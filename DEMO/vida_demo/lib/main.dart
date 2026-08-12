@@ -8,6 +8,7 @@ import 'screens/premios_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/social_screen.dart';
 import 'theme.dart';
+import 'widgets/fondo_estudio.dart';
 import 'widgets/iphone_frame.dart';
 
 void main() {
@@ -42,8 +43,7 @@ class MyApp extends StatelessWidget {
       // ya ocupa toda la pantalla del dispositivo.
       builder: (context, child) {
         if (!kIsWeb) return child!;
-        return ColoredBox(
-          color: const Color(0xFF0D0D0D),
+        return FondoEstudio(
           child: Center(
             child: Padding(
               // Un margen chico arriba/abajo para que el marco no quede
