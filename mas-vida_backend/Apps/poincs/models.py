@@ -28,4 +28,4 @@ class VersionRegla(models.Model):
     vigente_desde = models.DateField()
 
     def __str__(self):
-        return f"versión actual - {self.version} -vigente desde - {self.vigente_desde}"
+        return f"{self.version} -vigente desde - {self.vigente_desde}"
