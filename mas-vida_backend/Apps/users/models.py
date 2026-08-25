@@ -1,24 +1,29 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
+
 
 class Usuario(models.Model):
     user = models.OneToOneField(
-        User, 
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE
     )
 
-birthdate = models.DateField()
+    usuario_id = models.CharField(
+        max_length=100,
+        unique=True
+    )
 
-policy_number = models.CharField(
-    max_length=100
-)
+    birth_date = models.DateField()
 
-insurer = models.CharField(
-    max_length=100
-)
+    policy_number = models.CharField(
+        max_length=100
+    )
 
-policy_start_date = models.DateField()
+    insurer = models.CharField(
+        max_length=100
+    )
 
-def __str__(self):
-    return self.user.username
+    policy_start_date = models.DateField()
 
+    def __str__(self):
+        return self.usuario_id
