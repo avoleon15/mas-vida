@@ -1,3 +1,6 @@
 from django.contrib import admin
+from .models import Muestra, Sesion
 
-# Register your models here.
+admin.site.register(Muestra)
+admin.site.register(Sesion)
+
