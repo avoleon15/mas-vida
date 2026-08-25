@@ -16,3 +16,6 @@ class Ledger(models.Model):
         "VersionRegla",
         on_delete=models.PROTECT
     )
+
+def __str__(self):
+    return f"{self.usuario} - {self.puntos} pts - {self.tipo}"
