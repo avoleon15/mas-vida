@@ -7,10 +7,12 @@ class Ledger(models.Model):
     )
 
     puntos = models.IntegerField()
-    tipo = models.CharField()
-    fecha = models.DateField
+    tipo = models.CharField(
+        max_length=50
+    )
+    fecha = models.DateField()
 
     version_regla = models.ForeignKey(
-        "points.VersionRegla",
-        on_delete=models.CASCADE
+        "VersionRegla",
+        on_delete=models.PROTECT
     )
