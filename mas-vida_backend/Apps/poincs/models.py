@@ -17,5 +17,15 @@ class Ledger(models.Model):
         on_delete=models.PROTECT
     )
 
-def __str__(self):
-    return f"{self.usuario} - {self.puntos} pts - {self.tipo}"
+    def __str__(self):
+        return f"{self.usuario} - {self.puntos} pts - {self.tipo}"
+
+
+class VersionRegla(models.Model):
+    version = models.PositiveIntegerField(
+        unique=True
+    )
+    vigente_desde = models.DateField()
+
+    def __str__(self):
+        return f"versión actual - {self.version} -vigente desde - {self.vigente_desde}"
