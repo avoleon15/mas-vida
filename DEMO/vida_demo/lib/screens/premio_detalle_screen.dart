@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/placeholder_imagen.dart';
 import 'premios_screen.dart' show monedasUsuario;
@@ -12,8 +13,8 @@ class PremioDetalleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final premio =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    final costo = premio['costoMonedas'] as int;
+        ModalRoute.of(context)!.settings.arguments as Premio;
+    final costo = premio.costoMonedas;
     final alcanza = monedasUsuario >= costo;
     final saldoRestante = monedasUsuario - costo;
 
@@ -45,8 +46,8 @@ class PremioDetalleScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${(premio['nombre'] as String).toUpperCase()} · '
-                          '${(premio['zona'] as String).toUpperCase()}',
+                          '${premio.nombre.toUpperCase()} · '
+                          '${premio.zona.toUpperCase()}',
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: AppColors.textSecondary,
@@ -55,7 +56,7 @@ class PremioDetalleScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          (premio['descripcion'] as String).toUpperCase(),
+                          premio.descripcion.toUpperCase(),
                           style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 color: AppColors.textPrimary,
@@ -66,7 +67,7 @@ class PremioDetalleScreen extends StatelessWidget {
                         _buildPillCosto(context, costo, alcanza, saldoRestante),
                         const SizedBox(height: 18),
                         Text(
-                          premio['detalle'] as String,
+                          premio.detalle,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: AppColors.textSecondary,
@@ -76,7 +77,7 @@ class PremioDetalleScreen extends StatelessWidget {
                         const SizedBox(height: 20),
                         _buildCondicionesCard(
                           context,
-                          premio['condiciones'] as String,
+                          premio.condiciones,
                         ),
                       ],
                     ),
@@ -98,7 +99,7 @@ class PremioDetalleScreen extends StatelessWidget {
                           ? () => Navigator.of(context).pushNamed(
                               '/canje-exitoso',
                               arguments: {
-                                ...premio,
+                                'premio': premio,
                                 'monedasRestantes': saldoRestante,
                               },
                             )

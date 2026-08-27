@@ -1,111 +1,72 @@
 import 'package:flutter/material.dart';
+import '../datos/fuente_datos.dart';
+import '../datos/modelos.dart';
 import '../rachas_recompensas.dart';
+import '../reglas_puntos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/progress_ring.dart';
 
-// Racha activa del usuario, en semanas seguidas cumpliendo la meta
-// semanal. Mismo dato de ejemplo que usan Progress y Social.
-const int rachaSemanas = 12;
-
-/// Un nivel de la categoría anual (Bronze/Silver/Gold/Platinum) y el
-/// porcentaje de cashback que otorga sobre la póliza.
-class _Tier {
-  const _Tier(this.nombre, this.porcentajeCashback);
-
-  final String nombre;
-  final double porcentajeCashback;
-}
-
-const List<_Tier> _tiers = [
-  _Tier('Bronze', 5),
-  _Tier('Silver', 7.5),
-  _Tier('Gold', 10),
-  _Tier('Platinum', 20),
-];
-
 // ============================================================
-// Datos de ejemplo de "Metas Mensuales" (hardcodeados, sin backend
-// todavía). OJO: este es un sistema DISTINTO a la meta semanal
-// adaptativa de Progress (esa paga puntos/categoría). Acá se pagan
-// MONEDAS — la moneda que se gasta en Premios y caduca a 90 días.
+// Esta pantalla no lee JSON ni calcula puntos: todo sale ya resuelto de
+// `Datos.i`, que se hidrata al arrancar desde el repositorio elegido en
+// `lib/datos/fuente_datos.dart`.
 // ============================================================
 
-// Avance general del mes (0.0 a 1.0). Ejemplo simple, sin fórmula real
-// todavía.
-const double avanceMetaBase = 0.55;
+/// Racha activa del usuario, en semanas seguidas cumpliendo la meta.
+int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 
-// Las 4 metas ya elegidas este mes. Una viene marcada como completa
-// para mostrar el banner de "meta completada" en la demo.
-const List<Map<String, dynamic>> _metasDelMes = [
-  {
-    'nombre': 'Camina 50km este mes',
-    'progreso': 32,
-    'objetivo': 50,
-    'unidad': 'km',
-    'monedas': 10,
-    'completa': false,
-  },
-  {
-    'nombre': '3 entrenos de fuerza',
-    'progreso': 3,
-    'objetivo': 3,
-    'unidad': 'entrenos',
-    'monedas': 8,
-    'completa': true,
-  },
-  {
-    'nombre': '2 clases de yoga',
-    'progreso': 1,
-    'objetivo': 2,
-    'unidad': 'clases',
-    'monedas': 6,
-    'completa': false,
-  },
-  {
-    'nombre': '20,000 pasos extra',
-    'progreso': 14000,
-    'objetivo': 20000,
-    'unidad': 'pasos',
-    'monedas': 12,
-    'completa': false,
-  },
-];
+/// Los niveles anuales vienen del motor de reglas (`reglas_puntos.dart`),
+/// que a su vez sale del contrato v1. Los niveles 1 y 2 están sin definir
+/// y se muestran como tales.
+List<Nivel> get _niveles => niveles;
 
-// Solo el día 1 del mes se eligen las metas nuevas. Se deja en false
-// para la demo; cambiala a mano para ver la tarjeta de selección.
-const bool esMomentoDeElegir = false;
+// ============================================================
+// "Metas Mensuales". OJO: este es un sistema DISTINTO al de retos
+// semanales del contrato. Acá se pagan MONEDAS — la moneda que se gasta
+// en Premios y caduca a 90 días. Nunca puntos.
+// ============================================================
 
-// 8 opciones calibradas entre las que se eligen las 4 metas del mes.
-const List<String> _opcionesMetas = [
-  'Camina 40km',
-  '5 entrenos de fuerza',
-  '2 clases de yoga',
-  '15,000 pasos extra',
-  '4 entrenos de cardio',
-  '30km en bici',
-  '3 clases de spinning',
-  '10km de trote',
-];
+double get avanceMetaBase => Datos.i.resumen.metasMensuales.avanceBase;
 
-const int monedasEsteMes = 3;
-const int techoMonedasMensual = 8;
+List<MetaMensual> get _metasDelMes => Datos.i.resumen.metasMensuales.metas;
+
+/// Solo el día 1 del mes se eligen las metas nuevas.
+bool get esMomentoDeElegir => Datos.i.resumen.metasMensuales.esMomentoDeElegir;
+
+/// 8 opciones calibradas entre las que se eligen las 4 metas del mes.
+List<String> get _opcionesMetas => Datos.i.resumen.metasMensuales.opciones;
+
+int get monedasEsteMes => Datos.i.resumen.monedas.ganadasEsteMes;
+int get techoMonedasMensual => Datos.i.resumen.monedas.techoMensual;
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  // Datos de ejemplo (hardcodeados por ahora, sin backend todavía).
-  static const int pasos = 8432;
-  static const int metaPasos = 10000;
-  static const int puntosTotal = 12450;
-  static const int cashbackAcumulado = 450; // en quetzales
-  static const String categoriaActual = 'Silver';
-  static const int puntosParaSiguienteNivel = 3200;
-  static const String nombreUsuario = 'Diego';
-  // Avance dentro del nivel actual (Silver), en lo que se recibe el dato
-  // real del backend con los umbrales de puntos por nivel.
-  static const double progresoNivelActual = 0.40;
+  /// Pasos de hoy. `null` cuando no hay permiso de HealthKit — que NO es
+  /// lo mismo que cero pasos.
+  static int? get pasos => Datos.i.historial.hoy.pasos;
+
+  /// Meta diaria de pasos. Es el piso a partir del cual se empiezan a
+  /// ganar puntos (7.000), no una meta personalizada.
+  static int get metaPasos => pisoPasos;
+
+  /// PUNTOS acumulados del año. Nunca se gastan y nunca aparecen en
+  /// Premios.
+  static int get puntosTotal => Datos.i.resumen.puntosAno;
+
+  /// Cashback proyectado a fin de año, en quetzales. Se devuelve como
+  /// dinero DESPUÉS del pago de la prima — nunca como descuento.
+  ///
+  /// TODO: falta la fórmula de devengo a mitad de año, así que se muestra
+  /// la proyección anual y no un acumulado parcial.
+  static int get cashbackProyectado => Datos.i.resumen.cashback.proyectadoQ;
+
+  /// Nivel anual numérico (contrato v1: nunca Bronze/Silver/Gold/Platinum).
+  static int get nivelActual => Datos.i.resumen.nivel;
+
+  static String get nombreUsuario => Datos.i.perfil.nombre;
 
   @override
   Widget build(BuildContext context) {
@@ -130,9 +91,11 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     Center(
                       child: _StepsRing(
+                        // `null` = sin permiso de HealthKit. El anillo lo
+                        // muestra como estado propio, nunca como 0 pasos.
                         steps: pasos,
                         goal: metaPasos,
-                        color: AppColors.colorForTier(categoriaActual),
+                        color: AppColors.colorForNivel(nivelActual),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -306,10 +269,11 @@ class HomeScreen extends StatelessWidget {
   /// regulatoria de Guatemala) — nunca se le llama "descuento" ni "ahorro
   /// en tu prima".
   Widget _buildCashbackSection(BuildContext context) {
-    final tierActual = _tiers.firstWhere(
-      (tier) => tier.nombre == categoriaActual,
-    );
-    final siguienteTier = _tiers[_tiers.indexOf(tierActual) + 1];
+    final nivelHoy = nivelPorNumero(nivelActual);
+    final indice = _niveles.indexWhere((n) => n.numero == nivelActual);
+    final siguiente = indice >= 0 && indice + 1 < _niveles.length
+        ? _niveles[indice + 1]
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -364,7 +328,11 @@ class HomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Q$cashbackAcumulado acumulados este año',
+                // Proyección, no acumulado: falta la fórmula de devengo a
+                // mitad de año. Nunca "descuento en tu prima" — el
+                // cashback se devuelve como dinero DESPUÉS del pago.
+                'Q${_formatNumber(cashbackProyectado)} de cashback proyectado '
+                'este año',
                 // El más chico de los tres números principales de la
                 // pantalla (pasos > puntos > cashback).
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -375,15 +343,12 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              _buildCashbackDestacado(context, tierActual),
+              _buildCashbackDestacado(context, nivelHoy),
               const SizedBox(height: 24),
               _buildTierSteps(context),
               const SizedBox(height: 16),
               Text(
-                '${_formatNumber(puntosParaSiguienteNivel)} pts para llegar '
-                'a ${siguienteTier.nombre} y ganar '
-                '${_formatPercent(siguienteTier.porcentajeCashback)}% '
-                'de cashback',
+                _textoSiguienteNivel(siguiente),
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
@@ -395,17 +360,70 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// El % de cashback de la categoría actual, grande y protagonista,
-  /// junto con el nombre de la categoría. Es lo primero que se entiende
-  /// de un vistazo: "cuánto te está dando tu categoría hoy".
-  Widget _buildCashbackDestacado(BuildContext context, _Tier tierActual) {
+  /// Qué falta para el siguiente nivel.
+  ///
+  /// Con el techo anual de 12.000 puntos que fija el contrato, el nivel 4
+  /// (15.000+) queda fuera de alcance en el piloto: eso se dice explícito
+  /// en vez de mostrar una meta que nadie puede alcanzar.
+  static String _textoSiguienteNivel(Nivel? siguiente) {
+    if (siguiente == null) return 'Estás en el nivel más alto.';
+
+    if (!siguiente.definido) {
+      return 'Nivel ${siguiente.numero}: pendiente de definir. '
+          'Todavía no está fijado cuántos puntos pide ni qué cashback da.';
+    }
+
+    final faltan = siguiente.puntosMinimos! - puntosTotal;
+    final techo = Datos.i.resumen.techoAnual;
+
+    if (siguiente.puntosMinimos! > techo) {
+      return 'El nivel ${siguiente.numero} pide '
+          '${_formatNumber(siguiente.puntosMinimos!)} pts, por encima del '
+          'techo anual de ${_formatNumber(techo)}: queda fuera de alcance '
+          'en esta etapa.';
+    }
+
+    return '${_formatNumber(faltan)} pts para llegar al nivel '
+        '${siguiente.numero} y ganar '
+        '${_formatPercent(siguiente.porcentajeCashback!)}% de cashback';
+  }
+
+  /// El % de cashback del nivel actual, grande y protagonista. Es lo
+  /// primero que se entiende de un vistazo: "cuánto te está dando tu
+  /// nivel hoy".
+  Widget _buildCashbackDestacado(BuildContext context, Nivel? nivelHoy) {
+    // Nivel sin definir (1 o 2): estado explícito, nunca un % inventado.
+    if (nivelHoy == null || !nivelHoy.definido) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.help_outline,
+            size: 34,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Tu nivel ${nivelHoy?.numero ?? nivelActual} todavía no tiene '
+              'definido su % de cashback',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          '${_formatPercent(tierActual.porcentajeCashback)}%',
+          '${_formatPercent(nivelHoy.porcentajeCashback!)}%',
           style: Theme.of(context).textTheme.displaySmall?.copyWith(
-            color: AppColors.colorForTier(tierActual.nombre),
+            color: AppColors.colorForNivel(nivelHoy.numero),
             fontWeight: FontWeight.w700,
             height: 1,
           ),
@@ -414,7 +432,7 @@ class HomeScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(
-            'de cashback en tu\ncategoría ${tierActual.nombre}',
+            'de cashback en tu\nnivel ${nivelHoy.numero}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: AppColors.textSecondary,
               height: 1.3,
@@ -430,22 +448,24 @@ class HomeScreen extends StatelessWidget {
   /// resto queda apagado. Reemplaza al camino de círculos anterior por
   /// algo más fácil de leer de un vistazo.
   Widget _buildTierSteps(BuildContext context) {
-    final currentIndex = _tiers.indexWhere(
-      (tier) => tier.nombre == categoriaActual,
-    );
+    final currentIndex = _niveles.indexWhere((n) => n.numero == nivelActual);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            for (var i = 0; i < _tiers.length; i++) ...[
+            for (var i = 0; i < _niveles.length; i++) ...[
               if (i != 0) const SizedBox(width: 6),
               Expanded(
                 child: Container(
                   height: 8,
                   decoration: BoxDecoration(
-                    color: i <= currentIndex
+                    // Un nivel sin definir se dibuja punteado-neutro, no
+                    // como si estuviera conseguido.
+                    color: !_niveles[i].definido
+                        ? AppColors.cardBorder
+                        : i <= currentIndex
                         ? AppColors.accentSecondary
                         : AppColors.cardBorder,
                     borderRadius: BorderRadius.circular(4),
@@ -458,10 +478,12 @@ class HomeScreen extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            for (var i = 0; i < _tiers.length; i++)
+            for (var i = 0; i < _niveles.length; i++)
               Expanded(
                 child: Text(
-                  _tiers[i].nombre,
+                  _niveles[i].definido
+                      ? 'Nivel ${_niveles[i].numero}'
+                      : 'Nivel ${_niveles[i].numero}\n(por definir)',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: i == currentIndex
@@ -470,6 +492,7 @@ class HomeScreen extends StatelessWidget {
                     fontWeight: i == currentIndex
                         ? FontWeight.w700
                         : FontWeight.w500,
+                    height: 1.25,
                   ),
                 ),
               ),
@@ -578,10 +601,10 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFilaMeta(BuildContext context, Map<String, dynamic> meta) {
-    final progreso = meta['progreso'] as int;
-    final objetivo = meta['objetivo'] as int;
-    final completa = meta['completa'] as bool;
+  Widget _buildFilaMeta(BuildContext context, MetaMensual meta) {
+    final progreso = meta.progreso;
+    final objetivo = meta.objetivo;
+    final completa = meta.completa;
     final fraccion = objetivo == 0
         ? 0.0
         : (progreso / objetivo).clamp(0.0, 1.0);
@@ -600,7 +623,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    meta['nombre'] as String,
+                    meta.nombre,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -621,7 +644,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${_formatNumber(progreso)} / ${_formatNumber(objetivo)} '
-                    '${meta['unidad']}',
+                    '${meta.unidad}',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -643,7 +666,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${meta['monedas']}',
+                      '${meta.monedas}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.accentSecondary,
                         fontWeight: FontWeight.w700,
@@ -673,10 +696,7 @@ class HomeScreen extends StatelessWidget {
 
   /// Simula el estado de una notificación de meta completada (parte
   /// fija del layout de la demo, no una notificación push real).
-  Widget _buildBannerMetaCompletada(
-    BuildContext context,
-    Map<String, dynamic> meta,
-  ) {
+  Widget _buildBannerMetaCompletada(BuildContext context, MetaMensual meta) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -694,7 +714,7 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '¡Meta completada! +${meta['monedas']} monedas agregadas '
+              '¡Meta completada! +${meta.monedas} monedas agregadas '
               'a tu saldo',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppColors.accentSecondary,
@@ -780,47 +800,87 @@ class _StepsRing extends StatelessWidget {
     required this.color,
   });
 
-  final int steps;
+  /// `null` cuando HealthKit no devolvió nada y hay que asumir permiso
+  /// negado. NO es lo mismo que cero pasos, y la UI no puede mostrarlo
+  /// como tal.
+  final int? steps;
+
   final int goal;
-  // Color de la liga actual del usuario: el anillo cambia según en qué
-  // categoría está (Bronze, Silver, Gold, Platinum).
+  // Color del nivel anual del usuario: el anillo cambia según su nivel.
   final Color color;
 
   @override
   Widget build(BuildContext context) {
+    final pasosHoy = steps;
+    final sinPermiso = pasosHoy == null;
+
     return Stack(
       alignment: Alignment.center,
       children: [
-        // El arco relleno es la proporción real pasos/meta (ej. 8432 de
-        // 10000 = 84% del anillo).
-        ProgressRing(progress: steps / goal, size: 260, color: color),
+        // El arco relleno es la proporción real pasos/meta. Sin permiso
+        // el anillo queda vacío, no en cero.
+        ProgressRing(
+          progress: sinPermiso ? 0 : pasosHoy / goal,
+          size: 260,
+          color: sinPermiso ? AppColors.cardBorder : color,
+        ),
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              HomeScreen._formatNumber(steps),
-              // El número más grande y protagonista de toda la pantalla.
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 60,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'PASOS DE HOY',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            if (sinPermiso) ...[
+              const Icon(
+                Icons.lock_outline,
+                size: 44,
                 color: AppColors.textSecondary,
-                letterSpacing: 2,
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Meta: ${HomeScreen._formatNumber(goal)} pasos',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-            ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  'Sin permiso para leer tu actividad',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Activalo en Ajustes → Salud',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+            ] else ...[
+              Text(
+                HomeScreen._formatNumber(pasosHoy),
+                // El número más grande y protagonista de toda la pantalla.
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 60,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'PASOS DE HOY',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                // El "piso" es el mínimo desde el cual se empiezan a ganar
+                // puntos, no una meta personalizada.
+                'Desde ${HomeScreen._formatNumber(goal)} pasos ganás puntos',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
           ],
         ),
       ],

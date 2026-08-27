@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../datos/fuente_datos.dart';
+import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -9,139 +11,37 @@ import '../widgets/bottom_nav_bar.dart';
 // reemplazar después con datos reales.
 // ============================================================
 
-const String nombreUsuario = 'Diego';
+String get nombreUsuario => Datos.i.perfil.nombre;
 
 // ---- Duelos ----
-// Variable simple para probar a mano los dos estados de la sección.
-bool hayDueloActivo = true;
+// Los duelos NO otorgan monedas ni premios: son puramente competitivos.
+bool get hayDueloActivo => Datos.i.social.duelo.activo;
 
-const String duelloRivalHandle = '@mery_run';
-const String duelloTiempoRestante = '2 días restantes';
-const double duelloSuperacionPropia = 18; // % sobre el propio promedio
-const double duelloSuperacionRival = 12;
+String get duelloRivalHandle => Datos.i.social.duelo.rivalHandle;
+String get duelloTiempoRestante => Datos.i.social.duelo.tiempoRestante;
+
+/// % sobre el propio promedio de cada quien, nunca comparación directa.
+double get duelloSuperacionPropia => Datos.i.social.duelo.superacionPropia;
+double get duelloSuperacionRival => Datos.i.social.duelo.superacionRival;
 // Escala de referencia para las barras de superación (no hay un tope
 // natural como en una barra de progreso normal, así que usamos este
 // techo solo para que las barras se vean proporcionadas entre sí).
 const double _escalaSuperacion = 30;
 
-class _DueloHistorial {
-  const _DueloHistorial(this.rival, this.ganado);
-
-  final String rival;
-  final bool ganado;
-}
-
-const List<_DueloHistorial> _historialDuelos = [
-  _DueloHistorial('@mery_run', true),
-  _DueloHistorial('@juan_fit', false),
-  _DueloHistorial('@carlos_gt', true),
-  _DueloHistorial('@ana_runner', true),
-  _DueloHistorial('@luis_gym', false),
-];
+/// Historial de duelos. Los duelos no dan monedas ni premios.
+List<DueloHistorial> get _historialDuelos => Datos.i.social.historialDuelos;
 
 // ---- Conexiones ----
-class _Conexion {
-  const _Conexion({
-    required this.nombre,
-    required this.handle,
-    required this.rachaSemanas,
-    required this.categoriaAnual,
-    required this.monedasTotales,
-  });
-
-  final String nombre;
-  final String handle;
-  final int rachaSemanas;
-  final String categoriaAnual;
-  final int monedasTotales;
-}
-
-const List<_Conexion> _conexiones = [
-  _Conexion(
-    nombre: 'Juan Perez',
-    handle: '@juan_fit',
-    rachaSemanas: 12,
-    categoriaAnual: 'Gold',
-    monedasTotales: 9,
-  ),
-  _Conexion(
-    nombre: 'Maria Rodriguez',
-    handle: '@mery_run',
-    rachaSemanas: 8,
-    categoriaAnual: 'Silver',
-    monedasTotales: 5,
-  ),
-];
+/// De otra persona solo se exponen racha, nivel y monedas — NUNCA sus
+/// pasos ni su historial crudo.
+List<Conexion> get _conexiones => Datos.i.social.conexiones;
 
 // ---- Ranking ----
-enum _Tendencia { subida, bajada, igual }
+List<String> get _gruposRanking => Datos.i.social.gruposRanking;
 
-class _RankingPersona {
-  const _RankingPersona({
-    required this.nombre,
-    required this.puntosSemana,
-    required this.tendencia,
-    this.esUsuario = false,
-  });
-
-  final String nombre;
-  // Los puntos son privados: solo se usan para ordenar la lista, nunca
-  // se muestran en pantalla. El ranking visible es solo posición.
-  final int puntosSemana;
-  final _Tendencia tendencia;
-  final bool esUsuario;
-}
-
-const List<String> _gruposRanking = ['Oficina', 'Familia'];
-
-const Map<String, List<_RankingPersona>> _rankingPorGrupo = {
-  'Oficina': [
-    _RankingPersona(
-      nombre: 'Ana Martinez',
-      puntosSemana: 890,
-      tendencia: _Tendencia.subida,
-    ),
-    _RankingPersona(
-      nombre: 'David S.',
-      puntosSemana: 820,
-      tendencia: _Tendencia.igual,
-    ),
-    _RankingPersona(
-      nombre: nombreUsuario,
-      puntosSemana: 670,
-      tendencia: _Tendencia.subida,
-      esUsuario: true,
-    ),
-    _RankingPersona(
-      nombre: 'Juan Perez',
-      puntosSemana: 540,
-      tendencia: _Tendencia.bajada,
-    ),
-    _RankingPersona(
-      nombre: 'Maria Rodriguez',
-      puntosSemana: 410,
-      tendencia: _Tendencia.subida,
-    ),
-  ],
-  'Familia': [
-    _RankingPersona(
-      nombre: 'Mamá',
-      puntosSemana: 950,
-      tendencia: _Tendencia.subida,
-    ),
-    _RankingPersona(
-      nombre: nombreUsuario,
-      puntosSemana: 780,
-      tendencia: _Tendencia.igual,
-      esUsuario: true,
-    ),
-    _RankingPersona(
-      nombre: 'Hermano',
-      puntosSemana: 600,
-      tendencia: _Tendencia.bajada,
-    ),
-  ],
-};
+/// El ranking muestra POSICIÓN, nunca los puntos de los demás.
+Map<String, List<RankingPersona>> get _rankingPorGrupo =>
+    Datos.i.social.rankingPorGrupo;
 
 /// Las dos pestañas internas de Social. Por default abre en Amigos.
 enum _TabSocial { amigos, ranking }
@@ -426,7 +326,7 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  Widget _buildBurbujaDuelo(BuildContext context, _DueloHistorial duelo) {
+  Widget _buildBurbujaDuelo(BuildContext context, DueloHistorial duelo) {
     return SizedBox(
       width: 48,
       height: 48,
@@ -502,7 +402,7 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  Widget _buildConexionRow(BuildContext context, _Conexion conexion) {
+  Widget _buildConexionRow(BuildContext context, Conexion conexion) {
     return GestureDetector(
       onTap: () => _mostrarPerfilConexion(context, conexion),
       child: Container(
@@ -579,7 +479,7 @@ class _SocialScreenState extends State<SocialScreen> {
   /// Perfil reducido de la conexión: nunca muestra pasos ni actividad
   /// cruda de otra persona, solo lo que ya comparte públicamente en la
   /// app (racha, categoría, monedas).
-  void _mostrarPerfilConexion(BuildContext context, _Conexion conexion) {
+  void _mostrarPerfilConexion(BuildContext context, Conexion conexion) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
@@ -628,9 +528,9 @@ class _SocialScreenState extends State<SocialScreen> {
                   _buildStatPerfil(
                     context,
                     icon: Icons.workspace_premium_outlined,
-                    valor: conexion.categoriaAnual,
-                    label: 'CATEGORÍA',
-                    colorValor: AppColors.colorForTier(conexion.categoriaAnual),
+                    valor: 'Nivel ${conexion.nivel}',
+                    label: 'NIVEL',
+                    colorValor: AppColors.colorForNivel(conexion.nivel),
                   ),
                   _buildStatPerfil(
                     context,
@@ -798,7 +698,7 @@ class _SocialScreenState extends State<SocialScreen> {
 
   Widget _buildPosicionPropia(
     BuildContext context,
-    List<_RankingPersona> ranking,
+    List<RankingPersona> ranking,
   ) {
     final indice = ranking.indexWhere((p) => p.esUsuario);
     final persona = ranking[indice];
@@ -836,7 +736,7 @@ class _SocialScreenState extends State<SocialScreen> {
 
   Widget _buildListaRanking(
     BuildContext context,
-    List<_RankingPersona> ranking,
+    List<RankingPersona> ranking,
   ) {
     return Column(
       children: [
@@ -851,7 +751,7 @@ class _SocialScreenState extends State<SocialScreen> {
   Widget _buildRankingRow(
     BuildContext context,
     int posicion,
-    _RankingPersona persona,
+    RankingPersona persona,
   ) {
     return Container(
       width: double.infinity,
@@ -900,9 +800,9 @@ class _SocialScreenState extends State<SocialScreen> {
   Widget _buildPosicionIndicador(BuildContext context, int posicion) {
     if (posicion <= 3) {
       const colores = [
-        AppColors.tierGold,
-        AppColors.tierSilver,
-        AppColors.tierBronze,
+        AppColors.nivel3,
+        AppColors.nivel2,
+        AppColors.nivel1,
       ];
       return Icon(Icons.emoji_events, color: colores[posicion - 1], size: 20);
     }
@@ -917,21 +817,21 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  Widget _buildTendenciaIcon(BuildContext context, _Tendencia tendencia) {
+  Widget _buildTendenciaIcon(BuildContext context, Tendencia tendencia) {
     switch (tendencia) {
-      case _Tendencia.subida:
+      case Tendencia.subida:
         return const Icon(
           Icons.arrow_upward,
           color: AppColors.accentSecondary,
           size: 16,
         );
-      case _Tendencia.bajada:
+      case Tendencia.bajada:
         return const Icon(
           Icons.arrow_downward,
           color: AppColors.textSecondary,
           size: 16,
         );
-      case _Tendencia.igual:
+      case Tendencia.igual:
         return const Icon(
           Icons.remove,
           color: AppColors.textSecondary,

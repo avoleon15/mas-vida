@@ -1,0 +1,28 @@
+{
+  "_comentario": "Mock del perfil del asegurado. La edad viene de la póliza que provee la aseguradora, NUNCA autodeclarada: autodeclararla es un vector de fraude. El teléfono manda la edad; la FCM (219 − edad) la calcula el servidor.",
+  "usuario_id": "diego-001",
+  "nombre": "Diego",
+  "edad": 45,
+  "zona_horaria": "America/Guatemala",
+  "dispositivos_vinculados": [
+    { "nombre": "Apple Watch de Diego", "bundle": "com.apple.health.watch", "tipo": "reloj" },
+    { "nombre": "iPhone de Diego", "bundle": "com.apple.health.iphone", "tipo": "telefono" }
+  ],
+  "maximo_dispositivos": 3,
+  "permiso_healthkit": "concedido",
+  "poliza": {
+    "numero": "GT-48213",
+    "titular_y_dependientes": "Diego Piña + 2 dependientes",
+    "tipo_plan": "Gastos Médicos Mayores — Plan Individual",
+    "suma_asegurada": "Q500,000",
+    "deducible": "Q5,000 por evento",
+    "coaseguro": "10% después del deducible",
+    "vigencia": "1 ene 2026 – 31 dic 2026",
+    "fecha_renovacion": "1 ene 2027",
+    "prima_anual": "Q18,000",
+    "prima_anual_q": 18000,
+    "forma_pago": "Mensual",
+    "red_cobertura": "Red nacional + emergencias internacionales",
+    "estado": "Al día"
+  }
+}

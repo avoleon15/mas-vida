@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -100,7 +101,8 @@ class CanjeExitosoScreen extends StatelessWidget {
   }
 
   Widget _buildTarjetaCupon(BuildContext context, Map<String, dynamic> datos) {
-    final costo = datos['costoMonedas'] as int;
+    final premio = datos['premio'] as Premio;
+    final costo = premio.costoMonedas;
     final monedasRestantes = datos['monedasRestantes'] as int;
 
     return Container(
@@ -122,7 +124,7 @@ class CanjeExitosoScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            (datos['descripcion'] as String).toUpperCase(),
+            premio.descripcion.toUpperCase(),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: AppColors.accent,

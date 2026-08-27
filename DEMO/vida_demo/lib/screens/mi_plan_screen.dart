@@ -1,55 +1,54 @@
 import 'package:flutter/material.dart';
+import '../datos/fuente_datos.dart';
+import '../reglas_puntos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 
 // ============================================================
-// Datos de ejemplo (hardcodeados, sin backend todavía), consistentes
-// con los que usa Home para el mismo usuario demo.
+// Esta pantalla no lee JSON: todo sale de `Datos.i`.
 //
 // REGLA DURA DEL PROYECTO: acá NUNCA aparecen monedas — esa es la
 // moneda que se gasta en Premios. Mi Plan es solo puntos/cashback/
 // datos de póliza.
 // ============================================================
 
-class _Tier {
-  const _Tier(this.nombre, this.rangoPuntos, this.porcentajeCashback);
+/// Tabla de niveles del contrato v1. Los niveles 1 y 2 vienen sin rango
+/// ni porcentaje definidos y se muestran explícitamente como pendientes.
+List<Nivel> get _niveles => niveles;
 
-  final String nombre;
-  final String rangoPuntos;
-  final double porcentajeCashback;
-}
+int get nivelActual => Datos.i.resumen.nivel;
+int get puntosAnuales => Datos.i.resumen.puntosAno;
 
-const List<_Tier> _tiers = [
-  _Tier('Bronze', '5,000 – 9,999 pts', 5),
-  _Tier('Silver', '10,000 – 19,999 pts', 7.5),
-  _Tier('Gold', '20,000 – 29,999 pts', 10),
-  _Tier('Platinum', '30,000+ pts', 20),
-];
+/// Cashback proyectado de fin de año: el % del nivel aplicado sobre la
+/// prima anual de la póliza.
+int get cashbackProyectado => Datos.i.resumen.cashback.proyectadoQ;
 
-const String categoriaActual = 'Silver';
-const int cashbackAcumulado = 450; // en quetzales, acumulado este año
-const int puntosAnuales = 12450;
+/// TODO: falta la fórmula de devengo del cashback a mitad de año. Lo
+/// único fijado es que se devuelve como dinero DESPUÉS del pago de la
+/// prima, nunca como descuento directo (Superintendencia de Bancos).
+int? get cashbackDevengado => Datos.i.resumen.cashback.devengadoQ;
 
-// Proyección simple de fin de año a partir del ritmo actual (placeholder:
-// en producción esto sale de una regresión sobre el histórico real del
-// usuario, no de una regla fija).
-const String categoriaProyectada = 'Gold';
-const int cashbackProyectado = 1180;
+/// El nivel proyectado a fin de año necesitaría una regresión sobre el
+/// histórico real. Mientras no exista, se muestra el nivel actual sin
+/// prometer una subida que nadie calculó.
+///
+/// TODO: falta la regla de proyección de nivel a fin de año.
+int get nivelProyectado => nivelActual;
 
 // ---- Detalles de póliza ----
-const String numeroPoliza = 'GT-48213';
-const String titularYDependientes = 'Diego Piña + 2 dependientes';
-const String tipoPlan = 'Gastos Médicos Mayores — Plan Individual';
-const String sumaAsegurada = 'Q500,000';
-const String deducible = 'Q5,000 por evento';
-const String coaseguro = '10% después del deducible';
-const String vigencia = '1 ene 2026 – 31 dic 2026';
-const String fechaRenovacion = '1 ene 2027';
-const String primaAnual = 'Q18,000';
-const String formaPago = 'Mensual';
-const String redCobertura = 'Red nacional + emergencias internacionales';
-const String estadoPoliza = 'Al día';
+String get numeroPoliza => Datos.i.perfil.poliza.numero;
+String get titularYDependientes => Datos.i.perfil.poliza.titularYDependientes;
+String get tipoPlan => Datos.i.perfil.poliza.tipoPlan;
+String get sumaAsegurada => Datos.i.perfil.poliza.sumaAsegurada;
+String get deducible => Datos.i.perfil.poliza.deducible;
+String get coaseguro => Datos.i.perfil.poliza.coaseguro;
+String get vigencia => Datos.i.perfil.poliza.vigencia;
+String get fechaRenovacion => Datos.i.perfil.poliza.fechaRenovacion;
+String get primaAnual => Datos.i.perfil.poliza.primaAnual;
+String get formaPago => Datos.i.perfil.poliza.formaPago;
+String get redCobertura => Datos.i.perfil.poliza.redCobertura;
+String get estadoPoliza => Datos.i.perfil.poliza.estado;
 
 class MiPlanScreen extends StatelessWidget {
   const MiPlanScreen({super.key});
@@ -108,8 +107,9 @@ class MiPlanScreen extends StatelessWidget {
   // ============================================================
 
   Widget _buildCashbackCard(BuildContext context) {
-    final tierActual = _tiers.firstWhere((t) => t.nombre == categoriaActual);
-    final colorTier = AppColors.colorForTier(categoriaActual);
+    final nivelHoy = nivelPorNumero(nivelActual);
+    final colorNivel = AppColors.colorForNivel(nivelActual);
+    final pct = nivelHoy?.porcentajeCashback;
 
     return Container(
       width: double.infinity,
@@ -130,7 +130,7 @@ class MiPlanScreen extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Cashback acumulado',
+                'Cashback proyectado',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
@@ -140,17 +140,22 @@ class MiPlanScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Q$cashbackAcumulado',
+            'Q${_formatNumber(cashbackProyectado)}',
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
-              color: colorTier,
+              color: colorNivel,
               fontWeight: FontWeight.w700,
               height: 1,
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            'este año, en categoría $categoriaActual '
-            '(${_formatPercent(tierActual.porcentajeCashback)}% de cashback)',
+            // El cashback se devuelve como dinero DESPUÉS del pago de la
+            // prima: nunca "descuento" ni "ahorro en tu prima".
+            pct == null
+                ? 'este año, en nivel $nivelActual (su % de cashback todavía '
+                      'no está definido)'
+                : 'este año, en nivel $nivelActual '
+                      '(${_formatPercent(pct)}% de cashback sobre tu prima)',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
@@ -191,12 +196,12 @@ class MiPlanScreen extends StatelessWidget {
                 children: [
                   const TextSpan(text: 'A tu ritmo actual, terminarías el '),
                   TextSpan(
-                    text: 'año en categoría $categoriaProyectada',
+                    text: 'año en nivel $nivelProyectado',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const TextSpan(text: ', con aproximadamente '),
                   TextSpan(
-                    text: 'Q$cashbackProyectado de cashback',
+                    text: 'Q${_formatNumber(cashbackProyectado)} de cashback',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const TextSpan(text: '.'),
@@ -290,25 +295,28 @@ class MiPlanScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Categorías anuales',
+            'Niveles anuales',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 16),
-          for (var i = 0; i < _tiers.length; i++) ...[
-            _buildFilaTier(context, _tiers[i]),
-            if (i != _tiers.length - 1) const SizedBox(height: 12),
+          for (var i = 0; i < _niveles.length; i++) ...[
+            _buildFilaNivel(context, _niveles[i]),
+            if (i != _niveles.length - 1) const SizedBox(height: 12),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildFilaTier(BuildContext context, _Tier tier) {
-    final esActual = tier.nombre == categoriaActual;
-    final color = AppColors.colorForTier(tier.nombre);
+  Widget _buildFilaNivel(BuildContext context, Nivel nivel) {
+    final esActual = nivel.numero == nivelActual;
+    // Un nivel sin definir se dibuja apagado: no promete nada.
+    final color = nivel.definido
+        ? AppColors.colorForNivel(nivel.numero)
+        : AppColors.cardBorder;
 
     return Row(
       children: [
@@ -321,25 +329,31 @@ class MiPlanScreen extends StatelessWidget {
         SizedBox(
           width: 72,
           child: Text(
-            tier.nombre,
+            'Nivel ${nivel.numero}',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textPrimary,
+              color: nivel.definido
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
               fontWeight: esActual ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ),
         Expanded(
+          // "Pendiente de definir" para los niveles 1 y 2, que no tienen
+          // rango en ninguna fuente. Nunca un rango inventado.
           child: Text(
-            tier.rangoPuntos,
+            nivel.rangoTexto,
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
         ),
         Text(
-          '${_formatPercent(tier.porcentajeCashback)}%',
+          nivel.definido ? '${_formatPercent(nivel.porcentajeCashback!)}%' : '—',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppColors.textPrimary,
+            color: nivel.definido
+                ? AppColors.textPrimary
+                : AppColors.textSecondary,
             fontWeight: FontWeight.w700,
           ),
         ),

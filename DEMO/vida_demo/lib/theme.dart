@@ -14,7 +14,7 @@ class AppColors {
   static const Color cardBorder = Color(0xFFE5E9E7);
   static const Color accent = Color(0xFF4A90D9);
   // Verde salud/vitalidad: progreso, estados de éxito, checks
-  // completados. Nunca se usa para categorías (ver colorForTier).
+  // completados. Nunca se usa para niveles (ver colorForNivel).
   static const Color accentSecondary = Color(0xFF5FAE85);
   static const Color textPrimary = Color(0xFF1A2E35);
   static const Color textSecondary = Color(0xFF6B7280);
@@ -27,23 +27,29 @@ class AppColors {
   // blanco) aunque "Bronze" sea el más suave de los cuatro, porque este
   // color se usa como texto/ícono sobre fondo claro, no solo como
   // relleno — un verde casi blanco ahí sería ilegible.
-  static const Color tierBronze = Color(0xFF4F9973);
-  static const Color tierSilver = Color(0xFF3D8A63);
-  static const Color tierGold = Color(0xFF2E7A54);
-  static const Color tierPlatinum = Color(0xFF1E5C3E);
+  static const Color nivel1 = Color(0xFF4F9973);
+  static const Color nivel2 = Color(0xFF3D8A63);
+  static const Color nivel3 = Color(0xFF2E7A54);
+  static const Color nivel4 = Color(0xFF1E5C3E);
 
-  /// Devuelve el color de la liga según su nombre. Si no la reconoce,
-  /// cae de vuelta al acento general de la app.
-  static Color colorForTier(String tier) {
-    switch (tier) {
-      case 'Bronze':
-        return tierBronze;
-      case 'Silver':
-        return tierSilver;
-      case 'Gold':
-        return tierGold;
-      case 'Platinum':
-        return tierPlatinum;
+  /// Devuelve el color de un nivel anual (1 a 4).
+  ///
+  /// El contrato v1 prohíbe el naming Bronze/Silver/Gold/Platinum: los
+  /// niveles son numéricos. La asignación de color a número es puramente
+  /// visual, no codifica ninguna regla de negocio.
+  ///
+  /// Si el nivel no se reconoce (ej. `null` porque el acumulado cae en el
+  /// rango sin definir de los niveles 1 y 2), cae al acento general.
+  static Color colorForNivel(int? nivel) {
+    switch (nivel) {
+      case 1:
+        return nivel1;
+      case 2:
+        return nivel2;
+      case 3:
+        return nivel3;
+      case 4:
+        return nivel4;
       default:
         return accent;
     }

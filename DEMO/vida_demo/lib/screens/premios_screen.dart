@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../datos/fuente_datos.dart';
+import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -16,64 +18,19 @@ import '../widgets/placeholder_imagen.dart';
 
 /// Saldo de monedas del usuario. Se comparte con las pantallas de
 /// detalle y canje exitoso para que el flujo sea consistente.
-const int monedasUsuario = 40;
+// ============================================================
+// Esta pantalla no lee JSON: el catálogo y el saldo salen de `Datos.i`.
+//
+// REGLA DURA: acá solo hay MONEDAS. Los PUNTOS nunca aparecen en
+// Premios, y canjear monedas nunca descuenta puntos.
+// ============================================================
 
-const List<Map<String, dynamic>> _premios = [
-  {
-    'nombre': 'Café 4a Calle',
-    'zona': 'Zona 10',
-    'categoria': 'Cafés',
-    'descripcion': 'Bebida caliente gratis',
-    'detalle':
-        'Cualquier bebida caliente de 12 oz. Válido en las tres '
-        'sucursales de la ciudad.',
-    'condiciones':
-        'Un cupón por persona al mes. No acumulable con otras '
-        'promociones. Mostrá el código en caja antes de pagar.',
-    'costoMonedas': 20,
-  },
-  {
-    'nombre': 'Gimnasio Cumbre',
-    'zona': 'Zona 9',
-    'categoria': 'Gimnasios',
-    'descripcion': 'Mes de clases grupales',
-    'detalle':
-        'Acceso a todas las clases grupales del gimnasio durante un '
-        'mes completo.',
-    'condiciones':
-        'Aplica para nuevos inscritos o membresías vencidas. Presentá '
-        'tu DPI al activar el cupón.',
-    'costoMonedas': 40,
-  },
-  {
-    'nombre': 'Farmacia Vida Sana',
-    'zona': 'Zona 1',
-    'categoria': 'Farmacias',
-    'descripcion': '15% en vitaminas',
-    'detalle':
-        'Descuento aplicable en toda la línea de vitaminas y '
-        'suplementos de la farmacia.',
-    'condiciones':
-        'No acumulable con otras promociones. Válido únicamente en '
-        'tienda física.',
-    'costoMonedas': 30,
-  },
-  {
-    'nombre': 'Deportes Xelajú',
-    'zona': 'Zona 14',
-    'categoria': 'Gimnasios',
-    'descripcion': 'Q150 de crédito',
-    'detalle':
-        'Crédito aplicable en cualquier producto de la tienda, sin '
-        'fecha de vencimiento dentro del período de validez.',
-    'condiciones':
-        'Crédito no acumulable con otras promociones. Un cupón '
-        'por cliente.',
-    'costoMonedas': 80,
-  },
-];
+/// Saldo de monedas del usuario.
+int get monedasUsuario => Datos.i.resumen.monedas.saldo;
 
-const List<String> _categorias = ['Todos', 'Gimnasios', 'Cafés', 'Farmacias'];
+List<Premio> get _premios => Datos.i.catalogo.premios;
+
+List<String> get _categorias => Datos.i.catalogo.categorias;
 
 class PremiosScreen extends StatefulWidget {
   const PremiosScreen({super.key});
@@ -90,7 +47,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
     final premiosFiltrados = _categoriaSeleccionada == 'Todos'
         ? _premios
         : _premios
-              .where((p) => p['categoria'] == _categoriaSeleccionada)
+              .where((p) => p.categoria == _categoriaSeleccionada)
               .toList();
 
     return Scaffold(
@@ -111,6 +68,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildTituloYSaldo(context),
+                          ?_buildAvisoCaducidad(context),
                           const SizedBox(height: 20),
                           _buildChipsCategorias(context),
                         ],
@@ -180,6 +138,49 @@ class _PremiosScreenState extends State<PremiosScreen> {
     );
   }
 
+  /// Aviso cuando el lote de monedas más próximo está por caducar. Las
+  /// monedas caducan a los 90 días de acuñadas.
+  Widget? _buildAvisoCaducidad(BuildContext context) {
+    final lote = Datos.i.resumen.monedas.proximoLoteACaducar;
+    if (lote == null || !lote.cercaDeCaducar) return null;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.hourglass_bottom,
+              size: 18,
+              color: AppColors.accent,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                lote.diasParaCaducar == 1
+                    ? '${lote.cantidad} de tus monedas caducan mañana. '
+                          'Aprovechalas.'
+                    : '${lote.cantidad} de tus monedas caducan en '
+                          '${lote.diasParaCaducar} días. Aprovechalas.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildChipsCategorias(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -216,11 +217,8 @@ class _PremiosScreenState extends State<PremiosScreen> {
     );
   }
 
-  Widget _buildTarjetaPremio(
-    BuildContext context,
-    Map<String, dynamic> premio,
-  ) {
-    final costo = premio['costoMonedas'] as int;
+  Widget _buildTarjetaPremio(BuildContext context, Premio premio) {
+    final costo = premio.costoMonedas;
     final alcanza = monedasUsuario >= costo;
     final faltan = costo - monedasUsuario;
 
@@ -249,7 +247,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        premio['nombre'] as String,
+                        premio.nombre,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -259,7 +257,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        premio['descripcion'] as String,
+                        premio.descripcion,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(

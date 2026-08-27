@@ -1,0 +1,101 @@
+{
+  "_comentario": "Mock del resumen anual. Los campos puntos_ano, tope_anual_aplicado y nivel conservan el nombre exacto del JSON #2 del contrato v1. El acumulado anual NO es la suma de los 35 días del historial: el historial es solo la ventana reciente que muestra la app.",
+  "anio": 2026,
+
+  "puntos_ano": 11240,
+  "techo_anual": 12000,
+  "tope_anual_aplicado": false,
+  "nivel": 3,
+
+  "_nota_nivel": "Nivel 3 = 10.000–15.000 pts → 10% de cashback. El contrato v1 documenta que con el techo anual de 12.000 el nivel 4 (15.000+) queda fuera de alcance en el piloto.",
+
+  "cashback": {
+    "porcentaje": 10,
+    "proyectado_q": 1800,
+    "_nota_proyectado": "10% sobre la prima anual de Q18,000.",
+    "devengado_q": null,
+    "_todo_devengado": "TODO: falta la fórmula de devengo del cashback a mitad de año. El contrato y CLAUDE.md solo fijan que se devuelve como dinero DESPUÉS del pago de la prima, no cómo se acumula mes a mes."
+  },
+
+  "semana_actual": {
+    "_comentario": "Coincide con la suma real de dias.json para la semana del 24 al 30 de agosto. La semana va de lunes 00:00 a domingo 23:59 en hora de Guatemala.",
+    "inicio": "2026-08-24",
+    "fin": "2026-08-30",
+    "puntos": 200,
+    "puntos_semana_anterior": 425
+  },
+
+  "mes_actual": {
+    "_comentario": "Coincide con la suma real de dias.json para agosto.",
+    "inicio": "2026-08-01",
+    "fin": "2026-08-31",
+    "puntos": 1350
+  },
+
+  "actividad_anual": {
+    "_comentario": "Puntos por mes del año en curso. Enero a julio quedan fuera de la ventana de 35 días del historial; agosto (1350) sí coincide con dias.json. Septiembre en adelante todavía no ocurrió. La suma da los 11.240 de puntos_ano.",
+    "por_mes": [1400, 1350, 1500, 1450, 1400, 1400, 1390, 1350, 0, 0, 0, 0],
+    "mes_actual_indice": 7
+  },
+
+  "racha_semanas": 12,
+  "racha_historial": [true, true, true, true, true, true, true, true],
+
+  "retos_semanales": {
+    "_comentario": "Contrato v1: los retos son por nivel de dificultad progresiva, no por meta de puntos. Completar sube un nivel, fallar baja uno. Vive en GET /api/v1/retos/estado, fuera del JSON #2.",
+    "nivel_actual": 4,
+    "historial": [
+      { "semana_inicio": "2026-07-27", "nivel": 3, "completado": true },
+      { "semana_inicio": "2026-08-03", "nivel": 4, "completado": true },
+      { "semana_inicio": "2026-08-10", "nivel": 5, "completado": false },
+      { "semana_inicio": "2026-08-17", "nivel": 4, "completado": true }
+    ],
+    "meta_semana_actual": null,
+    "_todo_meta": "TODO: falta la tabla de dificultad progresiva por nivel de reto. El contrato v1 dice explícitamente que no hay número documentado por nivel todavía; lo define Luis en el motor de reglas."
+  },
+
+  "ritmo_cardiaco": {
+    "_comentario": "Reparto del tiempo de entrenamiento en zonas, en % del total. Sale de la FC cruda que manda el teléfono; el servidor lo clasifica contra FCM = 219 − edad.",
+    "_todo_umbrales": "TODO: faltan los umbrales de % de FCM que separan zona ligera, moderada e intensa. No están en el contrato ni en el Excel; dependen de la misma matriz de intensidad que define Luis en L7.",
+    "semana": { "ligero": 20, "moderado": 50, "intenso": 30, "tendencia_intensa": 10 },
+    "mes": { "ligero": 25, "moderado": 45, "intenso": 30, "tendencia_intensa": 6 },
+    "anio": { "ligero": 22, "moderado": 48, "intenso": 30, "tendencia_intensa": 4 }
+  },
+
+  "monedas_ganadas_anio": 14,
+
+  "metas_mensuales": {
+    "_comentario": "Mecánica descrita en CLAUDE.md (meta base + 4 metas elegidas el día 1 entre 8 opciones, pagadas en MONEDAS). NO está en el contrato v1 y no está reconciliada con los retos semanales.",
+    "_todo_reparto": "TODO: falta el reparto de monedas por meta. Lo único documentado es el techo mensual de 8 monedas, así que las 4 metas se reparten hasta ese techo. El reparto exacto no está definido en ninguna fuente.",
+    "avance_base": 0.55,
+    "es_momento_de_elegir": false,
+    "opciones": [
+      "Camina 40km",
+      "5 entrenos de fuerza",
+      "2 clases de yoga",
+      "15,000 pasos extra",
+      "4 entrenos de cardio",
+      "30km en bici",
+      "3 clases de spinning",
+      "10km de trote"
+    ],
+    "metas": [
+      { "nombre": "Camina 50km este mes", "progreso": 32, "objetivo": 50, "unidad": "km", "monedas": 3, "completa": false },
+      { "nombre": "3 entrenos de fuerza", "progreso": 3, "objetivo": 3, "unidad": "entrenos", "monedas": 2, "completa": true },
+      { "nombre": "2 clases de yoga", "progreso": 1, "objetivo": 2, "unidad": "clases", "monedas": 2, "completa": false },
+      { "nombre": "20,000 pasos extra", "progreso": 14000, "objetivo": 20000, "unidad": "pasos", "monedas": 1, "completa": false }
+    ]
+  },
+
+  "monedas": {
+    "saldo": 40,
+    "ganadas_este_mes": 3,
+    "techo_mensual": 8,
+    "_nota_valor": "TODO: falta cuánto vale una moneda en quetzales. Depende de las alianzas comerciales y no debe mostrarse en ninguna pantalla hasta que exista.",
+    "lotes": [
+      { "cantidad": 12, "acuñadas": "2026-06-05", "caducan": "2026-09-03", "dias_para_caducar": 8 },
+      { "cantidad": 16, "acuñadas": "2026-07-14", "caducan": "2026-10-12", "dias_para_caducar": 47 },
+      { "cantidad": 12, "acuñadas": "2026-08-09", "caducan": "2026-11-07", "dias_para_caducar": 73 }
+    ]
+  }
+}

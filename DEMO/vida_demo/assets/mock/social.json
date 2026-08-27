@@ -1,0 +1,42 @@
+{
+  "_comentario": "Mock de la pantalla Social. De las conexiones solo se expone racha, nivel y monedas — NUNCA pasos ni historial crudo. Los duelos no otorgan monedas ni premios: son puramente competitivos. El ranking muestra posición, nunca los puntos de los demás.",
+
+  "duelo": {
+    "activo": true,
+    "rival_handle": "@mery_run",
+    "tiempo_restante": "2 días restantes",
+    "superacion_propia": 18,
+    "superacion_rival": 12,
+    "_nota": "Superación sobre el propio promedio de cada quien, nunca comparación directa de pasos."
+  },
+
+  "historial_duelos": [
+    { "rival": "@mery_run", "ganado": true },
+    { "rival": "@juan_fit", "ganado": false },
+    { "rival": "@carlos_gt", "ganado": true },
+    { "rival": "@ana_runner", "ganado": true },
+    { "rival": "@luis_gym", "ganado": false }
+  ],
+
+  "conexiones": [
+    { "nombre": "Juan Perez", "handle": "@juan_fit", "racha_semanas": 12, "nivel": 3, "monedas_totales": 9 },
+    { "nombre": "Maria Rodriguez", "handle": "@mery_run", "racha_semanas": 8, "nivel": 3, "monedas_totales": 5 }
+  ],
+
+  "grupos_ranking": ["Oficina", "Familia"],
+
+  "ranking_por_grupo": {
+    "Oficina": [
+      { "nombre": "Ana Martinez", "puntos_semana": 340, "tendencia": "subida" },
+      { "nombre": "David S.", "puntos_semana": 275, "tendencia": "igual" },
+      { "nombre": "Diego", "puntos_semana": 200, "tendencia": "subida", "es_usuario": true },
+      { "nombre": "Juan Perez", "puntos_semana": 150, "tendencia": "bajada" },
+      { "nombre": "Sofia L.", "puntos_semana": 125, "tendencia": "igual" }
+    ],
+    "Familia": [
+      { "nombre": "Diego", "puntos_semana": 200, "tendencia": "subida", "es_usuario": true },
+      { "nombre": "Maria Rodriguez", "puntos_semana": 175, "tendencia": "subida" },
+      { "nombre": "Carlos Piña", "puntos_semana": 100, "tendencia": "bajada" }
+    ]
+  }
+}

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../datos/fuente_datos.dart';
+import '../datos/modelos.dart';
 import '../rachas_recompensas.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
@@ -6,130 +8,120 @@ import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 
 // ============================================================
-// Datos de ejemplo. Todo hardcodeado por ahora (sin backend) y
-// organizado en constantes simples por vista, para que sea fácil
-// de reemplazar después con datos reales.
+// Esta pantalla no lee JSON ni calcula puntos: los puntos ya vienen
+// calculados por el backend (hoy, por los datos de prueba). El motor de
+// `reglas_puntos.dart` solo aporta los techos y la tabla de niveles.
 // ============================================================
 
-// ---- Compartido entre las tres vistas (Nivel Actual es anual) ----
-const String categoriaActual = 'Silver';
-const String categoriaSiguiente = 'Gold';
-const int puntosAnuales = 12450;
-const int umbralSiguienteCategoria = 20000; // umbral hacia Gold
-const double porcentajeCashback = 7.5;
-const int monedasGanadasMes = 3;
+// ---- Compartido entre las tres vistas (el nivel es anual) ----
 
-// Edad del usuario, para la tabla de puntos por pasos (ver
-// reglas_puntos.dart). IMPORTANTE: en producción esto viene de los
-// datos de la póliza que provee la aseguradora, nunca autodeclarado por
-// el usuario. Dejala en 45 para probar el caso general, o cambiala a 70
-// para probar el caso 65+.
-const int edadUsuario = 45;
-const bool esUsuario65Mas = edadUsuario >= 65;
+/// Nivel anual numérico. El contrato v1 prohíbe Bronze/Silver/Gold/
+/// Platinum.
+int get nivelActual => Datos.i.resumen.nivel;
 
-// Año de referencia para los techos reales (afecta si febrero cuenta
-// 28 o 29 días). Se toma del calendario real, no se inventa.
-final int _anioReferencia = DateTime.now().year;
-// Techo real del año: 500 pts/día (tope diario) × días reales del año
-// (365 o 366 si es bisiesto).
-final int techoAnualPuntos = techoAnual(_anioReferencia);
+int get puntosAnuales => Datos.i.resumen.puntosAno;
 
-// TECHO DIARIO ABSOLUTO (regla del proyecto): 200 pts por pasos + 300
-// pts por ritmo cardíaco = 500 pts máximo que se puede ganar en un solo
-// día. Ningún dato de ejemplo de un día individual puede superar esto
-// (una semana, mes o año sí, porque son sumas de varios días).
+/// Siguiente nivel de la tabla, o `null` si ya está en el más alto.
+Nivel? get nivelSiguiente {
+  final i = niveles.indexWhere((n) => n.numero == nivelActual);
+  if (i < 0 || i + 1 >= niveles.length) return null;
+  return niveles[i + 1];
+}
+
+/// % de cashback del nivel actual. `null` si el nivel todavía no tiene
+/// definido su porcentaje (niveles 1 y 2).
+double? get porcentajeCashback => nivelPorNumero(nivelActual)?.porcentajeCashback;
+
+int get monedasGanadasMes => Datos.i.resumen.monedas.ganadasEsteMes;
+
+/// Edad del asegurado. Viene de la póliza, NUNCA autodeclarada.
+int get edadUsuario => Datos.i.perfil.edad;
+
+/// Techo anual: lo fija el contrato en 12.000 pts, no se deriva de
+/// multiplicar el techo diario por los días del año.
+int get techoAnualPuntos => Datos.i.resumen.techoAnual;
 
 // ---- Vista Semana ----
-class _DiaActividad {
-  const _DiaActividad(this.letra, this.puntos);
+class _DiaGrafica {
+  const _DiaGrafica(this.letra, this.puntos, this.dia);
 
   final String letra;
   final int puntos;
+
+  /// `null` para los días de la semana que todavía no ocurrieron.
+  final DiaActividad? dia;
 }
 
-// Lunes a domingo. "hoy" (Jueves) queda resaltado en la gráfica. Los
-// puntos de cada día salen del motor de reglas real (reglas_puntos.dart):
-// pasos + minutos/intensidad de ritmo cardíaco, con el tope real de 500
-// pts/día ya aplicado.
-final List<_DiaActividad> _actividadSemanal = [
-  _DiaActividad('L', puntosTotalesDelDia(pasos: 9100, edad: edadUsuario)),
-  _DiaActividad(
-    'M',
-    puntosTotalesDelDia(
-      pasos: 12300,
-      edad: edadUsuario,
-      minutosCardio: 65,
-      porcentajeRcmPromedio: 72,
-    ),
-  ),
-  _DiaActividad(
-    'M',
-    puntosTotalesDelDia(pasos: 6800, edad: edadUsuario),
-  ), // Miércoles
-  _DiaActividad(
-    'J', // Hoy: el mejor día de la semana, cerca del techo diario.
-    puntosTotalesDelDia(
-      pasos: 15000,
-      edad: edadUsuario,
-      minutosCardio: 95,
-      porcentajeRcmPromedio: 75,
-    ),
-  ),
-  _DiaActividad('V', puntosTotalesDelDia(pasos: 5900, edad: edadUsuario)),
-  _DiaActividad(
-    'S',
-    puntosTotalesDelDia(
-      pasos: 10800,
-      edad: edadUsuario,
-      minutosCardio: 65,
-      porcentajeRcmPromedio: 61,
-    ),
-  ),
-  _DiaActividad('D', puntosTotalesDelDia(pasos: 4200, edad: edadUsuario)),
-];
-const int _indiceHoy = 3;
+const List<String> _letrasSemana = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
-// Suma real de _actividadSemanal (50+400+0+500+0+300+0).
-const int puntosSemanaActual = 1250;
-const int puntosSemanaAnterior = 1080;
-// Techo real de la semana: 500 pts/día (tope diario) × 7 días.
-final int techoPuntosSemana = techoSemanal();
-const int rachaSemanas = 12;
-// Últimas 8 semanas: true = se cumplió la meta esa semana.
-const List<bool> rachaSemanasCumplidas = [
-  true,
-  true,
-  true,
-  false,
-  true,
-  true,
-  true,
-  true,
-];
-// Ritmo cardíaco de un solo entrenamiento (el último).
-const int zonaLigero = 20;
-const int zonaModerado = 50;
-const int zonaIntenso = 30;
-const int tendenciaZonaIntensa = 10;
+/// Lunes a domingo de la semana en curso, con los puntos ya acreditados
+/// que devolvió el backend. Los días que todavía no ocurrieron van en 0
+/// y sin dato asociado.
+List<_DiaGrafica> get _actividadSemanal {
+  final dias = Datos.i.historial.semanaEnCurso;
+  return [
+    for (var i = 0; i < 7; i++)
+      if (i < dias.length)
+        _DiaGrafica(_letrasSemana[i], dias[i].puntosDia, dias[i])
+      else
+        _DiaGrafica(_letrasSemana[i], 0, null),
+  ];
+}
+
+/// Índice de hoy dentro de la semana (0 = lunes). Se calcula sobre la
+/// fecha del dato, no sobre la hora del dispositivo.
+int get _indiceHoy => Datos.i.historial.hoy.fecha.weekday - 1;
+
+int get puntosSemanaActual => Datos.i.resumen.puntosSemana;
+int get puntosSemanaAnterior => Datos.i.resumen.puntosSemanaAnterior;
+
+/// Techo real de la semana: 200 pts/día × 7 días.
+int get techoPuntosSemana => techoDiario * 7;
+
+int get rachaSemanas => Datos.i.resumen.rachaSemanas;
+
+/// Últimas 8 semanas: true = se cumplió la meta esa semana.
+List<bool> get rachaSemanasCumplidas => Datos.i.resumen.rachaHistorial;
 
 // ---- Vista Mes ----
-// El mes agrupado en semanas (una barra = una semana), igual que la
-// vista Año agrupa en meses. Suma cerca de los 2,340 pts del mes.
-const List<int> _actividadSemanalDelMes = [520, 680, 340, 800];
-const List<String> _semanasDelMes = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
-const int _semanaActualDelMes = 1; // El día 14 cae en la Semana 2
+
+/// El mes agrupado en semanas (una barra = una semana), igual que la
+/// vista Año agrupa en meses. Se arma sumando los días reales del
+/// historial que caen en cada semana del mes en curso.
+List<int> get _actividadSemanalDelMes {
+  final dias = Datos.i.historial.mesEnCurso;
+  final porSemana = <DateTime, int>{};
+  for (final d in dias) {
+    final lunes = d.fecha.subtract(Duration(days: d.fecha.weekday - 1));
+    porSemana[lunes] = (porSemana[lunes] ?? 0) + d.puntosDia;
+  }
+  final ordenadas = porSemana.keys.toList()..sort();
+  return [for (final k in ordenadas) porSemana[k]!];
+}
+
+List<String> get _semanasDelMes =>
+    [for (var i = 1; i <= _actividadSemanalDelMes.length; i++) 'Sem $i'];
+
+/// La semana en curso es siempre la última barra que tiene datos.
+int get _semanaActualDelMes => _actividadSemanalDelMes.length - 1;
+
+/// Techo real del mes: 200 pts/día × días reales del mes en curso.
+int get techoMensualPuntos {
+  final hoy = Datos.i.historial.hoy.fecha;
+  final diasDelMes = DateTime(hoy.year, hoy.month + 1, 0).day;
+  return techoDiario * diasDelMes;
+}
+
+int get puntosDelMes => Datos.i.resumen.puntosMes;
 
 // ---- Vista Año ----
 const List<String> _mesesAbrev = [
   'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', //
   'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
 ];
-// Suma 12,450: igual a puntosAnuales, para que quede consistente.
-const List<int> _actividadAnual = [
-  900, 1050, 800, 1200, 950, 1100, //
-  1300, 1150, 900, 1000, 1050, 1050,
-];
-const int _mesActualIndice = 6; // Julio
+
+List<int> get _actividadAnual => Datos.i.resumen.actividadPorMes;
+int get _mesActualIndice => Datos.i.resumen.mesActualIndice;
 
 /// Agrupa los datos que necesita una vista "agregada" (Mes o Año): meta,
 /// actividad, monedas y ritmo cardíaco. Semana queda aparte porque
@@ -169,11 +161,8 @@ class _DatosPeriodo {
   final int zonaIntenso;
 }
 
-// Techo real del mes: 500 pts/día × días reales de julio (31).
-final int techoMensualPuntos = techoMensual(_anioReferencia, 7);
-
-final _datosMes = _DatosPeriodo(
-  puntosActuales: 2340,
+_DatosPeriodo get _datosMes => _DatosPeriodo(
+  puntosActuales: puntosDelMes,
   metaPuntos: techoMensualPuntos,
   unidadMeta: 'este mes',
   actividad: _actividadSemanalDelMes,
@@ -183,12 +172,12 @@ final _datosMes = _DatosPeriodo(
   monedasGanadas: monedasGanadasMes,
   monedasLabel: 'GANADAS ESTE MES',
   ritmoTitulo: 'Entrenamientos del mes',
-  zonaLigero: 25,
-  zonaModerado: 45,
-  zonaIntenso: 30,
+  zonaLigero: Datos.i.resumen.zonasMes.ligero,
+  zonaModerado: Datos.i.resumen.zonasMes.moderado,
+  zonaIntenso: Datos.i.resumen.zonasMes.intenso,
 );
 
-final _datosAnio = _DatosPeriodo(
+_DatosPeriodo get _datosAnio => _DatosPeriodo(
   puntosActuales: puntosAnuales,
   metaPuntos: techoAnualPuntos,
   unidadMeta: 'este año',
@@ -196,12 +185,12 @@ final _datosAnio = _DatosPeriodo(
   etiquetasActividad: _mesesAbrev,
   indiceActual: _mesActualIndice,
   mostrarEjeY: true,
-  monedasGanadas: 14,
+  monedasGanadas: Datos.i.resumen.monedasGanadasAnio,
   monedasLabel: 'GANADAS ESTE AÑO',
   ritmoTitulo: 'Entrenamientos del año',
-  zonaLigero: 22,
-  zonaModerado: 48,
-  zonaIntenso: 30,
+  zonaLigero: Datos.i.resumen.zonasAnio.ligero,
+  zonaModerado: Datos.i.resumen.zonasAnio.moderado,
+  zonaIntenso: Datos.i.resumen.zonasAnio.intenso,
 );
 
 /// Los tres períodos del selector. Cada uno cambia el contenido completo
@@ -263,6 +252,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
       case _Periodo.semana:
         return [
           _buildMetaSemanalCard(context),
+          const SizedBox(height: 20),
+          _buildRetosSemanales(context),
           const SizedBox(height: 20),
           _buildRecompensasConstancia(context),
           const SizedBox(height: 28),
@@ -456,6 +447,97 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   /// Tarjeta "Recompensas por constancia": los 5 hitos de racha con
   /// check verde en los ya alcanzados y en gris los pendientes.
+  /// Retos semanales por nivel de dificultad progresiva (contrato v1):
+  /// completar el reto SUBE un nivel, fallarlo BAJA uno. No es una meta
+  /// de puntos y no paga puntos — el reto cumplido acuña MONEDAS.
+  Widget _buildRetosSemanales(BuildContext context) {
+    final retos = Datos.i.resumen.retos;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.flag_outlined, color: AppColors.textPrimary),
+              const SizedBox(width: 8),
+              Text(
+                'Reto semanal',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Nivel ${retos.nivelActual}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppColors.accentSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            // La dificultad de cada nivel todavía no está documentada:
+            // se dice, no se inventa un número.
+            'La meta de este nivel todavía no está definida.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'ÚLTIMAS SEMANAS',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.textSecondary,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final semana in retos.historial)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    semana.completado
+                        ? Icons.arrow_upward
+                        : Icons.arrow_downward,
+                    size: 15,
+                    color: semana.completado
+                        ? AppColors.accentSecondary
+                        : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      semana.completado
+                          ? 'Nivel ${semana.nivel} completado — subiste a '
+                                'nivel ${semana.nivel + 1}'
+                          : 'Nivel ${semana.nivel} no completado — bajaste a '
+                                'nivel ${semana.nivel - 1}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecompensasConstancia(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -638,7 +720,9 @@ class _ProgressScreenState extends State<ProgressScreen> {
               ),
             ],
           ),
-          if (esUsuario65Mas) ...[
+          // El ajuste por edad ya no vive en la tabla de pasos (que es
+          // igual para todos), sino en el bonus de intensidad de 60+.
+          if (edadUsuario >= 60) ...[
             const SizedBox(height: 6),
             Text(
               'Tus metas están adaptadas para vos',
@@ -648,13 +732,15 @@ class _ProgressScreenState extends State<ProgressScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          for (var i = 0; i < _actividadSemanal.length; i++)
+          for (var i = 0; i < _actividadSemanal.length; i++) ...[
             _buildBarraDia(
               context,
               _actividadSemanal[i],
               i == _indiceHoy,
               maxPuntos,
             ),
+            ?_buildNotaDia(context, _actividadSemanal[i].dia),
+          ],
         ],
       ),
     );
@@ -662,7 +748,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   Widget _buildBarraDia(
     BuildContext context,
-    _DiaActividad dia,
+    _DiaGrafica dia,
     bool esHoy,
     int maxPuntos,
   ) {
@@ -708,6 +794,105 @@ class _ProgressScreenState extends State<ProgressScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Nota bajo la barra de un día cuando pasó algo que el usuario tiene
+  /// que poder entender: sin permiso, dato manual, techo diario, sesión
+  /// que no llegó a los 30 min, precedencia entre fuentes, revisión o
+  /// reversión.
+  ///
+  /// Se explica LA REGLA general, no el veredicto interno del motor: el
+  /// contrato v1 es explícito en no exponer por qué se descartó una
+  /// muestra, porque saberlo es saber cómo evadirlo.
+  Widget? _buildNotaDia(BuildContext context, DiaActividad? dia) {
+    if (dia == null) return null;
+
+    final notas = <(IconData, String)>[];
+
+    if (dia.sinPermiso) {
+      notas.add((
+        Icons.lock_outline,
+        'Sin permiso para leer tu actividad este día. Activalo en '
+            'Ajustes → Salud.',
+      ));
+    }
+    if (dia.esManual) {
+      notas.add((
+        Icons.edit_off_outlined,
+        'Los pasos ingresados a mano en la app de Salud no acreditan '
+            'puntos.',
+      ));
+    }
+    if (dia.topeAplicado) {
+      notas.add((
+        Icons.flag_outlined,
+        'Llegaste al techo de $techoDiario pts del día. Lo de más no '
+            'suma, pero igual cuenta para tu racha.',
+      ));
+    }
+    final sesion = dia.sesion;
+    if (sesion != null && !sesion.cuentaParaPuntos) {
+      notas.add((
+        Icons.timer_outlined,
+        'Tu sesión de ${sesion.duracionMin} min no llegó a los '
+            '$minutosMinimosSesion minutos continuos que pide la tabla.',
+      ));
+    }
+    if (dia.huboPrecedencia) {
+      final gana = dia.fuentePrevalece;
+      notas.add((
+        Icons.watch_outlined,
+        'Dos dispositivos reportaron pasos distintos. Se tomó '
+            '${gana?.nombre ?? 'la fuente con más pasos'}, nunca la suma '
+            'de ambos.',
+      ));
+    }
+    if (dia.marcadoParaRevision) {
+      notas.add((
+        Icons.pending_outlined,
+        'Este día quedó marcado para revisión. Tus puntos siguen '
+            'acreditados mientras lo revisamos.',
+      ));
+    }
+    final rev = dia.reversion;
+    if (rev != null) {
+      notas.add((
+        Icons.undo,
+        'Se revirtieron ${rev.puntosRevertidos} pts de este día '
+            '(${rev.motivo}).',
+      ));
+    }
+
+    if (notas.isEmpty) return null;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 28, bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (icono, texto) in notas)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icono, size: 13, color: AppColors.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      texto,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -948,7 +1133,11 @@ class _ProgressScreenState extends State<ProgressScreen> {
   /// umbral de la próxima categoría, puntos anuales y el % de cashback
   /// activo. Es información anual: igual en las tres vistas.
   Widget _buildNivelActual(BuildContext context) {
-    final progreso = puntosAnuales / umbralSiguienteCategoria;
+    final siguiente = nivelSiguiente;
+    // Sin siguiente nivel definido no hay umbral contra el cual medir: la
+    // barra se llena con el avance hacia el techo anual, que sí existe.
+    final umbral = siguiente?.puntosMinimos ?? techoAnualPuntos;
+    final progreso = puntosAnuales / umbral;
 
     return Container(
       width: double.infinity,
@@ -981,19 +1170,19 @@ class _ProgressScreenState extends State<ProgressScreen> {
           Row(
             children: [
               Text(
-                categoriaActual.toUpperCase(),
-                // Cada categoría en su propio color (dorado para Gold,
-                // plateado para Silver, etc.), igual que el anillo de Home.
+                'NIVEL $nivelActual',
+                // Cada nivel en su propio color, igual que el anillo de
+                // Home.
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.colorForTier(categoriaActual),
+                  color: AppColors.colorForNivel(nivelActual),
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const Spacer(),
               Text(
-                categoriaSiguiente.toUpperCase(),
+                siguiente == null ? '—' : 'NIVEL ${siguiente.numero}',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.colorForTier(categoriaSiguiente),
+                  color: AppColors.colorForNivel(siguiente?.numero),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1014,34 +1203,55 @@ class _ProgressScreenState extends State<ProgressScreen> {
           const SizedBox(height: 12),
           Text(
             'PUNTOS ANUALES: ${_formatNumber(puntosAnuales)} / '
-            '${_formatNumber(umbralSiguienteCategoria)}',
+            '${_formatNumber(umbral)}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: AppColors.textSecondary,
               letterSpacing: 0.5,
             ),
           ),
+          if (siguiente != null && !siguiente.definido) ...[
+            const SizedBox(height: 6),
+            Text(
+              'El nivel ${siguiente.numero} todavía no tiene definido su '
+              'rango de puntos.',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
           const SizedBox(height: 16),
           Builder(
             builder: (context) {
-              final colorTier = AppColors.colorForTier(categoriaActual);
+              final colorNivel = AppColors.colorForNivel(nivelActual);
+              final pct = porcentajeCashback;
               return Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: colorTier.withValues(alpha: 0.12),
+                  color: colorNivel.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: colorTier.withValues(alpha: 0.4)),
+                  border: Border.all(color: colorNivel.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.percent, color: colorTier, size: 18),
+                    Icon(
+                      pct == null ? Icons.help_outline : Icons.percent,
+                      color: colorNivel,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
-                    Text(
-                      '$porcentajeCashback% CASHBACK ACTIVO',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorTier,
-                        fontWeight: FontWeight.w700,
+                    Flexible(
+                      child: Text(
+                        // Nivel sin definir: se dice, no se inventa un %.
+                        pct == null
+                            ? 'CASHBACK DE ESTE NIVEL PENDIENTE DE DEFINIR'
+                            : '${_formatPorcentaje(pct)}% CASHBACK ACTIVO',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorNivel,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -1063,7 +1273,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
   }) {
     const coloresMonedas = [
       AppColors.accentSecondary,
-      AppColors.tierGold,
+      AppColors.nivel3,
       AppColors.textSecondary,
     ];
 
@@ -1165,10 +1375,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 16),
-          _buildZonasBarra(context, zonaLigero, zonaModerado, zonaIntenso),
+          _buildZonasBarra(context, Datos.i.resumen.zonasSemana.ligero, Datos.i.resumen.zonasSemana.moderado, Datos.i.resumen.zonasSemana.intenso),
           const SizedBox(height: 14),
           Text(
-            'Tu tiempo en zona intensa subió $tendenciaZonaIntensa% en tus '
+            'Tu tiempo en zona intensa subió $Datos.i.resumen.zonasSemana.tendenciaIntensa% en tus '
             'últimos 5 entrenamientos.',
             style: Theme.of(
               context,
@@ -1237,7 +1447,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final zonas = [
       (nombre: 'Ligero', valor: ligero, color: AppColors.textSecondary),
       (nombre: 'Moderado', valor: moderado, color: AppColors.accent),
-      (nombre: 'Intenso', valor: intenso, color: AppColors.tierGold),
+      (nombre: 'Intenso', valor: intenso, color: AppColors.nivel3),
     ];
 
     return Column(
@@ -1427,6 +1637,10 @@ class _SelectorPeriodo extends StatelessWidget {
     );
   }
 }
+
+/// 10.0 → "10", 7.5 → "7.5". Evita mostrar "10.0% de cashback".
+String _formatPorcentaje(double value) =>
+    value == value.roundToDouble() ? value.toStringAsFixed(0) : '$value';
 
 String _formatNumber(int value) {
   final s = value.toString();

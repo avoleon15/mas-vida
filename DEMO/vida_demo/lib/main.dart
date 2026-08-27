@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'datos/fuente_datos.dart';
 import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
@@ -11,7 +12,15 @@ import 'theme.dart';
 import 'widgets/fondo_estudio.dart';
 import 'widgets/iphone_frame.dart';
 
-void main() {
+Future<void> main() async {
+  // Necesario para poder leer assets antes de que arranque la app.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Se carga todo una sola vez desde el repositorio (hoy, los JSON de
+  // prueba de assets/mock/). Cuál repositorio se usa lo decide
+  // `lib/datos/fuente_datos.dart`, no esta línea.
+  await Datos.cargar();
+
   runApp(const MyApp());
 }
 

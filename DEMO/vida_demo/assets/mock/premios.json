@@ -1,0 +1,50 @@
+{
+  "_comentario": "Mock del catálogo de premios. El costo va SOLO en monedas: no existe todavía la equivalencia moneda → quetzal (depende de las alianzas comerciales) y no debe mostrarse en pantalla. Los PUNTOS nunca aparecen acá.",
+  "categorias": ["Todos", "Gimnasios", "Cafés", "Farmacias"],
+  "premios": [
+    {
+      "id": "cafe-4a-calle",
+      "nombre": "Café 4a Calle",
+      "zona": "Zona 10",
+      "categoria": "Cafés",
+      "descripcion": "Bebida caliente gratis",
+      "detalle": "Cualquier bebida caliente de 12 oz. Válido en las tres sucursales de la ciudad.",
+      "condiciones": "Un cupón por persona al mes. No acumulable con otras promociones. Mostrá el código en caja antes de pagar.",
+      "costo_monedas": 20,
+      "vence": "2026-12-31"
+    },
+    {
+      "id": "gimnasio-cumbre",
+      "nombre": "Gimnasio Cumbre",
+      "zona": "Zona 9",
+      "categoria": "Gimnasios",
+      "descripcion": "Mes de clases grupales",
+      "detalle": "Acceso a todas las clases grupales del gimnasio durante un mes completo.",
+      "condiciones": "Aplica para nuevos inscritos o membresías vencidas. Presentá tu DPI al activar el cupón.",
+      "costo_monedas": 40,
+      "vence": "2026-12-31"
+    },
+    {
+      "id": "farmacia-vida-sana",
+      "nombre": "Farmacia Vida Sana",
+      "zona": "Zona 1",
+      "categoria": "Farmacias",
+      "descripcion": "15% en vitaminas",
+      "detalle": "Descuento aplicable en toda la línea de vitaminas y suplementos de la farmacia.",
+      "condiciones": "No acumulable con otras promociones. Válido únicamente en tienda física.",
+      "costo_monedas": 30,
+      "vence": "2026-11-30"
+    },
+    {
+      "id": "deportes-xelaju",
+      "nombre": "Deportes Xelajú",
+      "zona": "Zona 14",
+      "categoria": "Gimnasios",
+      "descripcion": "Q150 de crédito",
+      "detalle": "Crédito aplicable en cualquier producto de la tienda, sin fecha de vencimiento dentro del período de validez.",
+      "condiciones": "Crédito no acumulable con otras promociones. Un cupón por cliente.",
+      "costo_monedas": 80,
+      "vence": "2026-12-31"
+    }
+  ]
+}
