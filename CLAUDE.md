@@ -57,6 +57,13 @@ social, sin beneficio real.
 | Gold | 20,000 – 29,999 | 10% |
 | Platinum | 30,000+ | 20% |
 
+[PENDIENTE: esta tabla es del modelo viejo y no calza con las reglas nuevas.
+El Excel (L13) dice que **cruzar 2,500 puntos cambia el nivel**, un umbral que
+no existe en ninguna fila de arriba. Además, con el techo diario de 200 pts el
+máximo anual pasa de 25,000 a ~73,000 pts, así que los cortes de 5,000/10,000/
+20,000/30,000 quedan demasiado bajos. Hay que redefinir la tabla completa
+antes de construir Mi Plan contra ella.]
+
 **Regla regulatoria dura:** el cashback SIEMPRE se devuelve como dinero
 DESPUÉS del pago de la prima. NUNCA se descuenta directamente (regulación de
 la Superintendencia de Bancos de Guatemala). Siempre "cashback", nunca
@@ -64,42 +71,54 @@ la Superintendencia de Bancos de Guatemala). Siempre "cashback", nunca
 
 ## Cálculo de puntos diarios
 
-**Por pasos — población general, menores de 65 años** (máximo 200 pts/día):
-- Menos de 7,499 pasos = 0 pts
-- 7,500 – 9,999 = 50 pts
-- 10,000 – 14,999 = 100 pts
-- 15,000+ = 200 pts
+Fuente de verdad: el plan de proyecto del equipo (`TASKS.xlsx`, criterios de
+aceptación de L6, L7, L8 y A15). Estas reglas **reemplazan** a las de la
+versión anterior de este documento — si encontrás en el código escalones de
+7,500 / 10,000 / 15,000 pasos, un techo diario de 500 pts, o FCmáx = 220 −
+edad, son del modelo viejo y hay que migrarlos.
 
-**Por pasos — usuarios de 65 años o más** (máximo 200 pts/día):
-- Menos de 5,000 pasos = 0 pts
-- 5,000 – 6,999 = 50 pts
-- 7,000 – 9,999 = 100 pts
-- 10,000+ = 200 pts
+**Por pasos** — función escalonada con piso en 7,000:
+- Menos de 7,000 pasos = 0 pts
+- 7,000 – 11,999 = 25 pts
+- 12,000 – 19,999 = 50 pts
+- 20,000+ = 100 pts
 
-Notas sobre los umbrales 65+:
+Los umbrales de pasos son **iguales para todas las edades**. Ya no existe una
+tabla de pasos separada para adultos mayores: el ajuste por edad vive ahora en
+la matriz de intensidad, no acá.
+
+**Por intensidad (ritmo cardíaco)** — matriz de duración × % de FCmáx:
+- **FCmáx = 219 − edad.** El cálculo lo hace SIEMPRE el servidor a partir de
+  la edad que viene en la póliza. El teléfono NUNCA manda la FCmáx ni la edad.
+- Ancla conocida de la matriz: **42 min al 74% de FCmáx = 100 pts.**
+- **Bonus 60+:** un usuario de 60 años o más recibe **×1.25** sobre los puntos
+  de intensidad (esa misma sesión le da 125 pts a un usuario de 62 años).
+- [PENDIENTE: la matriz completa de duración × % de FCmáx. El Excel fija un
+  solo punto de la matriz. Luis la define en la tarea L7 — hasta entonces **no
+  inventar escalones** ni reusar la tabla vieja de 60%/70% de este documento,
+  que ya no aplica.]
+
+**Techo diario absoluto: 200 pts**, igual para todas las edades. Un día que
+genere más puntos brutos acredita 200 y marca el registro con `tope_aplicado`.
+Ningún dato de ejemplo debe superar 200 pts en un solo día.
+
+Notas sobre la edad:
 - La edad DEBE venir de los datos de la póliza que provee la aseguradora,
   NUNCA autodeclarada por el usuario (autodeclararla es un vector de fraude
   obvio).
-- Estos umbrales son un punto de partida basado en literatura de actividad
-  física en adultos mayores y REQUIEREN validación médica/actuarial antes
-  de salir a piloto. No son definitivos.
-- En la UI, cualquier mención a metas ajustadas por edad debe tener tono
-  cálido, nunca clínico ni condescendiente.
+- El bonus 60+ y la FCmáx REQUIEREN validación médica/actuarial antes de salir
+  a piloto. No son definitivos.
+- En la UI, cualquier mención al ajuste por edad debe tener tono cálido, nunca
+  clínico ni condescendiente.
 
-**Por ritmo cardíaco** (máximo 300 pts/día, FCmáx = 220 − edad — esta tabla
-ya se autoajusta por edad, no necesita variante para 65+):
-- 30min–1h al 60% = 100 pts
-- 30min–1h al 70% = 200 pts
-- 1h+ al 60% = 200 pts
-- 1h+ al 70% = 300 pts
-- 1h30+ al 60% = 300 pts
+**Retos semanales:** el usuario elige un reto; el ciclo va de lunes 00:00 a
+domingo 23:59 y el corte del domingo cierra la semana. Cumplir el reto acuña
+MONEDAS, con **tope de 100 monedas por semana**.
 
-**Techo diario absoluto: 500 pts** (igual para todas las edades). Ningún
-dato de ejemplo debe superar esto para un solo día. **Techo anual: 25,000
-pts.**
-
-**Meta semanal adaptativa:** arranca en 300 pts, oscila 200-800. Ciclo:
-lunes 00:00 a domingo 23:59. Se autoajusta por actividad, no por edad.
+[PENDIENTE: reconciliar los retos semanales con la "meta semanal adaptativa"
+(arrancaba en 300 pts, oscilaba 200-800) y con las recompensas por constancia
+de más abajo. Son dos modelos distintos de la misma mecánica y el Excel solo
+describe el de retos. No mezclar los dos en la UI hasta que se decida.]
 
 ## Recompensas por constancia (streaks)
 
@@ -121,12 +140,17 @@ progreso al próximo hito) y Social (alerta de racha en riesgo).
 ## Anti-fraude
 
 - HealthKit registra qué app escribió cada muestra — guardar ese campo
-- Lista blanca de fuentes confiables (Apple, Garmin, Whoop)
+  (`fuente_bundle`, `fuente_nombre`, `fuente_version` en cada muestra)
+- Lista blanca de fuentes confiables (Apple, Garmin, Whoop). Una fuente que no
+  esté en la lista blanca NO acredita puntos
 - Una sola actividad cuenta por día (la de mayor puntaje)
-- Ventanas de sincronización de 6 días, una cuenta por persona
+- **Ventana de datos rezagados: 3 días.** Un dato de hace 2 días entra; uno de
+  hace 5 no. (Antes este documento decía 6 días — el Excel lo baja a 3.)
+- Una cuenta por persona
 - Deduplicación: SIEMPRE consultar el total agregado, nunca sumar muestras
   crudas (ej. Apple Watch + Whoop a la vez)
-- La edad para umbrales 65+ viene de la póliza, nunca del usuario
+- **Plausibilidad:** 60,000 pasos en un día se marcan para revisión
+- La edad para el bonus 60+ y la FCmáx viene de la póliza, nunca del usuario
 
 ## Sistema de diseño (lib/theme.dart)
 
@@ -245,5 +269,10 @@ producto o queda solo como material de pitch comercial]
 ## Decisiones pendientes
 
 - El "twist propio" del proyecto
-- Validación médica/actuarial de los umbrales 65+
+- La matriz completa de intensidad (duración × % de FCmáx) — tarea L7
+- Validación médica/actuarial del bonus 60+ y de FCmáx = 219 − edad
+- Redefinir la tabla de categorías anuales de cashback contra el techo diario
+  de 200 pts y el umbral de 2,500 puntos que menciona el Excel
+- Reconciliar retos semanales vs. meta semanal adaptativa vs. recompensas por
+  constancia
 - Si el dashboard para la aseguradora se construye o queda como pitch
