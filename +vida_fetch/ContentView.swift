@@ -5,7 +5,8 @@
 //  Created by Alvaro Jose Leon Aguilar on 8/26/26.
 //
 //  Demo: pide permisos de HealthKit y muestra pasos de hoy, ritmo cardíaco
-//  (promedio / más bajo / más alto) y entrenamientos recientes.
+//  (promedio / más bajo / más alto), entrenamientos recientes, y exporta el
+//  JSON #1 del contrato v1 (ver contrato-v1-corregido.md).
 //
 
 import SwiftUI
@@ -72,6 +73,33 @@ struct ContentView: View {
                             }
                         }
                     }
+                }
+
+                Section {
+                    TextField("usuario_id", text: $healthKitManager.usuarioID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    Button {
+                        Task { await healthKitManager.exportarJSON() }
+                    } label: {
+                        if healthKitManager.exportando {
+                            ProgressView()
+                        } else {
+                            Text("Exportar JSON de hoy")
+                        }
+                    }
+                    .disabled(healthKitManager.exportando)
+
+                    if let url = healthKitManager.exportURL {
+                        ShareLink(item: url) {
+                            Label("Compartir \(url.lastPathComponent)", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                } header: {
+                    Text("Exportar (contrato v1)")
+                } footer: {
+                    Text("Arma el JSON #1 (POST /api/v1/sync) del día de hoy con datos crudos de HealthKit, para revisarlo o mandárselo a Luis mientras no existe el endpoint real.")
                 }
             }
             .navigationTitle("+Vida — Spike HealthKit")
