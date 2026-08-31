@@ -6,7 +6,7 @@
 //
 //  Demo: pide permisos de HealthKit y muestra pasos de hoy, ritmo cardíaco
 //  (promedio / más bajo / más alto), entrenamientos recientes, y exporta el
-//  JSON #1 del contrato v1 (ver contrato-v1-corregido.md).
+//  JSON #1 del contrato v2 (ver contrato-v2.md), incluyendo frecuencia_cardiaca[].
 //
 
 import SwiftUI
@@ -27,8 +27,13 @@ struct ContentView: View {
                             Text(ultima, style: .time)
                         }
                     }
-                    if let error = healthKitManager.error {
-                        Text(error)
+                    if let errorPermisos = healthKitManager.errorPermisos {
+                        Text(errorPermisos)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                    if let errorSincronizacion = healthKitManager.errorSincronizacion {
+                        Text(errorSincronizacion)
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
@@ -71,6 +76,9 @@ struct ContentView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            // VoiceOver lee esta fila como una sola parada (actividad,
+                            // duración, fecha/hora y FC juntos) en vez de 4-5 paradas sueltas.
+                            .accessibilityElement(children: .combine)
                         }
                     }
                 }
@@ -96,18 +104,31 @@ struct ContentView: View {
                             Label("Compartir \(url.lastPathComponent)", systemImage: "square.and.arrow.up")
                         }
                     }
+
+                    if let errorExportacion = healthKitManager.errorExportacion {
+                        Text(errorExportacion)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                 } header: {
-                    Text("Exportar (contrato v1)")
+                    Text("Exportar (contrato v2)")
                 } footer: {
-                    Text("Arma el JSON #1 (POST /api/v1/sync) del día de hoy con datos crudos de HealthKit, para revisarlo o mandárselo a Luis mientras no existe el endpoint real.")
+                    Text("Arma el JSON #1 (POST /api/v1/sync) del día de hoy con datos crudos de HealthKit — pasos, sesiones y ahora también frecuencia_cardiaca[] del día completo — para revisarlo o mandárselo a Luis mientras no existe el endpoint real.")
                 }
             }
             .navigationTitle("+Vida — Spike HealthKit")
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
-                    Button("Solicitar permisos") {
+                    Button {
                         Task { await healthKitManager.solicitarPermisos() }
+                    } label: {
+                        if healthKitManager.solicitandoPermisos {
+                            ProgressView()
+                        } else {
+                            Text("Solicitar permisos")
+                        }
                     }
+                    .disabled(healthKitManager.solicitandoPermisos)
                     Spacer()
                     Button {
                         Task { await healthKitManager.sincronizar() }

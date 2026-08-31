@@ -8,10 +8,11 @@
 //  Todo lo demás (dashboard, niveles, retos) va por HTTP directo contra la API
 //  de Luis — este spike solo prueba la lectura cruda de HealthKit.
 //
-//  También incluye `exportarJSON`, que arma el JSON #1 del contrato v1
-//  (ver "contrato-v1-corregido.md" y SyncPayload.swift) a partir de datos
-//  crudos de HealthKit, para compartirlo/inspeccionarlo manualmente mientras
-//  no existe todavía el endpoint /api/v1/sync.
+//  También incluye `exportarJSON`, que arma el JSON #1 del contrato v2
+//  (ver "contrato-v2.md" y SyncPayload.swift) a partir de datos crudos de
+//  HealthKit — pasos, sesiones y ahora también frecuencia_cardiaca[] cruda
+//  del día completo (ticket A4) — para compartirlo/inspeccionarlo
+//  manualmente mientras no existe todavía el endpoint /api/v1/sync.
 //
 
 import Combine
@@ -80,15 +81,21 @@ final class HealthKitManager: ObservableObject {
     // MARK: - Estado publicado para la UI
 
     @Published var autorizado: Bool = false
+    @Published var solicitandoPermisos: Bool = false
     @Published var cargando: Bool = false
-    @Published var error: String?
+
+    // Un error por acción, no uno compartido: si dos operaciones corren cerca
+    // una de otra, el usuario tiene que poder saber sin ambigüedad cuál falló.
+    @Published var errorPermisos: String?
+    @Published var errorSincronizacion: String?
+    @Published var errorExportacion: String?
 
     @Published var pasosHoy: Double = 0
     @Published var frecuenciaCardiacaHoy: HeartRateStats = .vacio
     @Published var entrenamientos: [WorkoutSummary] = []
     @Published var ultimaSincronizacion: Date?
 
-    // MARK: - Estado publicado para la exportación del contrato v1
+    // MARK: - Estado publicado para la exportación del contrato v2
 
     /// `usuario_id` del payload. Editable desde la UI mientras no exista login
     /// real — no es el HealthKit userID, es el id interno que espera Luis.
@@ -113,17 +120,20 @@ final class HealthKitManager: ObservableObject {
     // solo se puede inferir consultando y viendo si vuelve algo (ver sincronizar()).
 
     func solicitarPermisos() async {
+        solicitandoPermisos = true
+        errorPermisos = nil
+        defer { solicitandoPermisos = false }
+
         guard HKHealthStore.isHealthDataAvailable() else {
-            error = HealthKitSpikeError.noDisponible.localizedDescription
+            errorPermisos = HealthKitSpikeError.noDisponible.localizedDescription
             return
         }
 
         do {
             try await healthStore.requestAuthorization(toShare: [], read: tiposLectura)
             autorizado = true
-            error = nil
         } catch {
-            self.error = "No se pudo solicitar autorización: \(error.localizedDescription)"
+            errorPermisos = "No se pudo solicitar autorización: \(error.localizedDescription)"
         }
     }
 
@@ -135,7 +145,7 @@ final class HealthKitManager: ObservableObject {
 
     func sincronizar() async {
         cargando = true
-        error = nil
+        errorSincronizacion = nil
         defer { cargando = false }
 
         async let pasosTask = fetchPasosHoy()
@@ -149,31 +159,32 @@ final class HealthKitManager: ObservableObject {
             entrenamientos = workouts
             ultimaSincronizacion = Date()
         } catch {
-            self.error = "Error al sincronizar: \(error.localizedDescription)"
+            errorSincronizacion = "Error al sincronizar: \(error.localizedDescription)"
         }
     }
 
     // MARK: - exportarJSON()
-    // Arma el JSON #1 del contrato v1 (ver contrato-v1-corregido.md) para un
-    // día calendario completo, y lo guarda como archivo para compartir. Esto
-    // es una herramienta de desarrollo/depuración: mientras no exista
+    // Arma el JSON #1 del contrato v2 (ver contrato-v2.md) para un día
+    // calendario completo, y lo guarda como archivo para compartir. Esto es
+    // una herramienta de desarrollo/depuración: mientras no exista
     // /api/v1/sync, sirve para mandarle a Luis un payload real de ejemplo.
 
     func exportarJSON(fecha: Date = Date()) async {
         exportando = true
-        error = nil
+        errorExportacion = nil
         defer { exportando = false }
 
         let inicioDia = Calendar.current.startOfDay(for: fecha)
         guard let finDia = Calendar.current.date(byAdding: .day, value: 1, to: inicioDia) else {
-            self.error = "No se pudo calcular el rango del día."
+            errorExportacion = "No se pudo calcular el rango del día."
             return
         }
 
         do {
             async let pasosTask = fetchPasosCrudos(desde: inicioDia, hasta: finDia)
             async let sesionesTask = fetchSesiones(desde: inicioDia, hasta: finDia)
-            let (pasos, sesiones) = try await (pasosTask, sesionesTask)
+            async let frecuenciaCrudaTask = fetchFrecuenciaCardiacaCruda(desde: inicioDia, hasta: finDia)
+            let (pasos, sesiones, frecuenciaCardiaca) = try await (pasosTask, sesionesTask, frecuenciaCrudaTask)
 
             let payload = SyncPayload(
                 usuario_id: usuarioID,
@@ -181,6 +192,7 @@ final class HealthKitManager: ObservableObject {
                 zona_horaria: TimeZone.current.identifier,
                 pasos: pasos,
                 sesiones: sesiones,
+                frecuencia_cardiaca: frecuenciaCardiaca,
                 sincronizado_en: FormatoFechas.iso8601.string(from: Date()),
                 app_version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
             )
@@ -195,7 +207,7 @@ final class HealthKitManager: ObservableObject {
 
             exportURL = url
         } catch {
-            self.error = "Error al exportar JSON: \(error.localizedDescription)"
+            errorExportacion = "Error al exportar JSON: \(error.localizedDescription)"
         }
     }
 
@@ -284,6 +296,45 @@ final class HealthKitManager: ObservableObject {
                 continuation.resume(returning: stats)
             }
             healthStore.execute(query)
+        }
+    }
+
+    // MARK: - Frecuencia cardíaca cruda del día (una entrada por HKQuantitySample)
+    // Nuevo en el contrato v2 — reemplaza lo que iba a ser el ticket A4
+    // ("detectar sesión intensa en Swift"): ahora A4 es solo exportar este
+    // HR crudo, esté o no dentro de un workout. La detección de sesiones
+    // intensas sin workout la hace el backend (L7) sobre este dato.
+
+    private func fetchFrecuenciaCardiacaCruda(desde inicio: Date, hasta fin: Date) async throws -> [FrecuenciaCardiacaMuestra] {
+        let predicado = HKQuery.predicateForSamples(withStart: inicio, end: fin, options: .strictStartDate)
+        let ordenar = [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
+        let unidad = HKUnit.count().unitDivided(by: .minute())
+
+        let muestras: [HKQuantitySample] = try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: tipoFrecuenciaCardiaca,
+                predicate: predicado,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: ordenar
+            ) { _, resultados, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: (resultados as? [HKQuantitySample]) ?? [])
+            }
+            healthStore.execute(query)
+        }
+
+        return muestras.map { muestra in
+            FrecuenciaCardiacaMuestra(
+                external_id: muestra.uuid.uuidString,
+                inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
+                fin: FormatoFechas.iso8601.string(from: muestra.endDate),
+                bpm: Int(muestra.quantity.doubleValue(for: unidad).rounded()),
+                fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
+                fuente_nombre: muestra.sourceRevision.source.name
+            )
         }
     }
 
