@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/progress_ring.dart';
+import '../widgets/tarjeta_borde_animado.dart';
 
 // ============================================================
 // Esta pantalla no lee JSON ni calcula puntos: todo sale ya resuelto de
@@ -85,8 +86,15 @@ class HomeScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 24),
-                    _buildSaludo(context),
-                    const SizedBox(height: 6),
+                    // El saludo va adentro de la tarjeta de borde animado:
+                    // le da algo de color a la parte de arriba de Home,
+                    // que estaba muy blanca. Adentro va SOLO el saludo.
+                    SizedBox(
+                      width: double.infinity,
+                      child: TarjetaBordeAnimado(child: _buildSaludo(context)),
+                    ),
+                    const SizedBox(height: 10),
+                    // La racha queda afuera de la tarjeta, justo abajo.
                     _buildRachaLinea(context),
                     const SizedBox(height: 24),
                     Center(
@@ -94,8 +102,6 @@ class HomeScreen extends StatelessWidget {
                         // `null` = sin permiso de HealthKit. El anillo lo
                         // muestra como estado propio, nunca como 0 pasos.
                         steps: pasos,
-                        goal: metaPasos,
-                        color: AppColors.colorForNivel(nivelActual),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -122,15 +128,30 @@ class HomeScreen extends StatelessWidget {
   /// Reemplaza al antiguo título fijo "HOY". Sin fondo: solo una sombra
   /// suave detrás del texto para que no quede tan plano.
   Widget _buildSaludo(BuildContext context) {
-    return Text(
-      '${_saludoSegunHora()}, $nombreUsuario',
-      style: AppTheme.sectionTitle.copyWith(
-        fontSize: 28,
-        shadows: [
-          Shadow(
-            color: AppColors.textPrimary.withValues(alpha: 0.10),
-            blurRadius: 6,
+    final base = AppTheme.sectionTitle.copyWith(
+      shadows: [
+        Shadow(
+          color: AppColors.textPrimary.withValues(alpha: 0.10),
+          blurRadius: 6,
+        ),
+      ],
+    );
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          // El saludo es el envoltorio: más chico y en el gris secundario.
+          TextSpan(
+            text: '${_saludoSegunHora()}, ',
+            style: base.copyWith(
+              fontSize: 24,
+              color: AppColors.textSecondary,
+            ),
           ),
+          // El nombre es lo que hace que se sienta personalizado, así que
+          // va más grande y en el color fuerte. La jerarquía es solo de
+          // tamaño y color de texto: no mete ningún color nuevo.
+          TextSpan(text: nombreUsuario, style: base.copyWith(fontSize: 34)),
         ],
       ),
     );
@@ -794,20 +815,12 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _StepsRing extends StatelessWidget {
-  const _StepsRing({
-    required this.steps,
-    required this.goal,
-    required this.color,
-  });
+  const _StepsRing({required this.steps});
 
   /// `null` cuando HealthKit no devolvió nada y hay que asumir permiso
   /// negado. NO es lo mismo que cero pasos, y la UI no puede mostrarlo
   /// como tal.
   final int? steps;
-
-  final int goal;
-  // Color del nivel anual del usuario: el anillo cambia según su nivel.
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -817,13 +830,9 @@ class _StepsRing extends StatelessWidget {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // El arco relleno es la proporción real pasos/meta. Sin permiso
-        // el anillo queda vacío, no en cero.
-        ProgressRing(
-          progress: sinPermiso ? 0 : pasosHoy / goal,
-          size: 260,
-          color: sinPermiso ? AppColors.cardBorder : color,
-        ),
+        // Sin permiso el anillo queda vacío (solo el track), que no es lo
+        // mismo que mostrar cero pasos: eso lo aclara el texto de abajo.
+        ProgressRing(pasos: sinPermiso ? 0 : pasosHoy, size: 260),
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -853,34 +862,8 @@ class _StepsRing extends StatelessWidget {
                   context,
                 ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
               ),
-            ] else ...[
-              Text(
-                HomeScreen._formatNumber(pasosHoy),
-                // El número más grande y protagonista de toda la pantalla.
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 60,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'PASOS DE HOY',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                // El "piso" es el mínimo desde el cual se empiezan a ganar
-                // puntos, no una meta personalizada.
-                'Desde ${HomeScreen._formatNumber(goal)} pasos ganás puntos',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-              ),
-            ],
+            ] else
+              TextoCentroAnillo(pasos: pasosHoy),
           ],
         ),
       ],
