@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     "rest_framework",
-    "users", "coins", "goals", "policies","rewards","activities","poincs"
+    "Apps.users", "Apps.coins", "Apps.goals", "Apps.policies","Apps.rewards","Apps.activities","Apps.poincs"
 ]
 
 MIDDLEWARE = [
