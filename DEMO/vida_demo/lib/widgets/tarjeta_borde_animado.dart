@@ -15,7 +15,7 @@ class TarjetaBordeAnimado extends StatefulWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    this.fondo = AppColors.tarjetaAzulClaro,
+    this.fondo = const Color.fromARGB(255, 245, 246, 247),
     this.colorBorde = AppColors.tarjetaBordeAzul,
     this.radio = 10,
     // Fino a propósito: el borde tiene que dar color, no robar la

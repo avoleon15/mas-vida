@@ -338,7 +338,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Podés ganar hasta 500 pts por día entre pasos y ritmo cardíaco',
+            // El techo diario real es `techoDiario` (200). El 500 que
+            // decía este texto era del modelo viejo.
+            'Podés ganar hasta $techoDiario pts por día entre pasos y ritmo '
+                'cardíaco',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

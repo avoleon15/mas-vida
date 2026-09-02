@@ -246,7 +246,10 @@ class TextoCentroAnillo extends StatelessWidget {
             letterSpacing: 1,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
+        // "PASOS" va ARRIBA del filete, cerrando el número.
+        Text('PASOS', style: estiloEtiqueta?.copyWith(letterSpacing: 1.5)),
+        const SizedBox(height: 8),
         // Filete del color del aro en curso: es lo que amarra el número
         // con el aro que se está llenando.
         Container(
@@ -257,13 +260,13 @@ class TextoCentroAnillo extends StatelessWidget {
             borderRadius: BorderRadius.circular(1),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
-          // El segundo número es el techo del ARO EN CURSO, no la meta
-          // del día: cambia solo al cambiar de aro. Que no calce con el
-          // llenado del aro es a propósito — el número dice cuántos pasos
-          // lleva hoy, el color dice en qué aro va.
-          'PASOS DE ${formatearMiles(techoDelAroActual(pasos))}',
+          // El número es el techo del ARO EN CURSO, no la meta del día:
+          // cambia solo al cambiar de aro. Que no calce con el llenado
+          // del aro es a propósito — el número de arriba dice cuántos
+          // pasos lleva hoy, el color dice en qué aro va.
+          'de ${formatearMiles(techoDelAroActual(pasos))}',
           style: estiloEtiqueta?.copyWith(letterSpacing: 1.5),
         ),
       ],
@@ -365,6 +368,39 @@ class _AnilloPasosPainter extends CustomPainter {
     final barrido = 2 * pi * fraccion;
     canvas.drawArc(arcRect, _startAngle, barrido, false, haloPaint);
     canvas.drawArc(arcRect, _startAngle, barrido, false, aroPaint);
+
+    // Marcas de INICIO y FIN del tramo recorrido. Ambas se derivan del
+    // color del metal: no entra ningún color nuevo.
+    // La de inicio es discreta (dónde abre el aro); la de fin es la
+    // principal, con su propio halo, porque es el "vas aquí".
+    final oscuro = Color.lerp(color, Colors.black, 0.35)!;
+
+    canvas.drawCircle(
+      _puntoEnAro(center, radius, _startAngle),
+      strokeWidth * 0.16,
+      Paint()..color = oscuro.withValues(alpha: 0.7),
+    );
+
+    final puntoFin = _puntoEnAro(center, radius, _startAngle + barrido);
+    canvas.drawCircle(
+      puntoFin,
+      strokeWidth * 0.5,
+      Paint()
+        ..color = color.withValues(alpha: 0.5)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sigmaHalo),
+    );
+    canvas.drawCircle(
+      puntoFin,
+      strokeWidth * 0.26,
+      Paint()..color = Color.lerp(color, Colors.white, 0.45)!,
+    );
+  }
+
+  Offset _puntoEnAro(Offset center, double radius, double angulo) {
+    return Offset(
+      center.dx + radius * cos(angulo),
+      center.dy + radius * sin(angulo),
+    );
   }
 
   @override

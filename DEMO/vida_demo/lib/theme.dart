@@ -6,31 +6,65 @@ import 'package:google_fonts/google_fonts.dart';
 class AppColors {
   AppColors._();
 
-  static const Color background = Color(0xFFF7FAF8);
+  // ----------------------------------------------------------
+  // Paleta de marca: azul #012096, naranja #F58700 y blanco.
+  //
+  // La regla de reparto es por TAMAÑO de la superficie:
+  //   blanco  -> lo grande (fondos, tarjetas, superficies)
+  //   azul    -> lo mediano (botones, barras de progreso, íconos de
+  //              sección, elementos de acción)
+  //   naranja -> lo chico (marcas de estado, chips, puntos, checks,
+  //              detalles que tienen que saltar a la vista)
+  //
+  // El naranja NUNCA se usa como relleno de una superficie grande: a
+  // ese tamaño compite con todo y rompe la calma que la app tiene que
+  // transmitir. Su trabajo es señalar, no vestir.
+  // ----------------------------------------------------------
+
+  /// Casi blanco con un tinte azul mínimo, para que las tarjetas blancas
+  /// puras se despeguen del fondo.
+  static const Color background = Color(0xFFF5F6FA);
   static const Color card = Color(0xFFFFFFFF);
   // Borde sutil de las tarjetas: sobre fondo claro, una tarjeta blanca
   // pura necesita este borde para no perderse contra el fondo (que
   // también es casi blanco).
-  static const Color cardBorder = Color(0xFFE5E9E7);
-  static const Color accent = Color(0xFF4A90D9);
-  // Verde salud/vitalidad: progreso, estados de éxito, checks
-  // completados. Nunca se usa para niveles (ver colorForNivel).
-  static const Color accentSecondary = Color(0xFF5FAE85);
-  static const Color textPrimary = Color(0xFF1A2E35);
-  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color cardBorder = Color(0xFFE3E6F0);
 
-  // Color de cada categoría/liga. El anillo de pasos usa el color de la
-  // liga actual del usuario, no siempre el acento general de la app.
-  // Progresión de verdes (más suave a más profundo): el azul queda
-  // reservado para elementos de acción/interactivos, nunca categorías.
-  // Nota: se evitan tonos demasiado pálidos (ej. un verde menta casi
-  // blanco) aunque "Bronze" sea el más suave de los cuatro, porque este
-  // color se usa como texto/ícono sobre fondo claro, no solo como
-  // relleno — un verde casi blanco ahí sería ilegible.
-  static const Color nivel1 = Color(0xFF4F9973);
-  static const Color nivel2 = Color(0xFF3D8A63);
-  static const Color nivel3 = Color(0xFF2E7A54);
-  static const Color nivel4 = Color(0xFF1E5C3E);
+  /// Azul de marca. Acciones y elementos medianos.
+  static const Color accent = Color(0xFF012096);
+
+  /// Naranja de marca. Detalles chicos: estados de éxito, checks,
+  /// marcadores, chips. Antes acá vivía el verde de salud.
+  static const Color accentSecondary = Color(0xFFF58700);
+
+  /// Azul muy oscuro en vez de negro puro: sobre fondo claro el negro se
+  /// ve duro, y este tono emparenta el texto con el azul de marca.
+  static const Color textPrimary = Color(0xFF101833);
+  /// Gris de apoyo. Se oscureció de #6B7280 a este tono porque sobre los
+  /// fondos tintados de Home el original daba 4.29:1 y 4.20:1 — por
+  /// debajo del 4.5:1 que pide WCAG AA para texto normal. Acá da 4.62:1
+  /// sobre el fondo cálido, 4.53:1 sobre la tarjeta de grupo y 5.21:1
+  /// sobre blanco.
+  ///
+  /// No aclararlo sin volver a medir: las etiquetas DIARIO / SEMANAL /
+  /// ANUAL van en este color y en la variante A se apoyan directo sobre
+  /// el fondo tintado, que es el caso más exigente.
+  static const Color textSecondary = Color(0xFF666D7A);
+
+  // Color de cada categoría/liga de cashback. Progresión del azul de
+  // marca, de más claro a más profundo, terminando exactamente en
+  // [accent].
+  //
+  // Lo que separa un nivel del siguiente es la LUMINOSIDAD, no el matiz:
+  // se leen como escalones aunque no se distingan bien los colores. No
+  // "corregir" estos valores acercándolos entre sí por gusto estético.
+  //
+  // Se evitan tonos demasiado pálidos porque estos colores también se
+  // usan como texto e íconos sobre fondo claro, no solo como relleno.
+  static const Color nivel1 = Color(0xFF7C90D4);
+  static const Color nivel2 = Color(0xFF5468BC);
+  static const Color nivel3 = Color(0xFF2C41A6);
+  static const Color nivel4 = Color(0xFF012096);
 
   // Los tres tramos del anillo de pasos de Home. NO son niveles de
   // cashback ni la liga de duelos: son solo la lectura visual de en qué
@@ -124,11 +158,25 @@ class AppColors {
   //
   // Relleno: el accent mezclado con blanco, para que dé color sin pelearse
   // con el texto oscuro que va encima.
-  static const Color tarjetaAzulClaro = Color(0xFFD7E7F7);
+  static const Color tarjetaAzulClaro = Color(0xFFDDE3F7);
 
   // La franja que gira por el borde. Es el accent tal cual: sólida, un
   // solo tono, sin degradado.
   static const Color tarjetaBordeAzul = accent;
+
+  /// Fondo de la pantalla: gris cálido muy suave, con las tarjetas de
+  /// contenido en blanco puro. El contraste entre los dos es lo que da
+  /// profundidad; antes fondo y tarjetas eran casi el mismo blanco y la
+  /// pantalla se veía plana.
+  ///
+  /// El tinte cálido emparenta el fondo con el naranja de marca sin traer
+  /// nada de saturación.
+  ///
+  /// [PENDIENTE DE APROBACIÓN] Este tono es PROPUESTA: no salió de
+  /// ninguna constante previa del proyecto porque no había ninguna que
+  /// sirviera.
+  static const Color fondoDePantalla = Color(0xFFF3F1ED);
+
 
   /// Devuelve el color de un nivel anual (1 a 4).
   ///
@@ -154,8 +202,50 @@ class AppColors {
   }
 }
 
+/// Escala de espaciado. Son CUATRO valores y no hay más: el ritmo
+/// constante es lo que hace que una pantalla se lea como una sola cosa y
+/// no como widgets sueltos.
+///
+/// Antes Home usaba 10, 12, 16, 20, 24 y 28 mezclados. La diferencia
+/// entre 24 y 28 no se percibe, pero rompe el ritmo igual.
+class AppSpacing {
+  AppSpacing._();
+
+  /// Entre cosas que son la misma idea (un dato y su etiqueta).
+  static const double dentro = 8;
+
+  /// Entre elementos hermanos de un mismo grupo.
+  static const double entre = 16;
+
+  /// Entre el encabezado de una sección y su contenido.
+  static const double grupo = 24;
+
+  /// Entre una sección y la siguiente. Es el corte grande.
+  static const double seccion = 40;
+}
+
 class AppTheme {
   AppTheme._();
+
+  /// Tracking correcto para un tamaño dado.
+  ///
+  /// Un `letterSpacing` fijo está mal en algún tamaño sí o sí: el texto
+  /// grande se ve desarmado con las letras separadas, y el chico se
+  /// vuelve ilegible si se le pega demasiado. Achica a medida que crece.
+  static double trackingPara(double fontSize) {
+    if (fontSize >= 48) return 0;
+    if (fontSize >= 32) return 1;
+    if (fontSize >= 20) return 2;
+    return 2.5;
+  }
+
+  /// Display font (Bebas Neue) con el tracking ya ajustado al tamaño.
+  static TextStyle display(double fontSize) => GoogleFonts.bebasNeue(
+    color: AppColors.textPrimary,
+    fontSize: fontSize,
+    letterSpacing: trackingPara(fontSize),
+    height: 1,
+  );
 
   // SF Pro es propietaria de Apple: solo se puede usar en apps para
   // plataformas Apple. Como esta app también corre en Web, usamos Inter
@@ -180,7 +270,7 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.light,
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: AppColors.fondoDePantalla,
       primaryColor: AppColors.accent,
       colorScheme: const ColorScheme.light(
         primary: AppColors.accent,
