@@ -30,8 +30,9 @@ pero el cliente que paga es la aseguradora.
 
 Toda la app en **español latinoamericano**, tono natural y humano (nunca
 traducción literal ni robótica). Es para el mercado guatemalteco. Excepción:
-los nombres de categorías de cashback (Bronze, Silver, Gold, Platinum)
-SIEMPRE quedan en inglés.
+los niveles de cashback se nombran por número ("Nivel 3"), nunca con los
+nombres en inglés Bronze/Silver/Gold/Platinum, que el contrato v1 prohíbe
+expresamente por ser de Vitality.
 
 ## Las 2 monedas — regla dura, nunca mezclar
 
@@ -48,21 +49,45 @@ Existe además una **liga de duelos cosmética** (Bronce → Plata → Oro →
 Diamante, en español) separada de las categorías de cashback — solo estado
 social, sin beneficio real.
 
-## Categorías anuales de cashback (siempre en inglés)
+## Niveles anuales de cashback — regla dura, numéricos
 
-| Categoría | Puntos anuales | % Cashback |
+Fuente de verdad: `contrato-v1-corregido.md`, congelado.
+
+**El naming Bronze/Silver/Gold/Platinum está PROHIBIDO en el proyecto.** Es de
+Vitality, no de +Vida. El nivel es un entero de 0 a 4 y en la UI se dice
+"Nivel 3", nunca un nombre en inglés. (Esto reemplaza a la regla anterior de
+este documento, que pedía lo contrario.)
+
+| Nivel | Puntos anuales | % Cashback |
 |---|---|---|
-| Bronze | 5,000 – 9,999 | 5% |
-| Silver | 10,000 – 19,999 | 7.5% |
-| Gold | 20,000 – 29,999 | 10% |
-| Platinum | 30,000+ | 20% |
+| 0 | 0 – 2,499 | 0% |
+| 1 | 2,500 – 4,999 | 5% |
+| 2 | 5,000 – 9,999 | 7,5% |
+| 3 | 10,000 – 14,999 | 10% |
+| 4 | 15,000+ | 20% |
 
-[PENDIENTE: esta tabla es del modelo viejo y no calza con las reglas nuevas.
-El Excel (L13) dice que **cruzar 2,500 puntos cambia el nivel**, un umbral que
-no existe en ninguna fila de arriba. Además, con el techo diario de 200 pts el
-máximo anual pasa de 25,000 a ~73,000 pts, así que los cortes de 5,000/10,000/
-20,000/30,000 quedan demasiado bajos. Hay que redefinir la tabla completa
-antes de construir Mi Plan contra ella.]
+Tabla **confirmada** (Daniel, 1 de septiembre de 2026). Reemplaza a la versión
+anterior de este documento, que dejaba los niveles 0, 1 y 2 sin definir. Vive
+en `niveles`, dentro de `lib/reglas_puntos.dart`: ese es el único lugar donde
+se escriben estos números.
+
+**Techo anual de actividad física: 12.000 puntos.** Topa los puntos por pasos
+e intensidad, y NO es un techo de los puntos del año: **los chequeos médicos
+dan puntos aparte, que se suman POR ENCIMA de ese techo.**
+
+Consecuencia: **el nivel 4 (15.000+) SÍ es alcanzable**, pero solo si el
+afiliado además se hace los chequeos — con pura actividad física no llega.
+Esto reemplaza a la versión anterior de este documento, que decía que el nivel
+4 quedaba fuera de alcance en el piloto.
+
+Los 15.000 son el **piso** del nivel 4, no un techo. Nunca poner un tope duro
+ahí.
+
+[PENDIENTE: cuántos puntos da un chequeo médico. **No inventarlo**, y no
+nombrar ninguna cifra de chequeos en la UI hasta que esté definido.]
+
+La **liga de duelos cosmética** (Bronce → Plata → Oro → Diamante, en español)
+sigue siendo algo aparte de los niveles de cashback — solo estado social.
 
 **Regla regulatoria dura:** el cashback SIEMPRE se devuelve como dinero
 DESPUÉS del pago de la prima. NUNCA se descuenta directamente (regulación de
@@ -77,11 +102,15 @@ versión anterior de este documento — si encontrás en el código escalones de
 7,500 / 10,000 / 15,000 pasos, un techo diario de 500 pts, o FCmáx = 220 −
 edad, son del modelo viejo y hay que migrarlos.
 
-**Por pasos** — función escalonada con piso en 7,000:
+**Por pasos** — función escalonada con piso en 7,000 (contrato v1):
 - Menos de 7,000 pasos = 0 pts
-- 7,000 – 11,999 = 25 pts
-- 12,000 – 19,999 = 50 pts
-- 20,000+ = 100 pts
+- 7,000 – 9,999 = 25 pts
+- 10,000 – 14,999 = 50 pts
+- 15,000+ = 100 pts
+
+Los pasos por encima de 15,000 NO dan puntos adicionales. Cuentan tanto los del
+teléfono como los de un reloj vinculado, pero la deduplicación y la precedencia
+entre fuentes se resuelven ANTES de aplicar la tabla — nunca se suman crudo.
 
 Los umbrales de pasos son **iguales para todas las edades**. Ya no existe una
 tabla de pasos separada para adultos mayores: el ajuste por edad vive ahora en
@@ -98,9 +127,18 @@ la matriz de intensidad, no acá.
   inventar escalones** ni reusar la tabla vieja de 60%/70% de este documento,
   que ya no aplica.]
 
-**Techo diario absoluto: 200 pts**, igual para todas las edades. Un día que
-genere más puntos brutos acredita 200 y marca el registro con `tope_aplicado`.
+**Techo diario absoluto: 200 pts**, igual para todas las edades, sumando ambas
+vías. Un día que genere más puntos brutos acredita 200 y marca el registro con
+`tope_diario_aplicado`. Llegar a exactamente 200 NO cuenta como recorte.
 Ningún dato de ejemplo debe superar 200 pts en un solo día.
+
+**Techo anual: 12.000 pts**, con su propia bandera `tope_anual_aplicado`.
+
+Nota verificada: con la única celda definida de la matriz de intensidad (100
+pts) más el escalón máximo de pasos (100 pts), un usuario menor de 60 llega
+como mucho a 200 pts brutos — es decir, `tope_diario_aplicado` **no puede dar
+true** para él. Solo se activa con el bonus 60+ (100 + 125 = 225). Hasta que la
+matriz defina una celda mayor a 100, ese es el único camino.
 
 Notas sobre la edad:
 - La edad DEBE venir de los datos de la póliza que provee la aseguradora,
@@ -111,9 +149,16 @@ Notas sobre la edad:
 - En la UI, cualquier mención al ajuste por edad debe tener tono cálido, nunca
   clínico ni condescendiente.
 
-**Retos semanales:** el usuario elige un reto; el ciclo va de lunes 00:00 a
-domingo 23:59 y el corte del domingo cierra la semana. Cumplir el reto acuña
-MONEDAS, con **tope de 100 monedas por semana**.
+**Retos semanales — por nivel de dificultad progresiva, no por meta de puntos**
+(confirmado en el contrato v1). Todos arrancan en nivel de reto 1. Completar la
+meta de la semana SUBE un nivel; no completarla BAJA uno. El ciclo va de lunes
+00:00 a domingo 23:59 en hora de Guatemala. Cumplir el reto acuña MONEDAS.
+
+[PENDIENTE: la tabla de dificultad por nivel de reto. El contrato dice explícito
+que no hay número documentado todavía; lo define Luis en el motor de reglas.
+El tope de 100 monedas por semana que decía la versión anterior de este
+documento tampoco calza con el techo mensual de 8 monedas que usa Home —
+hay que reconciliarlos.]
 
 [PENDIENTE: reconciliar los retos semanales con la "meta semanal adaptativa"
 (arrancaba en 300 pts, oscilaba 200-800) y con las recompensas por constancia
@@ -159,14 +204,28 @@ Tema CLARO. La app debe transmitir paz, tranquilidad y ambiente sano.
 `#000000` o gris `#1A1A1A` en el código, son del tema viejo y hay que
 migrarlos.)
 
-- **background:** blanco con tinte verdoso sutil `#F7FAF8`
-- **card:** blanco puro `#FFFFFF` con borde sutil gris muy claro `#E5E9E7`
+**Paleta de marca: azul `#012096`, naranja `#F58700` y blanco.** El reparto
+es por TAMAÑO de superficie:
+- **blanco** → lo grande (fondos, tarjetas, superficies)
+- **azul** → lo mediano (botones, barras de progreso, íconos de sección)
+- **naranja** → lo chico (marcas de estado, chips, checks, detalles que
+  tienen que saltar a la vista)
+
+El naranja **nunca** rellena una superficie grande: a ese tamaño compite con
+todo. Su trabajo es señalar, no vestir.
+
+(Esto reemplaza a la paleta anterior de este documento — azul `#4A90D9` y
+verde `#5FAE85`. Si encontrás esos dos hex o el verde de salud en el código,
+son del tema viejo.)
+
+- **background:** casi blanco con tinte azul mínimo `#F5F6FA`
+- **card:** blanco puro `#FFFFFF` con borde sutil `#E3E6F0`
   (necesario para que las tarjetas no se pierdan contra el fondo claro)
-- **accent (azul, calma):** `#4A90D9` — botones principales, links,
+- **accent (azul de marca):** `#012096` — botones principales, links,
   elementos interactivos
-- **accentSecondary (verde, salud/vitalidad):** `#5FAE85` — progreso,
-  estados de éxito, checks completados
-- **textPrimary:** azul marino oscuro `#1A2E35` (NO negro puro, se ve muy
+- **accentSecondary (naranja de marca):** `#F58700` — estados de éxito,
+  checks completados, marcadores y detalles chicos
+- **textPrimary:** azul muy oscuro `#101833` (NO negro puro, se ve muy
   duro sobre fondo claro)
 - **textSecondary:** gris medio `#6B7280`
 - **Tipografía:** SF Pro (o la más parecida disponible)
@@ -176,11 +235,12 @@ Reglas visuales:
   sólido o sin borde
 - **Sin glows brillantes** — sobre fondo claro se ven mal. Usar sombras
   suaves grises/verdes en su lugar
-- **Colores por categoría de cashback:** progresión de verdes (Bronze =
-  verde muy pálido → Platinum = verde profundo/saturado). El azul queda
-  reservado para elementos de acción, no para categorías
-- **Barras de progreso:** fondo vacío en `#E5E9E7`, relleno en verde
-  (progreso/logros) o azul (informativo/neutro)
+- **Colores por nivel de cashback:** progresión del azul de marca (nivel 1
+  = azul más claro → nivel 4 = `#012096`), vía
+  `AppColors.colorForNivel(int)`. Lo que separa un nivel del siguiente es
+  la LUMINOSIDAD, no el matiz: se leen como escalones aunque no se
+  distingan bien los colores
+- **Barras de progreso:** fondo vacío en `#E3E6F0`, relleno en azul
 - **Header** (`lib/widgets/app_header.dart`, reutilizado en TODAS las
   pantallas): "+VIDA" pegado a la esquina superior IZQUIERDA, foto de
   perfil pegada a la DERECHA
@@ -198,8 +258,9 @@ Reglas visuales:
   diaria, tiempo restante del día
 - Tarjeta de puntos totales (SIN botón de canje)
 - "Tu Cashback": monto acumulado, camino de categorías, link a Mi Plan
-- "Metas Mensuales": meta base + 4 metas elegidas (progreso/monedas/check),
-  selección de 8 opciones el día 1, contador de monedas vs. techo mensual
+- "Objetivos de la semana": las semanas del mes, cada una plegable, con
+  sus 3 objetivos (progreso/monedas/check) y el rango. Las metas mensuales
+  ya NO existen
 
 **Progress** (`lib/screens/progress_screen.dart`) — construida
 - Selector Semana/Mes/Año con contenido real por pestaña
@@ -260,7 +321,8 @@ producto o queda solo como material de pitch comercial]
 ## Decisiones técnicas cerradas
 
 - Frontend: **Flutter** (decisión final, no solo demo)
-- Backend: Python — [COMPLETAR: framework que decidió Luis]
+- Backend: Python / **Django** (confirmado por el código en `mas-vida_backend/`
+  y el `compose.yaml` de la rama dev)
 - Fuente de datos: Apple HealthKit únicamente
 - Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación)
 - Distribución piloto: TestFlight

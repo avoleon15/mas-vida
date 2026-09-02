@@ -64,26 +64,54 @@
 
   "monedas_ganadas_anio": 14,
 
-  "metas_mensuales": {
-    "_comentario": "Mecánica descrita en CLAUDE.md (meta base + 4 metas elegidas el día 1 entre 8 opciones, pagadas en MONEDAS). NO está en el contrato v1 y no está reconciliada con los retos semanales.",
-    "_todo_reparto": "TODO: falta el reparto de monedas por meta. Lo único documentado es el techo mensual de 8 monedas, así que las 4 metas se reparten hasta ese techo. El reparto exacto no está definido en ninguna fuente.",
-    "avance_base": 0.55,
-    "es_momento_de_elegir": false,
-    "opciones": [
-      "Camina 40km",
-      "5 entrenos de fuerza",
-      "2 clases de yoga",
-      "15,000 pasos extra",
-      "4 entrenos de cardio",
-      "30km en bici",
-      "3 clases de spinning",
-      "10km de trote"
-    ],
-    "metas": [
-      { "nombre": "Camina 50km este mes", "progreso": 32, "objetivo": 50, "unidad": "km", "monedas": 3, "completa": false },
-      { "nombre": "3 entrenos de fuerza", "progreso": 3, "objetivo": 3, "unidad": "entrenos", "monedas": 2, "completa": true },
-      { "nombre": "2 clases de yoga", "progreso": 1, "objetivo": 2, "unidad": "clases", "monedas": 2, "completa": false },
-      { "nombre": "20,000 pasos extra", "progreso": 14000, "objetivo": 20000, "unidad": "pasos", "monedas": 1, "completa": false }
+  "objetivos_semana": {
+    "_comentario": "OBJETIVOS SEMANALES. Reemplazan por completo a las metas mensuales, que ya no existen. Son 3 por semana, los tres de la MISMA semana (lunes 00:00 a domingo 23:59, hora de Guatemala), y se evaluan una sola vez el domingo. Cumplir 1 o 2 acuna MONEDAS sin mover el rango; cumplir los 3 sube un rango; no cumplir los 3 baja uno. Piso rango 1, techo rango 4, un movimiento por semana. Al empezar mes nuevo todos vuelven al rango 1.",
+    "_todo_dificultad": "TODO: falta la tabla de dificultad por rango. Por eso cada objetivo trae meta: null y la UI no muestra un numero de meta inventado. El campo avance (0 a 1) es lo que el servidor SI puede reportar: el conoce la meta del rango aunque la app todavia no tenga la tabla. Los valores de avance de este mock son ilustrativos.",
+    "_todo_objetivos": "TODO: cuales son los 3 objetivos es PROVISIONAL. Entran como datos, asi que cambiarlos no toca el motor de reglas.",
+    "_todo_monedas": "TODO: cuantas monedas paga cada objetivo tampoco esta documentado. Los valores de aca suman 8 por semana, que es el unico numero que existe (techo mensual de monedas en CLAUDE.md) y hay que reconciliarlo.",
+    "_nota_semanas": "Un mes puede tener 5 semanas. La app no asume 4: renderiza las que vengan.",
+    "rango_actual": 2,
+    "semanas": [
+    {
+      "numero": 1,
+      "cierra": "2026-09-06T23:59:59-06:00",
+      "estado": "cerrada",
+      "objetivos": [
+      { "id": "pasos_semana", "nombre": "Pasos de la semana", "unidad": "pasos", "progreso": 42100, "meta": null, "avance": 1.0, "monedas": 3, "completo": true },
+      { "id": "intensidad_semana", "nombre": "Minutos de intensidad", "unidad": "minutos", "progreso": 95, "meta": null, "avance": 1.0, "monedas": 3, "completo": true },
+      { "id": "dias_ritmo_alto", "nombre": "Dias con ritmo cardiaco alto", "unidad": "dias", "progreso": 4, "meta": null, "avance": 1.0, "monedas": 2, "completo": true }
+      ]
+    },
+    {
+      "numero": 2,
+      "cierra": "2026-09-13T23:59:59-06:00",
+      "estado": "cerrada",
+      "objetivos": [
+      { "id": "pasos_semana", "nombre": "Pasos de la semana", "unidad": "pasos", "progreso": 38900, "meta": null, "avance": 1.0, "monedas": 3, "completo": true },
+      { "id": "intensidad_semana", "nombre": "Minutos de intensidad", "unidad": "minutos", "progreso": 61, "meta": null, "avance": 0.68, "monedas": 3, "completo": false },
+      { "id": "dias_ritmo_alto", "nombre": "Dias con ritmo cardiaco alto", "unidad": "dias", "progreso": 3, "meta": null, "avance": 1.0, "monedas": 2, "completo": true }
+      ]
+    },
+    {
+      "numero": 3,
+      "cierra": "2026-09-20T23:59:59-06:00",
+      "estado": "en_curso",
+      "objetivos": [
+      { "id": "pasos_semana", "nombre": "Pasos de la semana", "unidad": "pasos", "progreso": 38400, "meta": null, "avance": 0.77, "monedas": 3, "completo": false },
+      { "id": "intensidad_semana", "nombre": "Minutos de intensidad", "unidad": "minutos", "progreso": 84, "meta": null, "avance": 0.42, "monedas": 3, "completo": false },
+      { "id": "dias_ritmo_alto", "nombre": "Dias con ritmo cardiaco alto", "unidad": "dias", "progreso": 3, "meta": null, "avance": 0.15, "monedas": 2, "completo": false }
+      ]
+    },
+    {
+      "numero": 4,
+      "cierra": "2026-09-27T23:59:59-06:00",
+      "estado": "futura",
+      "objetivos": [
+      { "id": "pasos_semana", "nombre": "Pasos de la semana", "unidad": "pasos", "progreso": 0, "meta": null, "avance": 0.0, "monedas": 3, "completo": false },
+      { "id": "intensidad_semana", "nombre": "Minutos de intensidad", "unidad": "minutos", "progreso": 0, "meta": null, "avance": 0.0, "monedas": 3, "completo": false },
+      { "id": "dias_ritmo_alto", "nombre": "Dias con ritmo cardiaco alto", "unidad": "dias", "progreso": 0, "meta": null, "avance": 0.0, "monedas": 2, "completo": false }
+      ]
+    }
     ]
   },
 

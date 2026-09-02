@@ -23,10 +23,14 @@
 /// `tope_diario_aplicado`.
 const int techoDiario = 200;
 
-/// Techo anual. El contrato documenta que, con el chequeo médico fuera
-/// de v1, el máximo alcanzable solo por actividad es 12.000 puntos — y
-/// que por lo tanto el nivel 4 queda fuera de alcance en el piloto.
-/// Es una consecuencia aceptada y documentada, no un bug.
+/// Techo anual de los puntos por ACTIVIDAD FÍSICA (pasos + intensidad).
+///
+/// NO es un techo de los puntos del año: los chequeos médicos dan puntos
+/// aparte que se suman POR ENCIMA de este número. Por eso el nivel 4
+/// (15.000) sí se alcanza — pero solo sumando chequeos, no caminando más.
+///
+/// [PENDIENTE: cuántos puntos da un chequeo. No inventarlo, y no nombrar
+/// ninguna cifra de chequeos en la UI hasta que esté definido.]
 const int techoAnual = 12000;
 
 /// Piso mínimo de pasos para ganar cualquier punto.
@@ -196,7 +200,10 @@ class Nivel {
   /// False mientras el rango y el % de este nivel no estén definidos en
   /// la documentación fuente. La UI debe mostrar un estado explícito de
   /// "pendiente de definir", nunca un número inventado.
-  bool get definido => porcentajeCashback != null;
+  ///
+  /// Hoy los cinco niveles están definidos, pero el campo se queda: es la
+  /// red de seguridad si mañana se agrega uno sin datos.
+  bool get definido => porcentajeCashback != null && puntosMinimos != null;
 
   String get rangoTexto {
     if (!definido) return 'Pendiente de definir';
@@ -209,27 +216,28 @@ class Nivel {
       n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
 }
 
-/// Tabla de niveles.
+/// Tabla de niveles anuales de cashback. Los cinco niveles y sus rangos
+/// están confirmados: ya no hay huecos pendientes acá.
 ///
-/// TODO: falta definir los niveles 1 y 2 — ni su rango de puntos ni su %
-/// de cashback existen en la documentación fuente. El contrato v1 deja
-/// anotado "confirmar con Alvaro/Diego el mapeo exacto de rango → nivel →
-/// % de cashback". No inventarlos.
+/// OJO con el nivel 4: arranca justo en [techoAnual] (12.000), que es lo
+/// máximo que da la ACTIVIDAD FÍSICA sola. Los chequeos médicos suman
+/// POR ENCIMA de ese techo, y son los que llevan al usuario a moverse
+/// dentro del nivel 4 hasta los 15.000.
 const List<Nivel> niveles = [
-  Nivel(1, null, null, null), // TODO: falta
-  Nivel(2, null, null, null), // TODO: falta
-  Nivel(3, 10000, 15000, 10),
-  Nivel(4, 15000, null, 20),
+  Nivel(0, 0, 2499, 0),
+  Nivel(1, 2500, 4999, 5),
+  Nivel(2, 5000, 9999, 7.5),
+  Nivel(3, 10000, 11999, 10),
+  Nivel(4, 12000, 15000, 20),
 ];
 
 /// Nivel que corresponde a un acumulado anual.
-///
-/// Devuelve `null` por debajo de 10.000 puntos: ahí caen los niveles 1 y
-/// 2, cuyos rangos no están definidos.
-int? nivelParaPuntos(int puntosAnuales) {
-  if (puntosAnuales >= 15000) return 4;
-  if (puntosAnuales >= 10000) return 3;
-  return null; // TODO: falta el rango de los niveles 1 y 2
+int nivelParaPuntos(int puntosAnuales) {
+  // De mayor a menor: el primero cuyo piso se alcanza es el nivel.
+  for (final n in niveles.reversed) {
+    if (puntosAnuales >= n.puntosMinimos!) return n.numero;
+  }
+  return 0;
 }
 
 /// Busca un nivel por número. Devuelve `null` si no está en la tabla.

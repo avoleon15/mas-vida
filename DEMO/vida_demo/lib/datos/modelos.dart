@@ -322,58 +322,174 @@ class EstadoRetos {
   );
 }
 
-/// Una meta mensual. Paga MONEDAS, nunca puntos.
-class MetaMensual {
-  const MetaMensual({
+/// UN objetivo de la semana. Paga MONEDAS, nunca puntos.
+///
+/// Los objetivos son SEMANALES: las metas mensuales ya no existen.
+class ObjetivoSemanal {
+  const ObjetivoSemanal({
+    required this.id,
     required this.nombre,
     required this.progreso,
-    required this.objetivo,
+    required this.meta,
     required this.unidad,
     required this.monedas,
-    required this.completa,
+    required this.avanceReportado,
+    required this.completo,
   });
+
+  /// Identificador estable. Es lo que casa el objetivo con su definición
+  /// en el motor de reglas, nunca el nombre visible.
+  final String id;
 
   final String nombre;
   final int progreso;
-  final int objetivo;
-  final String unidad;
-  final int monedas;
-  final bool completa;
 
-  factory MetaMensual.desdeJson(Map<String, dynamic> j) => MetaMensual(
+  /// Cuánto pide el objetivo en el rango de esa semana.
+  ///
+  /// Null mientras la tabla de dificultad por rango no esté definida. La
+  /// UI muestra "pendiente", nunca un número inventado.
+  final int? meta;
+
+  final String unidad;
+
+  /// MONEDAS que acuña cumplirlo. Nunca puntos.
+  final int monedas;
+
+  final bool completo;
+
+  /// Avance de 0 a 1 tal como lo reporta el servidor.
+  ///
+  /// Existe porque el servidor SÍ conoce la meta de cada rango aunque la
+  /// app todavía no tenga la tabla de dificultad: puede decir qué tan
+  /// lleno va el objetivo sin que el cliente sepa contra qué número.
+  final double? avanceReportado;
+
+  /// Qué tan lleno va el objetivo, de 0 a 1. Null solo cuando no hay
+  /// forma de saberlo.
+  ///
+  /// Un objetivo CUMPLIDO va lleno siempre. Antes esto devolvía null
+  /// cuando `meta` era null, y como null se pinta como cero, un objetivo
+  /// completado se veía con la barra vacía.
+  double? get avance {
+    if (completo) return 1;
+    final reportado = avanceReportado;
+    if (reportado != null) return reportado.clamp(0.0, 1.0);
+    final m = meta;
+    if (m == null || m <= 0) return null;
+    return (progreso / m).clamp(0.0, 1.0);
+  }
+
+  factory ObjetivoSemanal.desdeJson(Map<String, dynamic> j) => ObjetivoSemanal(
+    id: j['id'] as String,
     nombre: j['nombre'] as String,
     progreso: j['progreso'] as int,
-    objetivo: j['objetivo'] as int,
+    meta: j['meta'] as int?,
     unidad: j['unidad'] as String,
     monedas: j['monedas'] as int,
-    completa: j['completa'] as bool,
+    avanceReportado: (j['avance'] as num?)?.toDouble(),
+    completo: j['completo'] as bool,
   );
 }
 
-/// Bloque de "Metas Mensuales" de Home.
+/// En qué momento está una semana respecto de hoy.
+enum EstadoSemana {
+  /// Ya se evaluó (su domingo 23:59 pasó).
+  cerrada,
+
+  /// Es la semana en curso.
+  enCurso,
+
+  /// Todavía no empieza.
+  futura,
+}
+
+/// Una semana con sus 3 objetivos.
 ///
-/// TODO: falta reconciliar esta mecánica con los retos semanales del
-/// contrato v1. Son dos sistemas distintos de la misma idea y solo el de
-/// retos está en el contrato; el de metas mensuales solo en CLAUDE.md.
-class MetasMensuales {
-  const MetasMensuales({
-    required this.avanceBase,
-    required this.esMomentoDeElegir,
-    required this.opciones,
-    required this.metas,
+/// Los tres son de la MISMA semana y se evalúan de una sola vez, el
+/// domingo 23:59 (hora de Guatemala).
+class SemanaObjetivos {
+  const SemanaObjetivos({
+    required this.numero,
+    required this.cierra,
+    required this.estado,
+    required this.objetivos,
   });
 
-  final double avanceBase;
-  final bool esMomentoDeElegir;
-  final List<String> opciones;
-  final List<MetaMensual> metas;
+  /// Número de semana dentro del mes: 1, 2, 3… Un mes puede tener 5.
+  final int numero;
 
-  factory MetasMensuales.desdeJson(Map<String, dynamic> j) => MetasMensuales(
-    avanceBase: (j['avance_base'] as num).toDouble(),
-    esMomentoDeElegir: j['es_momento_de_elegir'] as bool,
-    opciones: (j['opciones'] as List).cast<String>(),
-    metas: (j['metas'] as List)
-        .map((m) => MetaMensual.desdeJson(m as Map<String, dynamic>))
+  /// Domingo 23:59 en que se evalúa.
+  final DateTime cierra;
+
+  final EstadoSemana estado;
+  final List<ObjetivoSemanal> objetivos;
+
+  /// Cuántos de los tres van cumplidos.
+  int get cumplidos => objetivos.where((o) => o.completo).length;
+
+  /// MONEDAS ya acuñadas en la semana.
+  int get monedasGanadas => objetivos
+      .where((o) => o.completo)
+      .fold(0, (suma, o) => suma + o.monedas);
+
+  /// MONEDAS que quedan en juego si se cumple todo lo que falta.
+  int get monedasEnJuego =>
+      objetivos.fold(0, (suma, o) => suma + o.monedas) - monedasGanadas;
+
+  /// Cumplir los TRES es lo único que sube de rango.
+  bool get subioDeRango => cumplidos == objetivos.length;
+
+  factory SemanaObjetivos.desdeJson(Map<String, dynamic> j) => SemanaObjetivos(
+    numero: j['numero'] as int,
+    cierra: DateTime.parse(j['cierra'] as String),
+    estado: switch (j['estado'] as String) {
+      'cerrada' => EstadoSemana.cerrada,
+      'en_curso' => EstadoSemana.enCurso,
+      _ => EstadoSemana.futura,
+    },
+    objetivos: (j['objetivos'] as List)
+        .map((o) => ObjetivoSemanal.desdeJson(o as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+/// Bloque de "Objetivos de la semana" de Home: las semanas del mes en
+/// curso, cada una con sus 3 objetivos.
+///
+/// Reemplaza por completo al bloque viejo de metas mensuales, que ya no
+/// existe. Las reglas del movimiento de rango viven en
+/// `reglas_rango.dart`.
+class ObjetivosSemana {
+  const ObjetivosSemana({required this.rangoActual, required this.semanas});
+
+  /// Rango en la escalera. Paga MONEDAS, nunca puntos.
+  final int rangoActual;
+
+  /// Las semanas del mes. Pueden ser 4 o 5: no todos los meses tienen
+  /// cuatro lunes.
+  final List<SemanaObjetivos> semanas;
+
+  /// MONEDAS acuñadas por estos objetivos, sumando todas las semanas.
+  ///
+  /// NO es el saldo de la billetera: el saldo incluye monedas de meses
+  /// anteriores y descuenta lo gastado en Premios. Esto es solo lo que
+  /// dieron los objetivos que se están mostrando, así que suma
+  /// exactamente lo que el usuario ve en las tarjetas de cada semana.
+  int get monedasGanadas =>
+      semanas.fold(0, (suma, s) => suma + s.monedasGanadas);
+
+  /// La semana en curso, o null si el mes ya cerró.
+  SemanaObjetivos? get enCurso {
+    for (final s in semanas) {
+      if (s.estado == EstadoSemana.enCurso) return s;
+    }
+    return null;
+  }
+
+  factory ObjetivosSemana.desdeJson(Map<String, dynamic> j) => ObjetivosSemana(
+    rangoActual: j['rango_actual'] as int,
+    semanas: (j['semanas'] as List)
+        .map((s) => SemanaObjetivos.desdeJson(s as Map<String, dynamic>))
         .toList(),
   );
 }
@@ -442,7 +558,7 @@ class ResumenAnual {
     required this.rachaHistorial,
     required this.retos,
     required this.monedas,
-    required this.metasMensuales,
+    required this.objetivosSemana,
     required this.actividadPorMes,
     required this.mesActualIndice,
     required this.zonasSemana,
@@ -468,7 +584,7 @@ class ResumenAnual {
   final List<bool> rachaHistorial;
   final EstadoRetos retos;
   final SaldoMonedas monedas;
-  final MetasMensuales metasMensuales;
+  final ObjetivosSemana objetivosSemana;
 
   /// Puntos por mes del año en curso, de enero a diciembre.
   final List<int> actividadPorMes;
@@ -505,8 +621,8 @@ class ResumenAnual {
       rachaHistorial: (j['racha_historial'] as List).cast<bool>(),
       retos: EstadoRetos.desdeJson(j['retos_semanales'] as Map<String, dynamic>),
       monedas: SaldoMonedas.desdeJson(j['monedas'] as Map<String, dynamic>),
-      metasMensuales: MetasMensuales.desdeJson(
-        j['metas_mensuales'] as Map<String, dynamic>,
+      objetivosSemana: ObjetivosSemana.desdeJson(
+        j['objetivos_semana'] as Map<String, dynamic>,
       ),
     );
   }

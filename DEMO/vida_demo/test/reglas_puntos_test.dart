@@ -142,38 +142,41 @@ void main() {
   });
 
   group('Niveles', () {
-    test('los niveles 1 y 2 no están definidos', () {
-      expect(nivelPorNumero(1)!.definido, isFalse);
-      expect(nivelPorNumero(2)!.definido, isFalse);
-      expect(nivelPorNumero(1)!.rangoTexto, 'Pendiente de definir');
+    // La tabla completa y sus bordes viven en niveles_cashback_test.dart.
+    test('los cinco niveles están definidos', () {
+      for (var i = 0; i <= 4; i++) {
+        expect(nivelPorNumero(i)!.definido, isTrue, reason: 'nivel $i');
+      }
     });
 
-    test('nivel 3 va de 10.000 a 15.000 con 10% de cashback', () {
+    test('nivel 3 va de 10.000 a 11.999 con 10% de cashback', () {
       final n = nivelPorNumero(3)!;
       expect(n.puntosMinimos, 10000);
-      expect(n.puntosMaximos, 15000);
+      expect(n.puntosMaximos, 11999);
       expect(n.porcentajeCashback, 10);
     });
 
-    test('nivel 4 es 15.000+ con 20% de cashback', () {
+    test('nivel 4 va de 12.000 a 15.000 con 20% de cashback', () {
       final n = nivelPorNumero(4)!;
-      expect(n.puntosMinimos, 15000);
+      expect(n.puntosMinimos, 12000);
       expect(n.porcentajeCashback, 20);
     });
 
-    test('por debajo de 10.000 el nivel es desconocido, no inventado', () {
-      expect(nivelParaPuntos(0), isNull);
-      expect(nivelParaPuntos(9999), isNull);
-    });
-
-    test('mapea el acumulado a nivel 3 o 4 según corresponda', () {
+    test('mapea el acumulado al nivel que corresponda', () {
+      expect(nivelParaPuntos(0), 0);
+      expect(nivelParaPuntos(2500), 1);
+      expect(nivelParaPuntos(9999), 2);
       expect(nivelParaPuntos(11240), 3);
-      expect(nivelParaPuntos(15000), 4);
+      expect(nivelParaPuntos(12000), 4);
     });
 
-    test('el techo anual de 12.000 deja el nivel 4 fuera de alcance', () {
-      expect(nivelParaPuntos(techoAnual), 3);
-      expect(nivelPorNumero(4)!.puntosMinimos! > techoAnual, isTrue);
+    test('el nivel 4 arranca justo donde topa la actividad física', () {
+      // `techoAnual` topa SOLO los puntos por actividad física. El nivel 4
+      // empieza exactamente ahí: de ese punto en adelante, los puntos
+      // vienen de los chequeos médicos.
+      expect(nivelPorNumero(4)!.puntosMinimos, techoAnual);
+      expect(nivelParaPuntos(techoAnual), 4);
+      expect(nivelParaPuntos(techoAnual - 1), 3);
     });
   });
 }
