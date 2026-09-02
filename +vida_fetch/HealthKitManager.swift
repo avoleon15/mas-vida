@@ -8,11 +8,19 @@
 //  Todo lo demás (dashboard, niveles, retos) va por HTTP directo contra la API
 //  de Luis — este spike solo prueba la lectura cruda de HealthKit.
 //
+//  OJO — nombres: `actualizarVistaHoy()` de acá abajo NO es el `sincronizar`
+//  que define el contrato (ver contrato-v2.md). Ese método de acá es solo
+//  para refrescar la pantalla de depuración con los datos de hoy. El
+//  `sincronizar` real del contrato — el que arma el JSON #1, hace el POST y
+//  devuelve el JSON #2 — es `enviarSincronizacion()`. Cuando A10 conecte el
+//  MethodChannel, el método `sincronizar` de Flutter debe apuntar a
+//  `enviarSincronizacion()`, no a `actualizarVistaHoy()`.
+//
 //  También incluye `exportarJSON`, que arma el JSON #1 del contrato v2
 //  (ver "contrato-v2.md" y SyncPayload.swift) a partir de datos crudos de
-//  HealthKit — pasos, sesiones y ahora también frecuencia_cardiaca[] cruda
-//  del día completo (ticket A4) — para compartirlo/inspeccionarlo
-//  manualmente mientras no existe todavía el endpoint /api/v1/sync.
+//  HealthKit y lo guarda como archivo para compartirlo/inspeccionarlo a
+//  mano — útil para depurar, pero ya no es el camino real de sincronización
+//  (ver `enviarSincronizacion` / `sincronizarHistorial`, tickets A7/A9).
 //
 
 import Combine
@@ -64,11 +72,14 @@ struct HeartRateStats {
 /// Errores propios del spike, para mostrar mensajes legibles en la UI.
 enum HealthKitSpikeError: LocalizedError {
     case noDisponible
+    case rangoInvalido
 
     var errorDescription: String? {
         switch self {
         case .noDisponible:
             return "HealthKit no está disponible en este dispositivo."
+        case .rangoInvalido:
+            return "No se pudo calcular el rango de fechas."
         }
     }
 }
@@ -99,9 +110,39 @@ final class HealthKitManager: ObservableObject {
 
     /// `usuario_id` del payload. Editable desde la UI mientras no exista login
     /// real — no es el HealthKit userID, es el id interno que espera Luis.
+    /// Es estado compartido: lo usan tanto `exportarJSON` como
+    /// `enviarSincronizacion`/`sincronizarHistorial` — no es exclusivo de la
+    /// exportación a archivo aunque viva en esa sección de la UI.
     @Published var usuarioID: String = "alvaro-001"
     @Published var exportando: Bool = false
     @Published var exportURL: URL?
+
+    // MARK: - Estado publicado para el backfill de historial (A9)
+
+    @Published var backfillEnProgreso: Bool = false
+    @Published var errorBackfill: String?
+    @Published var payloadsHistorial: [SyncPayload] = []
+    @Published var respuestasHistorial: [RespuestaSincronizacion] = []
+
+    private static let claveBackfillInicialHecho = "vida.backfillInicialHecho"
+
+    // MARK: - Estado publicado para el envío real al backend (A7)
+
+    /// URL base del backend de Luis. Mientras no exista una pantalla de
+    /// configuración real, queda editable desde acá — va a cambiar varias
+    /// veces mientras Luis pasa de correrlo local a un túnel de ngrok a la
+    /// URL pública de Railway/Render.
+    @Published var baseURLTexto: String = "http://localhost:8000"
+    @Published var enviando: Bool = false
+    @Published var errorEnvio: String?
+
+    /// Respuesta del envío de HOY (`enviarSincronizacion`) — separada de
+    /// `respuestasHistorial` (el backfill) a propósito. Antes había un solo
+    /// `ultimaRespuesta` compartido entre las dos acciones: tocabas
+    /// "Traer últimos 7 días" y pisaba silenciosamente el resultado de
+    /// "Enviar hoy a Luis" sin ninguna señal de cuál era cuál. Cada acción
+    /// ahora tiene su propio resultado, mostrado junto a su propio botón.
+    @Published var respuestaEnvioHoy: RespuestaSincronizacion?
 
     // MARK: - Tipos de HealthKit que leemos (v1: pasos, ritmo cardíaco, workouts)
     // Elevación descartada, sueño fuera de alcance en v1 — ver reglas del proyecto.
@@ -117,7 +158,8 @@ final class HealthKitManager: ObservableObject {
     // MARK: - solicitarPermisos()
     // Corresponde al método `solicitarPermisos` del futuro MethodChannel.
     // Nota: HealthKit nunca informa si el usuario negó el permiso de lectura,
-    // solo se puede inferir consultando y viendo si vuelve algo (ver sincronizar()).
+    // solo se puede inferir consultando y viendo si vuelve algo (ver
+    // actualizarVistaHoy() / enviarSincronizacion()).
 
     func solicitarPermisos() async {
         solicitandoPermisos = true
@@ -137,13 +179,14 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - sincronizar()
-    // Corresponde al método `sincronizar` del futuro MethodChannel.
-    // Trae datos crudos de hoy: pasos, FC (promedio/más bajo/más alto) y
-    // entrenamientos recientes. El cálculo de puntos, FCM y niveles NO va
-    // aquí — eso lo hace siempre el servidor de Luis con datos crudos.
+    // MARK: - actualizarVistaHoy()
+    // Solo refresca la pantalla de depuración con datos de hoy: pasos, FC
+    // (promedio/más bajo/más alto) y entrenamientos recientes. NO manda nada
+    // a ningún lado y NO es el `sincronizar` del contrato — ver nota al
+    // inicio del archivo. El cálculo de puntos, FCM y niveles NO va aquí —
+    // eso lo hace siempre el servidor de Luis con datos crudos.
 
-    func sincronizar() async {
+    func actualizarVistaHoy() async {
         cargando = true
         errorSincronizacion = nil
         defer { cargando = false }
@@ -163,40 +206,47 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
+    // MARK: - construirPayload() (A9)
+    // Arma el JSON #1 del contrato v2 para un día calendario cualquiera —
+    // extraído de exportarJSON() para que tanto la exportación a archivo
+    // como el envío real (enviarSincronizacion) y el backfill
+    // (sincronizarHistorial) compartan exactamente la misma lógica.
+
+    private func construirPayload(fecha: Date) async throws -> SyncPayload {
+        let inicioDia = Calendar.current.startOfDay(for: fecha)
+        guard let finDia = Calendar.current.date(byAdding: .day, value: 1, to: inicioDia) else {
+            throw HealthKitSpikeError.rangoInvalido
+        }
+
+        async let pasosTask = fetchPasosCrudos(desde: inicioDia, hasta: finDia)
+        async let sesionesTask = fetchSesiones(desde: inicioDia, hasta: finDia)
+        async let frecuenciaCrudaTask = fetchFrecuenciaCardiacaCruda(desde: inicioDia, hasta: finDia)
+        let (pasos, sesiones, frecuenciaCardiaca) = try await (pasosTask, sesionesTask, frecuenciaCrudaTask)
+
+        return SyncPayload(
+            usuario_id: usuarioID,
+            fecha: FormatoFechas.diaCalendario.string(from: fecha),
+            zona_horaria: TimeZone.current.identifier,
+            pasos: pasos,
+            sesiones: sesiones,
+            frecuencia_cardiaca: frecuenciaCardiaca,
+            sincronizado_en: FormatoFechas.iso8601.string(from: Date()),
+            app_version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        )
+    }
+
     // MARK: - exportarJSON()
-    // Arma el JSON #1 del contrato v2 (ver contrato-v2.md) para un día
-    // calendario completo, y lo guarda como archivo para compartir. Esto es
-    // una herramienta de desarrollo/depuración: mientras no exista
-    // /api/v1/sync, sirve para mandarle a Luis un payload real de ejemplo.
+    // Arma el JSON #1 del contrato v2 para un día calendario completo y lo
+    // guarda como archivo para compartir/inspeccionar a mano. Herramienta de
+    // depuración — para el envío real usar `enviarSincronizacion`.
 
     func exportarJSON(fecha: Date = Date()) async {
         exportando = true
         errorExportacion = nil
         defer { exportando = false }
 
-        let inicioDia = Calendar.current.startOfDay(for: fecha)
-        guard let finDia = Calendar.current.date(byAdding: .day, value: 1, to: inicioDia) else {
-            errorExportacion = "No se pudo calcular el rango del día."
-            return
-        }
-
         do {
-            async let pasosTask = fetchPasosCrudos(desde: inicioDia, hasta: finDia)
-            async let sesionesTask = fetchSesiones(desde: inicioDia, hasta: finDia)
-            async let frecuenciaCrudaTask = fetchFrecuenciaCardiacaCruda(desde: inicioDia, hasta: finDia)
-            let (pasos, sesiones, frecuenciaCardiaca) = try await (pasosTask, sesionesTask, frecuenciaCrudaTask)
-
-            let payload = SyncPayload(
-                usuario_id: usuarioID,
-                fecha: FormatoFechas.diaCalendario.string(from: fecha),
-                zona_horaria: TimeZone.current.identifier,
-                pasos: pasos,
-                sesiones: sesiones,
-                frecuencia_cardiaca: frecuenciaCardiaca,
-                sincronizado_en: FormatoFechas.iso8601.string(from: Date()),
-                app_version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-            )
-
+            let payload = try await construirPayload(fecha: fecha)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
             let datos = try encoder.encode(payload)
@@ -209,6 +259,92 @@ final class HealthKitManager: ObservableObject {
         } catch {
             errorExportacion = "Error al exportar JSON: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - clienteAPI() (A7)
+    // `baseURLTexto` es editable desde la UI mientras no exista una pantalla
+    // de configuración real — se valida acá en vez de guardar una URL
+    // potencialmente inválida.
+
+    private func clienteAPI() throws -> ApiClient {
+        guard let url = URL(string: baseURLTexto), url.scheme != nil, url.host != nil else {
+            throw ApiError.urlInvalida
+        }
+        return ApiClient(baseURL: url)
+    }
+
+    // MARK: - enviarSincronizacion() (A7)
+    // Este es el `sincronizar` real del contrato: arma el JSON #1 de un día,
+    // lo manda por POST a /api/v1/sync, y guarda el JSON #2 de respuesta en
+    // `respuestaEnvioHoy`. Reemplaza al humano como "cartero" — antes armabas
+    // el archivo con exportarJSON() y lo mandabas a mano; ahora el código lo
+    // entrega directo por la red. Nunca calcula ni manda puntos, edad ni
+    // FCM — eso ya viene resuelto por el backend en la respuesta.
+
+    func enviarSincronizacion(fecha: Date = Date()) async {
+        enviando = true
+        errorEnvio = nil
+        defer { enviando = false }
+
+        do {
+            let payload = try await construirPayload(fecha: fecha)
+            let cliente = try clienteAPI()
+            let respuesta = try await cliente.enviarSincronizacion(payload)
+            respuestaEnvioHoy = respuesta
+            ultimaSincronizacion = Date()
+        } catch {
+            errorEnvio = "Error al enviar a Luis: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - sincronizarHistorial() (A9)
+    // Trae los últimos `dias` días (hoy incluido), uno por uno, y los manda
+    // por el mismo POST /api/v1/sync — el campo `fecha` de cada payload le
+    // dice a Luis de qué día son los datos, no hace falta un endpoint
+    // separado (ver contrato-v2.md, nota "ventana de sync" para Luis).
+    // Secuencial a propósito: varias HKSampleQuery en paralelo para el mismo
+    // tipo no ganan velocidad, solo compiten entre sí.
+    //
+    // Guarda su resultado en `respuestasHistorial`, no en `respuestaEnvioHoy`
+    // — son dos acciones distintas y no deben pisarse el resultado.
+
+    func sincronizarHistorial(dias: Int = 7) async {
+        backfillEnProgreso = true
+        errorBackfill = nil
+        defer { backfillEnProgreso = false }
+
+        let hoy = Calendar.current.startOfDay(for: Date())
+        let fechas = (0..<dias).compactMap {
+            Calendar.current.date(byAdding: .day, value: -$0, to: hoy)
+        }
+
+        do {
+            let cliente = try clienteAPI()
+            var payloads: [SyncPayload] = []
+            var respuestas: [RespuestaSincronizacion] = []
+
+            for fecha in fechas {
+                let payload = try await construirPayload(fecha: fecha)
+                let respuesta = try await cliente.enviarSincronizacion(payload)
+                payloads.append(payload)
+                respuestas.append(respuesta)
+            }
+
+            payloadsHistorial = payloads
+            respuestasHistorial = respuestas
+        } catch {
+            errorBackfill = "Error al traer historial: \(error.localizedDescription)"
+        }
+    }
+
+    /// Dispara el backfill solo la primera vez — mientras no exista login
+    /// real (L10/D6), "primera vez" se simula con una bandera local que se
+    /// prende apenas el backfill termina sin error.
+    func sincronizarHistorialSiEsPrimeraVez(dias: Int = 7) async {
+        guard !UserDefaults.standard.bool(forKey: Self.claveBackfillInicialHecho) else { return }
+        await sincronizarHistorial(dias: dias)
+        guard errorBackfill == nil else { return }
+        UserDefaults.standard.set(true, forKey: Self.claveBackfillInicialHecho)
     }
 
     // MARK: - Pasos (suma acumulada del día calendario, para la UI)

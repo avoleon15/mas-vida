@@ -2,12 +2,14 @@
 //  SyncPayload.swift
 //  +vida_fetch
 //
-//  Modelos del JSON #1 del contrato v2 (iOS → Backend), tal como está
-//  congelado en "contrato-v2.md":
+//  Modelos del JSON #1 y JSON #2 del contrato v2 (iOS ↔ Backend), tal como
+//  está congelado en "contrato-v2.md":
 //
 //    POST /api/v1/sync
-//    { usuario_id, fecha, zona_horaria, pasos[], sesiones[], frecuencia_cardiaca[],
-//      sincronizado_en, app_version }
+//    → { usuario_id, fecha, zona_horaria, pasos[], sesiones[], frecuencia_cardiaca[],
+//        sincronizado_en, app_version }
+//    ← { fecha, puntos_pasos, puntos_intensidad, puntos_dia, tope_diario_aplicado,
+//        puntos_ano, tope_anual_aplicado, nivel }
 //
 //  Novedad de v2 (30 ago 2026): se agrega `frecuencia_cardiaca[]` con el HR
 //  crudo del día completo, esté o no dentro de un workout — reemplaza lo que
@@ -71,6 +73,22 @@ struct SyncPayload: Codable {
     let frecuencia_cardiaca: [FrecuenciaCardiacaMuestra]
     let sincronizado_en: String
     let app_version: String
+}
+
+/// El JSON #2 — respuesta síncrona al mismo `POST /api/v1/sync` (ticket A7).
+/// A propósito no trae nada que explique *por qué* se descartó una muestra,
+/// se detectó (o no) una sesión intensa sin workout, o se aplicó un techo —
+/// esa lógica es del backend y no debe ser visible para el cliente (ver
+/// contrato-v2.md).
+struct RespuestaSincronizacion: Codable {
+    let fecha: String
+    let puntos_pasos: Int
+    let puntos_intensidad: Int
+    let puntos_dia: Int
+    let tope_diario_aplicado: Bool
+    let puntos_ano: Int
+    let tope_anual_aplicado: Bool
+    let nivel: Int
 }
 
 /// Formateadores de fecha compartidos, para que `fecha` y los timestamps
