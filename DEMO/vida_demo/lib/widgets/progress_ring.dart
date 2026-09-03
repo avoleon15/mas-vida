@@ -241,10 +241,7 @@ class TextoCentroAnillo extends StatelessWidget {
           // Bebas Neue, la misma display font de los encabezados de
           // sección. Al ser condensada, un número de cinco dígitos entra
           // cómodo adentro del aro.
-          style: AppTheme.sectionTitle.copyWith(
-            fontSize: 62,
-            letterSpacing: 1,
-          ),
+          style: AppTheme.sectionTitle.copyWith(fontSize: 62, letterSpacing: 1),
         ),
         const SizedBox(height: 6),
         // "PASOS" va ARRIBA del filete, cerrando el número.

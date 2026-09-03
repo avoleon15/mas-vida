@@ -190,7 +190,12 @@ PuntosDelDia calcularDia({
 /// El contrato v1 prohíbe explícitamente el naming Bronze/Silver/Gold/
 /// Platinum: eso es de Vitality. Los niveles son numéricos (0–4).
 class Nivel {
-  const Nivel(this.numero, this.puntosMinimos, this.puntosMaximos, this.porcentajeCashback);
+  const Nivel(
+    this.numero,
+    this.puntosMinimos,
+    this.puntosMaximos,
+    this.porcentajeCashback,
+  );
 
   final int numero;
   final int? puntosMinimos;
@@ -212,8 +217,10 @@ class Nivel {
     return '$min – ${_miles(puntosMaximos!)} pts';
   }
 
-  static String _miles(int n) =>
-      n.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+  static String _miles(int n) => n.toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+$)'),
+    (m) => '${m[1]},',
+  );
 }
 
 /// Tabla de niveles anuales de cashback. Los cinco niveles y sus rangos

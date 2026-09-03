@@ -12,8 +12,7 @@ class PremioDetalleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final premio =
-        ModalRoute.of(context)!.settings.arguments as Premio;
+    final premio = ModalRoute.of(context)!.settings.arguments as Premio;
     final costo = premio.costoMonedas;
     final alcanza = monedasUsuario >= costo;
     final saldoRestante = monedasUsuario - costo;
@@ -75,10 +74,7 @@ class PremioDetalleScreen extends StatelessWidget {
                               ),
                         ),
                         const SizedBox(height: 20),
-                        _buildCondicionesCard(
-                          context,
-                          premio.condiciones,
-                        ),
+                        _buildCondicionesCard(context, premio.condiciones),
                       ],
                     ),
                   ),

@@ -88,7 +88,9 @@ class _TarjetaBordeAnimadoState extends State<TarjetaBordeAnimado>
           children: [
             // 1. Base del borde: lo que se ve donde la franja naranja no
             // está pasando en este momento.
-            const Positioned.fill(child: ColoredBox(color: AppColors.cardBorder)),
+            const Positioned.fill(
+              child: ColoredBox(color: AppColors.cardBorder),
+            ),
 
             // 2. La franja que gira. Va en un OverflowBox para poder ser
             // más grande que la tarjeta (tiene que cubrirla en diagonal)

@@ -294,9 +294,7 @@ class _Fila extends StatelessWidget {
           child: Icon(
             icono,
             size: 20,
-            color: activa
-                ? AppColors.accentSecondary
-                : AppColors.textSecondary,
+            color: activa ? AppColors.accentSecondary : AppColors.textSecondary,
           ),
         ),
         const SizedBox(width: AppSpacing.entre),
@@ -323,9 +321,7 @@ class _Fila extends StatelessWidget {
         Text(
           '+$puntos',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: activa
-                ? AppColors.accentSecondary
-                : AppColors.textSecondary,
+            color: activa ? AppColors.accentSecondary : AppColors.textSecondary,
             fontWeight: FontWeight.w700,
           ),
         ),

@@ -242,7 +242,8 @@ ResultadoSemana evaluarSemana({
 }) {
   // 1. El mes nuevo manda sobre todo lo demás: primero se vuelve al piso
   //    y recién desde ahí se evalúa la semana.
-  final reinicia = cierrePrevio != null && empiezaMesNuevo(cierre, cierrePrevio);
+  final reinicia =
+      cierrePrevio != null && empiezaMesNuevo(cierre, cierrePrevio);
   final base = reinicia ? rangoMinimo : rangoPrevio;
 
   // 2. ¿Se puede evaluar? Un objetivo sin meta para este rango no se

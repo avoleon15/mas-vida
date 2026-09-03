@@ -799,11 +799,7 @@ class _SocialScreenState extends State<SocialScreen> {
 
   Widget _buildPosicionIndicador(BuildContext context, int posicion) {
     if (posicion <= 3) {
-      const colores = [
-        AppColors.nivel3,
-        AppColors.nivel2,
-        AppColors.nivel1,
-      ];
+      const colores = [AppColors.nivel3, AppColors.nivel2, AppColors.nivel1];
       return Icon(Icons.emoji_events, color: colores[posicion - 1], size: 20);
     }
     return Center(

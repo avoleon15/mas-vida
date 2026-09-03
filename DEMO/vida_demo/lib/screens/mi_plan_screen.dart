@@ -349,7 +349,9 @@ class MiPlanScreen extends StatelessWidget {
           ),
         ),
         Text(
-          nivel.definido ? '${_formatPercent(nivel.porcentajeCashback!)}%' : '—',
+          nivel.definido
+              ? '${_formatPercent(nivel.porcentajeCashback!)}%'
+              : '—',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: nivel.definido
                 ? AppColors.textPrimary
@@ -417,30 +419,39 @@ class MiPlanScreen extends StatelessWidget {
   }
 
   Widget _buildCardIdentificacion(BuildContext context) {
-    return _buildCardDatos(context, filas: [
-      ('Número de póliza', numeroPoliza, null),
-      ('Titular y dependientes', titularYDependientes, null),
-      ('Tipo de plan', tipoPlan, null),
-      ('Estado de la póliza', estadoPoliza, AppColors.accentSecondary),
-    ]);
+    return _buildCardDatos(
+      context,
+      filas: [
+        ('Número de póliza', numeroPoliza, null),
+        ('Titular y dependientes', titularYDependientes, null),
+        ('Tipo de plan', tipoPlan, null),
+        ('Estado de la póliza', estadoPoliza, AppColors.accentSecondary),
+      ],
+    );
   }
 
   Widget _buildCardCoberturaYMontos(BuildContext context) {
-    return _buildCardDatos(context, filas: [
-      ('Suma asegurada anual', sumaAsegurada, null),
-      ('Deducible', deducible, null),
-      ('Coaseguro', coaseguro, null),
-      ('Red de cobertura', redCobertura, null),
-    ]);
+    return _buildCardDatos(
+      context,
+      filas: [
+        ('Suma asegurada anual', sumaAsegurada, null),
+        ('Deducible', deducible, null),
+        ('Coaseguro', coaseguro, null),
+        ('Red de cobertura', redCobertura, null),
+      ],
+    );
   }
 
   Widget _buildCardPagosYVigencia(BuildContext context) {
-    return _buildCardDatos(context, filas: [
-      ('Vigencia', vigencia, null),
-      ('Fecha de renovación', fechaRenovacion, null),
-      ('Prima anual', primaAnual, null),
-      ('Forma de pago', formaPago, null),
-    ]);
+    return _buildCardDatos(
+      context,
+      filas: [
+        ('Vigencia', vigencia, null),
+        ('Fecha de renovación', fechaRenovacion, null),
+        ('Prima anual', primaAnual, null),
+        ('Forma de pago', formaPago, null),
+      ],
+    );
   }
 
   /// Tarjeta genérica de filas "etiqueta a la izquierda, valor a la
