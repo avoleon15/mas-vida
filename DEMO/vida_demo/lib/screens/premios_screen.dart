@@ -46,9 +46,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
   Widget build(BuildContext context) {
     final premiosFiltrados = _categoriaSeleccionada == 'Todos'
         ? _premios
-        : _premios
-              .where((p) => p.categoria == _categoriaSeleccionada)
-              .toList();
+        : _premios.where((p) => p.categoria == _categoriaSeleccionada).toList();
 
     return Scaffold(
       body: SafeArea(
@@ -68,6 +66,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildTituloYSaldo(context),
+                          _buildVencimientoPermanente(context),
                           ?_buildAvisoCaducidad(context),
                           const SizedBox(height: 20),
                           _buildChipsCategorias(context),
@@ -138,8 +137,44 @@ class _PremiosScreenState extends State<PremiosScreen> {
     );
   }
 
+  /// Cuándo vence el próximo lote de monedas. SIEMPRE visible, no solo
+  /// cuando está por caducar.
+  ///
+  /// Antes esta información solo aparecía en los últimos 15 días, y en
+  /// Progreso había una tarjeta que la repetía. Al quitar esa tarjeta, el
+  /// dato tenía que quedar disponible acá todo el tiempo: es plata del
+  /// usuario y enterarse dos semanas antes es tarde para planificar.
+  Widget _buildVencimientoPermanente(BuildContext context) {
+    final lote = Datos.i.resumen.monedas.proximoLoteACaducar;
+    if (lote == null) return const SizedBox.shrink();
+
+    // El aviso de urgencia de abajo ya lo dice con más fuerza: no hace
+    // falta decirlo dos veces seguidas.
+    if (lote.cercaDeCaducar) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${lote.cantidad} de tus monedas vencen en '
+              '${lote.diasParaCaducar} días. Las monedas duran 6 meses '
+              'desde que las ganás.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Aviso cuando el lote de monedas más próximo está por caducar. Las
-  /// monedas caducan a los 90 días de acuñadas.
+  /// monedas caducan a los 6 meses de acuñadas.
   Widget? _buildAvisoCaducidad(BuildContext context) {
     final lote = Datos.i.resumen.monedas.proximoLoteACaducar;
     if (lote == null || !lote.cercaDeCaducar) return null;

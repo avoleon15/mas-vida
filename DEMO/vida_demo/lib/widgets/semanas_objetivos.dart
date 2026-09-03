@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:getwidget/getwidget.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:flutter/services.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
@@ -22,8 +24,9 @@ class SemanasObjetivos extends StatelessWidget {
       children: [
         for (var i = 0; i < semanas.length; i++) ...[
           _TarjetaSemana(semana: semanas[i]),
-          if (i != semanas.length - 1)
+          if (i != semanas.length - 1) ...[
             const SizedBox(height: AppSpacing.dentro),
+          ],
         ],
       ],
     );
@@ -222,12 +225,14 @@ class _ChipMonedas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.accentSecondary.withValues(alpha: apagado ? 0.12 : 0.2),
-        borderRadius: BorderRadius.circular(9),
+    // ShadBadge: la pastilla del sistema de shadcn, con el naranja de
+    // marca en vez de su color por defecto.
+    return ShadBadge.raw(
+      variant: ShadBadgeVariant.secondary,
+      backgroundColor: AppColors.accentSecondary.withValues(
+        alpha: apagado ? 0.12 : 0.2,
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -280,9 +285,9 @@ class _Detalle extends StatelessWidget {
           Text(
             // La regla, dicha donde se aplica.
             'Los tres cumplidos suben un rango. Menos de tres, baja uno.',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textSecondary,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -331,18 +336,20 @@ class _FilaObjetivo extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            // Sin meta definida no hay avance que mostrar: la barra queda
-            // vacía en vez de inventar una posición.
-            value: avance ?? 0,
-            minHeight: 5,
-            backgroundColor: AppColors.cardBorder,
-            valueColor: AlwaysStoppedAnimation(
-              hecho ? AppColors.accentSecondary : AppColors.accent,
-            ),
-          ),
+        // GFProgressBar en vez de LinearProgressIndicator: anima el
+        // llenado sola cuando el avance cambia, en vez de saltar.
+        GFProgressBar(
+          // Sin meta definida no hay avance que mostrar: la barra queda
+          // vacía en vez de inventar una posición.
+          percentage: avance ?? 0,
+          lineHeight: 6,
+          margin: EdgeInsets.zero,
+          animation: true,
+          animationDuration: 500,
+          backgroundColor: AppColors.cardBorder,
+          progressBarColor: hecho
+              ? AppColors.accentSecondary
+              : AppColors.accent,
         ),
         const SizedBox(height: 4),
         Text(
@@ -365,7 +372,9 @@ class _FilaObjetivo extends StatelessWidget {
     if (o.completo) return '$base · completado';
     // Con meta definida se dice contra qué se mide.
     final meta = o.meta;
-    if (meta != null) return '${_miles(o.progreso)} de ${_miles(meta)} ${o.unidad}';
+    if (meta != null) {
+      return '${_miles(o.progreso)} de ${_miles(meta)} ${o.unidad}';
+    }
     // Sin meta pero con avance reportado por el servidor: el porcentaje
     // es cierto aunque el número de la meta no esté documentado acá.
     final avance = o.avance;

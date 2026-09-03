@@ -7,6 +7,7 @@ import 'screens/mi_plan_screen.dart';
 import 'screens/premio_detalle_screen.dart';
 import 'screens/premios_screen.dart';
 import 'screens/progress_screen.dart';
+import 'screens/records_screen.dart';
 import 'screens/social_screen.dart';
 import 'theme.dart';
 import 'widgets/fondo_estudio.dart';
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/home': (context) => const HomeScreen(),
         '/progress': (context) => const ProgressScreen(),
+        '/records': (context) => const RecordsScreen(),
         '/social': (context) => const SocialScreen(),
         '/premios': (context) => const PremiosScreen(),
         '/mi-plan': (context) => const MiPlanScreen(),
@@ -51,7 +53,15 @@ class MyApp extends StatelessWidget {
       // como celular. En el build real de iOS esto no aplica: ahí `child`
       // ya ocupa toda la pantalla del dispositivo.
       builder: (context, child) {
-        if (!kIsWeb) return child!;
+        // Los componentes de shadcn_ui necesitan un ShadTheme en el
+        // árbol. Va acá adentro y no reemplazando al MaterialApp, así el
+        // Material que ya usa la app queda intacto.
+        //
+        // El tema se arma desde NUESTROS tokens, no de la paleta por
+        // defecto de shadcn: si no, sus componentes traerían sus propios
+        // grises y la app se vería hecha de dos apps distintas.
+        child = TemaVida(child: child!);
+        if (!kIsWeb) return child;
         return FondoEstudio(
           child: Center(
             child: Padding(
@@ -61,7 +71,7 @@ class MyApp extends StatelessWidget {
               child: ClipRect(
                 child: FittedBox(
                   fit: BoxFit.fitHeight,
-                  child: IPhoneFrame(child: child!),
+                  child: IPhoneFrame(child: child),
                 ),
               ),
             ),

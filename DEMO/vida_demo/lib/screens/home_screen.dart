@@ -6,6 +6,7 @@ import '../rachas_recompensas.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
+import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/desglose_puntos_hoy.dart';
 import '../widgets/escalera_cashback.dart';
@@ -26,7 +27,7 @@ int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 
 // ============================================================
 // OBJETIVOS DE LA SEMANA. Acá se pagan MONEDAS — la moneda que se gasta
-// en Premios y caduca a 90 días. Nunca puntos: los puntos mueven el
+// en Premios y caduca a los 6 meses. Nunca puntos: los puntos mueven el
 // cashback anual y las dos monedas del producto no se mezclan.
 //
 // Reemplazan por completo a las viejas "Metas Mensuales", que ya no
@@ -450,7 +451,7 @@ class HomeScreen extends StatelessWidget {
 
   /// Sección "Objetivos de la semana": el sistema de MONEDAS, aparte del
   /// de puntos/cashback de arriba. Las monedas se gastan en Premios y
-  /// caducan a los 90 días; los puntos nunca se gastan.
+  /// caducan a los 6 meses; los puntos nunca se gastan.
   ///
   /// Son 3 objetivos, los tres de la MISMA semana. Se evalúan una sola
   /// vez, el domingo 23:59 (hora de Guatemala).
@@ -686,7 +687,7 @@ class _PastillaNivel extends StatelessWidget {
 /// varios acordeones (los puntos de hoy, las cuatro semanas) y uno más
 /// se perdía entre los demás. La hoja además deja Home visible detrás,
 /// así el monto se lee sin perder de vista de dónde salió.
-class _BotonVerCashback extends StatefulWidget {
+class _BotonVerCashback extends StatelessWidget {
   const _BotonVerCashback({required this.monto, required this.porcentaje});
 
   /// Quetzales proyectados para el cierre del año.
@@ -695,14 +696,7 @@ class _BotonVerCashback extends StatefulWidget {
   /// Porcentaje del nivel actual. Null si el nivel no lo tiene definido.
   final double? porcentaje;
 
-  @override
-  State<_BotonVerCashback> createState() => _BotonVerCashbackState();
-}
-
-class _BotonVerCashbackState extends State<_BotonVerCashback> {
-  bool _presionado = false;
-
-  void _abrirHoja() {
+  void _abrirHoja(BuildContext context) {
     // Háptica en el momento causal: cuando la hoja empieza a subir.
     HapticFeedback.selectionClick();
     showModalBottomSheet<void>(
@@ -713,66 +707,18 @@ class _BotonVerCashbackState extends State<_BotonVerCashback> {
       // El velo oscurece Home lo justo para que la hoja mande, sin
       // borrar el contexto de dónde salió el número.
       barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
-      builder: (_) => _HojaCashback(
-        monto: widget.monto,
-        porcentaje: widget.porcentaje,
-      ),
+      builder: (_) => _HojaCashback(monto: monto, porcentaje: porcentaje),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      // El hundido responde en el press, no al soltar.
-      onTapDown: (_) => setState(() => _presionado = true),
-      onTapUp: (_) => setState(() => _presionado = false),
-      onTapCancel: () => setState(() => _presionado = false),
-      onTap: _abrirHoja,
-      child: AnimatedScale(
-        scale: _presionado ? 0.97 : 1,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-          decoration: BoxDecoration(
-            // Azul: es una acción, y el azul es el color de acción de la
-            // app.
-            color: AppColors.accent,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.accent.withValues(alpha: 0.28),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.payments_outlined,
-                size: 19,
-                color: Colors.white,
-              ),
-              const SizedBox(width: AppSpacing.dentro),
-              Flexible(
-                child: Text(
-                  'Ver mi cashback',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    // Mismo widget que el botón de récords de Progreso: los dos son el
+    // botón de acción principal de la app y no pueden verse distinto.
+    return BotonPrincipal(
+      texto: 'Ver mi cashback',
+      icono: Icons.payments_outlined,
+      onPressed: () => _abrirHoja(context),
     );
   }
 }
@@ -1036,7 +982,7 @@ class _PresionableState extends State<_Presionable> {
 /// gastado en Premios—, porque acá tiene que cuadrar con lo que el
 /// usuario puede sumar a ojo en las tarjetas.
 ///
-/// Son MONEDAS: se gastan en Premios y caducan a los 90 días. Nunca
+/// Son MONEDAS: se gastan en Premios y caducan a los 6 meses. Nunca
 /// puntos.
 class _SaldoMonedasChip extends StatelessWidget {
   const _SaldoMonedasChip({required this.monedas});

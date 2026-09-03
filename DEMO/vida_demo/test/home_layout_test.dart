@@ -33,7 +33,7 @@ void main() {
           ).copyWith(textScaler: TextScaler.linear(escala)),
           child: child!,
         ),
-        home: const HomeScreen(),
+        home: const TemaVida(child: HomeScreen()),
       ),
     );
     await tester.pump(const Duration(milliseconds: 400));

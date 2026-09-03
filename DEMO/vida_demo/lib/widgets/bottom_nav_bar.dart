@@ -12,7 +12,7 @@ class BottomNavBar extends StatelessWidget {
     _NavItemData(icon: Icons.home_rounded, label: 'Hoy', route: '/home'),
     _NavItemData(
       icon: Icons.show_chart_rounded,
-      label: 'Progress',
+      label: 'Progreso',
       route: '/progress',
     ),
     _NavItemData(
@@ -137,13 +137,13 @@ class _NavItem extends StatelessWidget {
       ),
     );
 
-    // El ítem activo lleva una píldora de fondo verde muy pálido (sobre
+    // El ítem activo lleva una píldora de fondo azul muy pálido (sobre
     // fondo claro ya no alcanza con el contraste solo); los inactivos
     // van sin ningún borde, solo ícono y texto en gris tenue.
     final child = selected
         ? Container(
             decoration: BoxDecoration(
-              color: AppColors.accentSecondary.withValues(alpha: 0.14),
+              color: AppColors.accent.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(20),
             ),
             child: content,

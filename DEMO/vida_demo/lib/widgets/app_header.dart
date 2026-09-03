@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:getwidget/getwidget.dart';
 import '../theme.dart';
 
 /// Encabezado reutilizable: se repite igual en todas las pantallas de
@@ -43,8 +44,12 @@ class AppHeader extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            const CircleAvatar(
-              radius: 20,
+            // GFAvatar de getwidget: mismo lugar, pero con el borde y
+            // el tamaño estandarizados de la librería. Los colores siguen
+            // saliendo de nuestros tokens.
+            const GFAvatar(
+              size: GFSize.SMALL,
+              shape: GFAvatarShape.circle,
               backgroundColor: AppColors.cardBorder,
               child: Icon(Icons.person, color: AppColors.textSecondary),
             ),

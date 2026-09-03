@@ -21,7 +21,10 @@ void main() {
     tester.view.physicalSize = const Size(430, 2600);
     tester.view.devicePixelRatio = 1.0;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.darkTheme, home: const HomeScreen()),
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: const TemaVida(child: HomeScreen()),
+      ),
     );
     await tester.pump();
   }
@@ -45,10 +48,7 @@ void main() {
 
     expect(find.text('TE REGRESAN'), findsOneWidget);
     // El aviso regulatorio viaja SIEMPRE con el monto.
-    expect(
-      find.textContaining('después de pagar tu prima'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('después de pagar tu prima'), findsOneWidget);
   });
 
   testWidgets('la X cierra la hoja', (tester) async {

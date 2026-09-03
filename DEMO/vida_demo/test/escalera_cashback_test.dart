@@ -19,13 +19,15 @@ void main() {
         theme: AppTheme.darkTheme,
         home: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(escala)),
-          child: const Scaffold(
-            body: SingleChildScrollView(
-              padding: EdgeInsets.all(20),
-              child: EscaleraCashback(
-                nivelActual: 3,
-                puntosTotal: 11240,
-                techoActividad: 12000,
+          child: const TemaVida(
+            child: Scaffold(
+              body: SingleChildScrollView(
+                padding: EdgeInsets.all(20),
+                child: EscaleraCashback(
+                  nivelActual: 3,
+                  puntosTotal: 11240,
+                  techoActividad: 12000,
+                ),
               ),
             ),
           ),

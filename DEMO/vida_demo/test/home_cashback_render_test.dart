@@ -20,7 +20,10 @@ void main() {
   ) async {
     await tester.binding.setSurfaceSize(const Size(430, 3000));
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.darkTheme, home: const HomeScreen()),
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: const TemaVida(child: HomeScreen()),
+      ),
     );
     await tester.pump();
     // Los desbordes de layout se drenan aparte: este test es de
