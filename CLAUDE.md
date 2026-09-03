@@ -39,7 +39,7 @@ expresamente por ser de Vitality.
 1. **PUNTOS** — nunca se gastan. Determinan categoría anual y % de cashback.
    Nunca aparecen en Premios.
 2. **MONEDAS** (antes "medallas" — si ves ese término en código viejo,
-   migralo) — se gastan en Premios, caducan a los 90 días. Nunca aparecen
+   migralo) — se gastan en Premios, caducan a los 6 meses. Nunca aparecen
    en Mi Plan.
 
 Los **duelos** (Social) NO dan ninguna moneda ni premio por ahora — son
@@ -245,9 +245,55 @@ Reglas visuales:
   pantallas): "+VIDA" pegado a la esquina superior IZQUIERDA, foto de
   perfil pegada a la DERECHA
 - **Barra inferior** (`lib/widgets/bottom_nav_bar.dart`, reutilizada en
-  TODAS las pantallas): 5 ítems fijos en este orden: Home, Progress,
+  TODAS las pantallas): 5 ítems fijos en este orden: Hoy, Progreso,
   Social, Premios, Mi Plan. El ítem activo necesita fondo de píldora sutil
-  (verde muy pálido) — sobre fondo claro ya no basta el contraste solo
+  (azul de marca muy pálido) — sobre fondo claro ya no basta el contraste
+  solo
+
+## Cómo se construye la UI — regla dura
+
+**+Vida es una app iOS y tiene que sentirse nativa de iOS.** No es una
+preferencia estética: es el criterio que gana cuando dos opciones se
+contradicen.
+
+Nada se escribe a mano si ya existe un componente que lo resuelva. El
+orden de preferencia es **estricto** — se baja al siguiente escalón solo
+cuando el anterior no tiene nada que sirva:
+
+1. **`package:flutter/cupertino.dart`** — SIEMPRE primero para cualquier
+   cosa con la que el usuario interactúe: botones, selectores segmentados,
+   switches, pickers, alertas, hojas modales, barras de navegación.
+   `CupertinoButton`, `CupertinoSlidingSegmentedControl`,
+   `CupertinoAlertDialog`, `CupertinoPicker`, `CupertinoSwitch`.
+   Estos traen gratis el atenuado, el rebote y la sensación que un usuario
+   de iPhone ya conoce. Una imitación hecha con `GestureDetector` +
+   `AnimatedScale` NUNCA es preferible a un control de Cupertino.
+2. **`shadcn_ui`** — para lo estructural que Cupertino no cubre: tarjetas,
+   badges, menús flotantes, popovers, acordeones, campos de formulario.
+3. **`getwidget`** — para piezas sueltas que las dos anteriores no traen:
+   avatares, barras de progreso animadas, indicadores.
+4. **`fl_chart`** — TODA gráfica. No se dibujan gráficas con
+   `CustomPainter`: la librería ya trae animación al cambiar de datos,
+   tooltips táctiles y ejes configurables.
+5. **`CustomPainter` propio** — solo cuando ninguna de las anteriores lo
+   resuelve. Hoy el único caso legítimo es el anillo de pasos de Home, que
+   es un dibujo específico del producto.
+
+**Todas se atan a los tokens de `lib/theme.dart`.** Ninguna librería
+entra con su paleta por defecto: shadcn tiene sus grises, GetWidget su
+azul, y si se dejan como vienen la app se ve hecha de tres apps
+distintas. El `ShadThemeData` de +Vida vive en `theme.dart` y se arma
+desde `AppColors`.
+
+**`TemaVida` es obligatorio.** Los componentes de `shadcn_ui` fallan si no
+encuentran un `ShadTheme` arriba en el árbol, así que toda pantalla que se
+monte —la app real o un test— tiene que pasar por
+`TemaVida(child: ...)`. Ponerlo solo en el `builder` del `MaterialApp` NO
+alcanza: los tests montan pantallas sueltas y revientan.
+
+Cuando lo nativo de iOS y el look de shadcn se contradigan, **gana iOS**.
+shadcn y GetWidget son de estética web/Material: se usan por lo que
+resuelven, no por cómo se ven de fábrica.
 
 ## Pantallas — estado y contenido
 
