@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 /// Design tokens para +Vida. Tema CLARO: la app debe transmitir paz,
 /// tranquilidad y ambiente sano (ver CLAUDE.md).
@@ -40,6 +41,7 @@ class AppColors {
   /// Azul muy oscuro en vez de negro puro: sobre fondo claro el negro se
   /// ve duro, y este tono emparenta el texto con el azul de marca.
   static const Color textPrimary = Color(0xFF101833);
+
   /// Gris de apoyo. Se oscureció de #6B7280 a este tono porque sobre los
   /// fondos tintados de Home el original daba 4.29:1 y 4.20:1 — por
   /// debajo del 4.5:1 que pide WCAG AA para texto normal. Acá da 4.62:1
@@ -177,7 +179,6 @@ class AppColors {
   /// sirviera.
   static const Color fondoDePantalla = Color(0xFFF3F1ED);
 
-
   /// Devuelve el color de un nivel anual (1 a 4).
   ///
   /// El contrato v1 prohíbe el naming Bronze/Silver/Gold/Platinum: los
@@ -310,4 +311,49 @@ class AppTheme {
       dividerColor: AppColors.cardBorder,
     );
   }
+}
+
+/// Tema de shadcn_ui armado desde los tokens de +Vida.
+///
+/// No se usa su paleta por defecto a propósito: los componentes de
+/// shadcn tienen que verse como el resto de la app, no como shadcn.
+final ShadThemeData temaShad = ShadThemeData(
+  brightness: Brightness.light,
+  colorScheme: const ShadColorScheme(
+    background: AppColors.fondoDePantalla,
+    foreground: AppColors.textPrimary,
+    card: AppColors.card,
+    cardForeground: AppColors.textPrimary,
+    popover: AppColors.card,
+    popoverForeground: AppColors.textPrimary,
+    primary: AppColors.accent,
+    primaryForeground: Colors.white,
+    secondary: AppColors.cardBorder,
+    secondaryForeground: AppColors.textPrimary,
+    muted: AppColors.cardBorder,
+    mutedForeground: AppColors.textSecondary,
+    accent: AppColors.accentSecondary,
+    accentForeground: Colors.white,
+    destructive: Color(0xFFB3261E),
+    destructiveForeground: Colors.white,
+    border: AppColors.cardBorder,
+    input: AppColors.cardBorder,
+    ring: AppColors.accent,
+    selection: AppColors.accent,
+  ),
+);
+
+/// Envoltorio que pone el [temaShad] en el árbol.
+///
+/// Los componentes de shadcn_ui fallan si no encuentran un `ShadTheme`
+/// arriba, así que TODA pantalla que se monte —la app real o un test—
+/// tiene que pasar por acá. Ponerlo solo en el `builder` del MaterialApp
+/// no alcanza: los tests montan pantallas sueltas y se quedaban sin tema.
+class TemaVida extends StatelessWidget {
+  const TemaVida({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ShadTheme(data: temaShad, child: child);
 }
