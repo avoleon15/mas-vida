@@ -11,7 +11,9 @@ from .models import Muestra, MuestraBPM, Sesion
 @api_view(['POST'])
 def sync(request):
     payload = request.data
+    print("PAYLOAD RECIBIDO:", payload)
     usuario_id = payload.get('usuario_id')
+
 
     try:
         usuario = Usuario.objects.get(usuario_id=usuario_id)
@@ -91,6 +93,15 @@ def sync(request):
         )
 
     return Response(
-        {'mensaje': 'payload recibido'},
+        {
+            "fecha": payload.get("fecha"),
+            "puntos_pasos": 0,
+            "puntos_intensidad": 0,
+            "puntos_dia": 0,
+            "tope_diario_aplicado": False,
+            "puntos_ano": 0,
+            "tope_anual_aplicado": False,
+            "nivel": 0
+        },
         status=status.HTTP_200_OK
     )
