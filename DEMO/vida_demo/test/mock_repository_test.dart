@@ -94,26 +94,53 @@ void main() {
       final dias = Datos.i.historial.dias;
       bool hay(bool Function(DiaActividad) f) => dias.any(f);
 
-      expect(hay((d) => d.pasos == 6999 && d.puntosDia == 0), isTrue,
-          reason: '6.999 pasos → 0 pts');
-      expect(hay((d) => d.pasos == 7000 && d.puntosDia == 25), isTrue,
-          reason: '7.000 pasos → 25 pts');
-      expect(hay((d) => d.pasos == 12400 && d.puntosPasos == 50), isTrue,
-          reason: '12.400 pasos → 50 pts');
-      expect(hay((d) => d.pasos == 23000 && d.puntosPasos == 100), isTrue,
-          reason: '23.000 pasos → 100 pts');
-      expect(hay((d) => d.sesion?.cuentaParaPuntos == false), isTrue,
-          reason: 'sesión de menos de 30 min');
-      expect(hay((d) => d.sesion?.puntosIntensidad == 100), isTrue,
-          reason: '42 min al 74% de FCM');
-      expect(hay((d) => d.esManual && d.puntosDia == 0), isTrue,
-          reason: 'pasos manuales → 0 pts');
+      expect(
+        hay((d) => d.pasos == 6999 && d.puntosDia == 0),
+        isTrue,
+        reason: '6.999 pasos → 0 pts',
+      );
+      expect(
+        hay((d) => d.pasos == 7000 && d.puntosDia == 25),
+        isTrue,
+        reason: '7.000 pasos → 25 pts',
+      );
+      expect(
+        hay((d) => d.pasos == 12400 && d.puntosPasos == 50),
+        isTrue,
+        reason: '12.400 pasos → 50 pts',
+      );
+      expect(
+        hay((d) => d.pasos == 23000 && d.puntosPasos == 100),
+        isTrue,
+        reason: '23.000 pasos → 100 pts',
+      );
+      expect(
+        hay((d) => d.sesion?.cuentaParaPuntos == false),
+        isTrue,
+        reason: 'sesión de menos de 30 min',
+      );
+      expect(
+        hay((d) => d.sesion?.puntosIntensidad == 100),
+        isTrue,
+        reason: '42 min al 74% de FCM',
+      );
+      expect(
+        hay((d) => d.esManual && d.puntosDia == 0),
+        isTrue,
+        reason: 'pasos manuales → 0 pts',
+      );
       expect(hay((d) => d.sinPermiso), isTrue, reason: 'día sin permiso');
-      expect(hay((d) => d.marcadoParaRevision && d.puntosDia > 0), isTrue,
-          reason: 'atípico marcado que sigue acreditando');
+      expect(
+        hay((d) => d.marcadoParaRevision && d.puntosDia > 0),
+        isTrue,
+        reason: 'atípico marcado que sigue acreditando',
+      );
       expect(hay((d) => d.reversion != null), isTrue, reason: 'reversión');
-      expect(hay((d) => d.huboPrecedencia), isTrue,
-          reason: 'precedencia entre fuentes');
+      expect(
+        hay((d) => d.huboPrecedencia),
+        isTrue,
+        reason: 'precedencia entre fuentes',
+      );
     });
 
     test('la precedencia toma la fuente con más pasos, nunca la suma', () {
@@ -127,8 +154,10 @@ void main() {
     });
 
     test('hay un lote de monedas cerca de caducar', () {
-      expect(Datos.i.resumen.monedas.proximoLoteACaducar!.cercaDeCaducar,
-          isTrue);
+      expect(
+        Datos.i.resumen.monedas.proximoLoteACaducar!.cercaDeCaducar,
+        isTrue,
+      );
     });
 
     test('los lotes de monedas suman el saldo', () {
@@ -159,7 +188,10 @@ void main() {
   group('Las pantallas montan con los datos de prueba', () {
     Future<void> montar(WidgetTester tester, Widget pantalla) async {
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.darkTheme, home: pantalla),
+        MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: TemaVida(child: pantalla),
+        ),
       );
       await tester.pump();
     }
@@ -171,7 +203,13 @@ void main() {
 
     testWidgets('Progress', (t) async {
       await montar(t, const ProgressScreen());
-      expect(find.textContaining('Nivel'), findsWidgets);
+      // "Nivel Actual" se borro de esta pantalla: vive en Hoy, en la
+      // seccion de cashback. Aca se verifica lo que si quedo.
+      // Dos: el titulo de la pantalla y la pestana de la barra de abajo,
+      // que tambien se llama Progreso ahora que dejo de estar en ingles.
+      expect(find.text('Progreso'), findsNWidgets(2));
+      expect(find.text('Puntos'), findsOneWidget);
+      expect(find.text('Recompensas por constancia'), findsOneWidget);
     });
 
     testWidgets('Social', (t) async {

@@ -31,6 +31,9 @@ void main() {
     // Son dos cantidades distintas a proposito. Si algun dia coinciden
     // por casualidad este test no sirve, pero hoy documenta la diferencia.
     final resumen = Datos.i.resumen;
-    expect(resumen.objetivosSemana.monedasGanadas, isNot(resumen.monedas.saldo));
+    expect(
+      resumen.objetivosSemana.monedasGanadas,
+      isNot(resumen.monedas.saldo),
+    );
   });
 }

@@ -42,16 +42,16 @@
   "racha_historial": [true, true, true, true, true, true, true, true],
 
   "retos_semanales": {
-    "_comentario": "Contrato v1: los retos son por nivel de dificultad progresiva, no por meta de puntos. Completar sube un nivel, fallar baja uno. Vive en GET /api/v1/retos/estado, fuera del JSON #2.",
-    "nivel_actual": 4,
+    "_comentario": "Estado de los OBJETIVOS SEMANALES. La escalera se llama RANGO, no Nivel: Nivel es la escalera anual de cashback que sale de los puntos, y son cosas distintas. Cumplir los 3 objetivos sube un rango, no cumplirlos baja uno. Piso 1, techo 4.",
+    "_nota_correccion": "El historial traia un rango 5, que no existe. Ahora la secuencia es coherente: cada semana arranca donde la dejo la anterior y ninguna pasa de 4.",
+    "rango_actual": 4,
     "historial": [
-      { "semana_inicio": "2026-07-27", "nivel": 3, "completado": true },
-      { "semana_inicio": "2026-08-03", "nivel": 4, "completado": true },
-      { "semana_inicio": "2026-08-10", "nivel": 5, "completado": false },
-      { "semana_inicio": "2026-08-17", "nivel": 4, "completado": true }
+      { "semana_inicio": "2026-07-27", "rango": 2, "completado": true },
+      { "semana_inicio": "2026-08-03", "rango": 3, "completado": true },
+      { "semana_inicio": "2026-08-10", "rango": 4, "completado": false },
+      { "semana_inicio": "2026-08-17", "rango": 3, "completado": true }
     ],
-    "meta_semana_actual": null,
-    "_todo_meta": "TODO: falta la tabla de dificultad progresiva por nivel de reto. El contrato v1 dice explícitamente que no hay número documentado por nivel todavía; lo define Luis en el motor de reglas."
+    "_todo_dificultad": "TODO: falta la tabla de dificultad por rango. El contrato v1 dice explicitamente que no hay numero documentado todavia; lo define Luis en el motor de reglas."
   },
 
   "ritmo_cardiaco": {

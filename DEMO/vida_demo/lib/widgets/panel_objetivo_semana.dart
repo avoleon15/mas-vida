@@ -5,11 +5,14 @@ import '../theme.dart';
 /// Panel del objetivo de la semana. Va escondido al lado del anillo de
 /// pasos y se revela deslizando.
 ///
-/// Mecánica (contrato v1): el objetivo es de pasos y tiene niveles de
-/// dificultad progresiva. Cumplirlo SUBE un nivel; fallarlo BAJA uno. El
+/// Mecánica (contrato v1): hay 3 objetivos por semana y una escalera de
+/// RANGO con dificultad progresiva. Cumplir los tres SUBE un rango; no
+/// cumplirlos BAJA uno. Piso 1, techo 4. Ojo con el nombre: Nivel es la
+/// escalera ANUAL de cashback, que sale de los puntos, y no tiene nada
+/// que ver con esto. El
 /// ciclo va de lunes 00:00 a domingo 23:59, hora de Guatemala.
 ///
-/// La META EN PASOS de cada nivel todavía no existe en ninguna fuente
+/// La META EN PASOS de cada rango todavía no existe en ninguna fuente
 /// (`contrato-v1-corregido.md` la deja pendiente y la define Luis en el
 /// motor de reglas), así que acá se muestra "pendiente" en vez de un
 /// número inventado.
@@ -28,7 +31,7 @@ class PanelObjetivoSemana extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nivel = retos.nivelActual;
+    final rango = retos.rangoActual;
     // Últimas 8 semanas, como en Progress.
     final historial = retos.historial.length > 8
         ? retos.historial.sublist(retos.historial.length - 8)
@@ -49,7 +52,7 @@ class PanelObjetivoSemana extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.dentro),
-          Text('Nivel $nivel', style: AppTheme.display(48)),
+          Text('Rango $rango', style: AppTheme.display(48)),
           const SizedBox(height: AppSpacing.dentro),
           // La meta real está pendiente: no se inventa un número de pasos.
           Container(
@@ -69,8 +72,8 @@ class PanelObjetivoSemana extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              'Si lo cumplís subís a nivel ${nivel + 1}. '
-              'Si no, bajás a nivel ${nivel > 1 ? nivel - 1 : 1}.',
+              'Si cumplís los tres subís a rango ${rango < 4 ? rango + 1 : 4}. '
+              'Si no, bajás a rango ${rango > 1 ? rango - 1 : 1}.',
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,

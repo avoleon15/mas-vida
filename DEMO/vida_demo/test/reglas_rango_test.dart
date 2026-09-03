@@ -139,7 +139,8 @@ void main() {
       // Cualquier dia de la semana da el mismo mes: es la propiedad que
       // impide que una semana cuente doble.
       final meses = <DateTime>{
-        for (var d = 0; d < 7; d++) mesDeLaSemana(lunesEnero.add(Duration(days: d))),
+        for (var d = 0; d < 7; d++)
+          mesDeLaSemana(lunesEnero.add(Duration(days: d))),
       };
       expect(meses.length, 1);
     });
@@ -162,9 +163,13 @@ void main() {
 
     test('un mes con cinco lunes no rompe nada', () {
       // Junio de 2026 tiene lunes 1, 8, 15, 22 y 29.
-      final lunes = [1, 8, 15, 22, 29]
-          .map((d) => lunesDeLaSemana(DateTime(2026, 6, d)).day)
-          .toList();
+      final lunes = [
+        1,
+        8,
+        15,
+        22,
+        29,
+      ].map((d) => lunesDeLaSemana(DateTime(2026, 6, d)).day).toList();
       expect(lunes, [1, 8, 15, 22, 29]);
     });
   });

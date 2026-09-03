@@ -77,14 +77,15 @@ class SesionIntensidad {
 
   final int puntosIntensidad;
 
-  factory SesionIntensidad.desdeJson(Map<String, dynamic> j) => SesionIntensidad(
-    duracionMin: j['duracion_min'] as int,
-    continua: j['continua'] as bool,
-    tipoActividad: j['tipo_actividad'] as String,
-    porcentajeFcm: j['porcentaje_fcm'] as int,
-    cuentaParaPuntos: j['cuenta_para_puntos'] as bool,
-    puntosIntensidad: j['puntos_intensidad'] as int,
-  );
+  factory SesionIntensidad.desdeJson(Map<String, dynamic> j) =>
+      SesionIntensidad(
+        duracionMin: j['duracion_min'] as int,
+        continua: j['continua'] as bool,
+        tipoActividad: j['tipo_actividad'] as String,
+        porcentajeFcm: j['porcentaje_fcm'] as int,
+        cuentaParaPuntos: j['cuenta_para_puntos'] as bool,
+        puntosIntensidad: j['puntos_intensidad'] as int,
+      );
 }
 
 /// Una reversión de puntos ya acreditados. Se permite hasta 2 semanas
@@ -210,7 +211,9 @@ class Historial {
   List<DiaActividad> get mesEnCurso {
     final ultimo = hoy.fecha;
     return dias
-        .where((d) => d.fecha.year == ultimo.year && d.fecha.month == ultimo.month)
+        .where(
+          (d) => d.fecha.year == ultimo.year && d.fecha.month == ultimo.month,
+        )
         .toList();
   }
 
@@ -223,7 +226,7 @@ class Historial {
 }
 
 /// Un lote de monedas con su fecha de caducidad. Las monedas caducan a
-/// los 90 días de acuñadas.
+/// los 6 meses de acuñadas.
 class LoteMonedas {
   const LoteMonedas({
     required this.cantidad,
@@ -286,36 +289,48 @@ class SaldoMonedas {
 class SemanaReto {
   const SemanaReto({
     required this.semanaInicio,
-    required this.nivel,
+    required this.rango,
     required this.completado,
   });
 
   final String semanaInicio;
-  final int nivel;
+
+  /// RANGO en el que se jugó esa semana, de 1 a [rangoMaximo].
+  ///
+  /// Se llamaba `nivel`, que es el nombre de la escalera ANUAL de
+  /// cashback. Son dos cosas distintas: Nivel viene de los puntos y mueve
+  /// el cashback; Rango viene de los objetivos semanales y paga monedas.
+  final int rango;
+
   final bool completado;
 
   factory SemanaReto.desdeJson(Map<String, dynamic> j) => SemanaReto(
     semanaInicio: j['semana_inicio'] as String,
-    nivel: j['nivel'] as int,
+    rango: j['rango'] as int,
     completado: j['completado'] as bool,
   );
 }
 
-/// Estado de los retos semanales. Contrato v1: por nivel de dificultad
-/// progresiva, no por meta de puntos. Completar sube un nivel, fallar
-/// baja uno.
+/// Estado de los objetivos semanales: en qué RANGO va el usuario y cómo
+/// le fue en las semanas anteriores.
+///
+/// Cumplir los tres objetivos de la semana sube un rango; no cumplirlos
+/// baja uno. Las reglas completas viven en `reglas_rango.dart`.
 class EstadoRetos {
-  const EstadoRetos({required this.nivelActual, required this.historial});
+  const EstadoRetos({required this.rangoActual, required this.historial});
 
-  final int nivelActual;
+  /// De 1 a [rangoMaximo]. NO es el nivel de cashback: ese es anual, sale
+  /// de los puntos y se llama Nivel.
+  final int rangoActual;
+
   final List<SemanaReto> historial;
 
-  /// TODO: falta la tabla de dificultad progresiva por nivel. El contrato
-  /// dice explícitamente que no hay número documentado todavía.
-  Object? get metaSemanaActual => null;
+  /// TODO: falta la tabla de dificultad por rango. El contrato dice
+  /// explícitamente que no hay número documentado todavía.
+  Object? get objetivoSemanaActual => null;
 
   factory EstadoRetos.desdeJson(Map<String, dynamic> j) => EstadoRetos(
-    nivelActual: j['nivel_actual'] as int,
+    rangoActual: j['rango_actual'] as int,
     historial: (j['historial'] as List)
         .map((h) => SemanaReto.desdeJson(h as Map<String, dynamic>))
         .toList(),
@@ -428,9 +443,8 @@ class SemanaObjetivos {
   int get cumplidos => objetivos.where((o) => o.completo).length;
 
   /// MONEDAS ya acuñadas en la semana.
-  int get monedasGanadas => objetivos
-      .where((o) => o.completo)
-      .fold(0, (suma, o) => suma + o.monedas);
+  int get monedasGanadas =>
+      objetivos.where((o) => o.completo).fold(0, (suma, o) => suma + o.monedas);
 
   /// MONEDAS que quedan en juego si se cumple todo lo que falta.
   int get monedasEnJuego =>
@@ -604,7 +618,9 @@ class ResumenAnual {
     return ResumenAnual(
       actividadPorMes: (anual['por_mes'] as List).cast<int>(),
       mesActualIndice: anual['mes_actual_indice'] as int,
-      zonasSemana: ZonasRitmo.desdeJson(ritmo['semana'] as Map<String, dynamic>),
+      zonasSemana: ZonasRitmo.desdeJson(
+        ritmo['semana'] as Map<String, dynamic>,
+      ),
       zonasMes: ZonasRitmo.desdeJson(ritmo['mes'] as Map<String, dynamic>),
       zonasAnio: ZonasRitmo.desdeJson(ritmo['anio'] as Map<String, dynamic>),
       monedasGanadasAnio: j['monedas_ganadas_anio'] as int,
@@ -619,7 +635,9 @@ class ResumenAnual {
       puntosMes: (j['mes_actual'] as Map<String, dynamic>)['puntos'] as int,
       rachaSemanas: j['racha_semanas'] as int,
       rachaHistorial: (j['racha_historial'] as List).cast<bool>(),
-      retos: EstadoRetos.desdeJson(j['retos_semanales'] as Map<String, dynamic>),
+      retos: EstadoRetos.desdeJson(
+        j['retos_semanales'] as Map<String, dynamic>,
+      ),
       monedas: SaldoMonedas.desdeJson(j['monedas'] as Map<String, dynamic>),
       objetivosSemana: ObjetivosSemana.desdeJson(
         j['objetivos_semana'] as Map<String, dynamic>,
