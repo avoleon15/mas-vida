@@ -1,9 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/chip_monedas.dart';
 import '../widgets/placeholder_imagen.dart';
 
 // ============================================================
@@ -41,12 +44,24 @@ class PremiosScreen extends StatefulWidget {
 
 class _PremiosScreenState extends State<PremiosScreen> {
   String _categoriaSeleccionada = 'Todos';
+  String _busqueda = '';
 
   @override
   Widget build(BuildContext context) {
-    final premiosFiltrados = _categoriaSeleccionada == 'Todos'
-        ? _premios
-        : _premios.where((p) => p.categoria == _categoriaSeleccionada).toList();
+    final texto = _busqueda.trim().toLowerCase();
+    final premiosFiltrados = _premios.where((p) {
+      final deLaCategoria =
+          _categoriaSeleccionada == 'Todos' ||
+          p.categoria == _categoriaSeleccionada;
+      // Se busca por comercio y por lo que dan: alguien puede acordarse
+      // de "vitaminas" y no del nombre de la farmacia.
+      final coincide =
+          texto.isEmpty ||
+          p.nombre.toLowerCase().contains(texto) ||
+          p.descripcion.toLowerCase().contains(texto) ||
+          p.categoria.toLowerCase().contains(texto);
+      return deLaCategoria && coincide;
+    }).toList();
 
     return Scaffold(
       body: SafeArea(
@@ -66,31 +81,37 @@ class _PremiosScreenState extends State<PremiosScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildTituloYSaldo(context),
-                          _buildVencimientoPermanente(context),
-                          ?_buildAvisoCaducidad(context),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 18),
+                          _Buscador(
+                            texto: _busqueda,
+                            onChanged: (t) => setState(() => _busqueda = t),
+                          ),
+                          const SizedBox(height: 16),
                           _buildChipsCategorias(context),
                         ],
                       ),
                     ),
                   ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: 0.7,
-                          ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) =>
-                            _buildTarjetaPremio(context, premiosFiltrados[i]),
-                        childCount: premiosFiltrados.length,
+                  if (premiosFiltrados.isEmpty)
+                    SliverToBoxAdapter(child: _buildSinResultados(context))
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      sliver: SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 14,
+                              mainAxisSpacing: 14,
+                              childAspectRatio: 0.7,
+                            ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) =>
+                              _buildTarjetaPremio(context, premiosFiltrados[i]),
+                          childCount: premiosFiltrados.length,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -112,106 +133,86 @@ class _PremiosScreenState extends State<PremiosScreen> {
           ),
         ),
         const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.accentSecondary,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.monetization_on, color: Colors.black, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                '$monedasUsuario',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
+        ChipMonedas(cantidad: monedasUsuario),
+        // La "i" va PEGADA al chip de monedas: lo que explica es de qué
+        // se trata ese saldo.
+        BotonInfo(
+          onPressed: () => _mostrarInfoMonedas(context),
+          semantica: 'Cómo funcionan tus monedas',
         ),
       ],
     );
   }
 
-  /// Cuándo vence el próximo lote de monedas. SIEMPRE visible, no solo
-  /// cuando está por caducar.
+  /// El vencimiento, en una alerta centrada.
   ///
-  /// Antes esta información solo aparecía en los últimos 15 días, y en
-  /// Progreso había una tarjeta que la repetía. Al quitar esa tarjeta, el
-  /// dato tenía que quedar disponible acá todo el tiempo: es plata del
-  /// usuario y enterarse dos semanas antes es tarde para planificar.
-  Widget _buildVencimientoPermanente(BuildContext context) {
+  /// Antes era un renglón fijo debajo del título. Es información que se
+  /// consulta una vez y después estorba todos los días: acá está cuando
+  /// se busca y no ocupa la pantalla el resto del tiempo.
+  void _mostrarInfoMonedas(BuildContext context) {
+    HapticFeedback.selectionClick();
     final lote = Datos.i.resumen.monedas.proximoLoteACaducar;
-    if (lote == null) return const SizedBox.shrink();
 
-    // El aviso de urgencia de abajo ya lo dice con más fuerza: no hace
-    // falta decirlo dos veces seguidas.
-    if (lote.cercaDeCaducar) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          const Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '${lote.cantidad} de tus monedas vencen en '
-              '${lote.diasParaCaducar} días. Las monedas duran 6 meses '
-              'desde que las ganás.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-            ),
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Tus monedas'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: [
+              Text(
+                'Tenés $monedasUsuario monedas para gastar en Premios.',
+                style: const TextStyle(height: 1.35),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                lote == null
+                    ? 'Las monedas duran 6 meses desde que las ganás.'
+                    : '${lote.cantidad} de ellas vencen en '
+                          '${lote.diasParaCaducar} días. Cada moneda dura 6 '
+                          'meses desde que la ganás.',
+                style: const TextStyle(height: 1.35),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Entendido'),
           ),
         ],
       ),
     );
   }
 
-  /// Aviso cuando el lote de monedas más próximo está por caducar. Las
-  /// monedas caducan a los 6 meses de acuñadas.
-  Widget? _buildAvisoCaducidad(BuildContext context) {
-    final lote = Datos.i.resumen.monedas.proximoLoteACaducar;
-    if (lote == null || !lote.cercaDeCaducar) return null;
-
+  /// Cuando el filtro no deja nada. Sin esto la cuadrícula queda en
+  /// blanco y parece que la pantalla se rompió.
+  Widget _buildSinResultados(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.hourglass_bottom,
-              size: 18,
-              color: AppColors.accent,
+      padding: const EdgeInsets.fromLTRB(40, 48, 40, 48),
+      child: Column(
+        children: [
+          const Icon(
+            CupertinoIcons.search,
+            size: 30,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _busqueda.trim().isEmpty
+                ? 'Todavía no hay premios en esta categoría.'
+                : 'No encontramos ningún comercio con '
+                      '"${_busqueda.trim()}".',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                lote.diasParaCaducar == 1
-                    ? '${lote.cantidad} de tus monedas caducan mañana. '
-                          'Aprovechalas.'
-                    : '${lote.cantidad} de tus monedas caducan en '
-                          '${lote.diasParaCaducar} días. Aprovechalas.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -230,22 +231,54 @@ class _PremiosScreenState extends State<PremiosScreen> {
     );
   }
 
+  /// El chip activo NO se rellena de azul sólido.
+  ///
+  /// Relleno lleno más texto oscuro dejaba la palabra seleccionada casi
+  /// ilegible — justo la que más hay que poder leer. Ahora el activo es
+  /// un tinte muy claro con el texto en azul, y lo que lo separa de los
+  /// demás es un halo suave por fuera.
   Widget _buildChip(BuildContext context, String categoria) {
     final activo = categoria == _categoriaSeleccionada;
+
     return GestureDetector(
       onTap: () => setState(() => _categoriaSeleccionada = categoria),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: activo ? AppColors.accent : AppColors.card,
+          // Azul: seleccionar algo es azul en toda la app. El chip de
+          // monedas de arriba se queda naranja justamente porque NO es
+          // una selección, es un saldo.
+          color: activo ? AppColors.azulBruma : AppColors.card,
           borderRadius: BorderRadius.circular(999),
-          border: activo ? null : Border.all(color: AppColors.cardBorder),
+          border: Border.all(
+            color: activo ? AppColors.accent : AppColors.cardBorder,
+            width: activo ? 1.5 : 1,
+          ),
+          // Dos sombras: una amplia y difusa que hace el halo, y una
+          // corta debajo que apoya la pastilla sobre el fondo. Con una
+          // sola se ve o flotando o plana.
+          boxShadow: activo
+              ? [
+                  BoxShadow(
+                    color: AppColors.accent.withValues(alpha: 0.28),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                  BoxShadow(
+                    color: AppColors.accent.withValues(alpha: 0.18),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           categoria,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: activo ? Colors.black : AppColors.textSecondary,
-            fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
+            color: activo ? AppColors.accent : AppColors.textSecondary,
+            fontWeight: activo ? FontWeight.w800 : FontWeight.w500,
           ),
         ),
       ),
@@ -336,6 +369,123 @@ class _PremiosScreenState extends State<PremiosScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Buscador de comercios.
+///
+/// Sigue el diseño que pidió Daniel (píldora, lupa a la izquierda, X a la
+/// derecha, borde azul al enfocar, sombra suave), pero armado sobre
+/// [CupertinoTextField]: así trae el teclado, la selección y el cursor de
+/// iOS, que un `TextField` de Material no da.
+class _Buscador extends StatefulWidget {
+  const _Buscador({required this.texto, required this.onChanged});
+
+  final String texto;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_Buscador> createState() => _BuscadorState();
+}
+
+class _BuscadorState extends State<_Buscador> {
+  late final TextEditingController _control = TextEditingController(
+    text: widget.texto,
+  );
+  final FocusNode _foco = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    // El borde solo cambia con el foco: hay que repintar cuando cambia.
+    _foco.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _control.dispose();
+    _foco.dispose();
+    super.dispose();
+  }
+
+  void _limpiar() {
+    _control.clear();
+    widget.onChanged('');
+    _foco.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enfocado = _foco.hasFocus;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          // Dos píxeles siempre, transparente cuando no hay foco: así el
+          // campo no cambia de tamaño al enfocarlo.
+          color: enfocado ? AppColors.accent : Colors.transparent,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textPrimary.withValues(
+              alpha: enfocado ? 0.10 : 0.06,
+            ),
+            blurRadius: enfocado ? 14 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 14),
+          Icon(
+            CupertinoIcons.search,
+            size: 19,
+            color: enfocado ? AppColors.accent : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: CupertinoTextField(
+              controller: _control,
+              focusNode: _foco,
+              onChanged: widget.onChanged,
+              placeholder: 'Buscar un comercio',
+              // El fondo y el borde los pone el contenedor de afuera.
+              decoration: const BoxDecoration(),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              placeholderStyle: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textPrimary),
+              cursorColor: AppColors.accent,
+              textInputAction: TextInputAction.search,
+            ),
+          ),
+          // La X solo aparece cuando hay algo que borrar: un botón que no
+          // hace nada enseña a ignorarlo.
+          if (_control.text.isNotEmpty)
+            CupertinoButton(
+              onPressed: _limpiar,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: Size.zero,
+              child: const Icon(
+                CupertinoIcons.xmark,
+                size: 17,
+                color: AppColors.textSecondary,
+              ),
+            )
+          else
+            const SizedBox(width: 14),
+        ],
       ),
     );
   }
