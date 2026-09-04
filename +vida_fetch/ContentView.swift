@@ -169,6 +169,21 @@ struct ContentView: View {
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
+
+                    if healthKitManager.pendientesEnCola > 0 {
+                        HStack {
+                            Image(systemName: "tray.and.arrow.up")
+                                .foregroundStyle(.orange)
+                            Text("\(healthKitManager.pendientesEnCola) día(s) pendiente(s) de reenviar (A8)")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Button("Reintentar ahora") {
+                                Task { await healthKitManager.reintentarPendientes() }
+                            }
+                            .font(.footnote)
+                        }
+                    }
                 } header: {
                     Text("Enviar hoy a Luis")
                 } footer: {
@@ -217,6 +232,10 @@ struct ContentView: View {
                             await healthKitManager.solicitarPermisos()
                             if healthKitManager.autorizado {
                                 await healthKitManager.sincronizarHistorialSiEsPrimeraVez()
+                                // A8: si quedó algo pendiente de una sesión
+                                // anterior sin red, aprovechamos que se abrió
+                                // la app para intentar vaciar la cola.
+                                await healthKitManager.reintentarPendientes()
                             }
                         }
                     } label: {

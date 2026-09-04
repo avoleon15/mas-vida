@@ -89,6 +89,10 @@ final class HealthKitManager: ObservableObject {
 
     private let healthStore = HKHealthStore()
 
+    /// Cola de reintentos con persistencia local (A8) para los payloads
+    /// que fallaron al enviarse a Luis.
+    private let syncQueue = SyncQueue()
+
     // MARK: - Estado publicado para la UI
 
     @Published var autorizado: Bool = false
@@ -135,6 +139,10 @@ final class HealthKitManager: ObservableObject {
     @Published var baseURLTexto: String = "http://localhost:8000"
     @Published var enviando: Bool = false
     @Published var errorEnvio: String?
+
+    /// Cuántos días quedan esperando a ser reenviados (A8) — para mostrar
+    /// en la UI que hay algo pendiente aunque el usuario no vea el error.
+    @Published var pendientesEnCola: Int = 0
 
     /// Respuesta del envío de HOY (`enviarSincronizacion`) — separada de
     /// `respuestasHistorial` (el backfill) a propósito. Antes había un solo
@@ -286,15 +294,47 @@ final class HealthKitManager: ObservableObject {
         errorEnvio = nil
         defer { enviando = false }
 
+        guard let payload = try? await construirPayload(fecha: fecha) else {
+            errorEnvio = "Error al armar el payload de HealthKit."
+            return
+        }
+
         do {
-            let payload = try await construirPayload(fecha: fecha)
             let cliente = try clienteAPI()
             let respuesta = try await cliente.enviarSincronizacion(payload)
             respuestaEnvioHoy = respuesta
             ultimaSincronizacion = Date()
+            syncQueue.remover(fecha: payload.fecha)
+            pendientesEnCola = syncQueue.pendientes().count
+            // Si esto sí llegó, probablemente ya hay red — aprovechamos para
+            // intentar vaciar lo que haya quedado pendiente de antes.
+            await reintentarPendientes()
         } catch {
-            errorEnvio = "Error al enviar a Luis: \(error.localizedDescription)"
+            errorEnvio = "Error al enviar a Luis: \(error.localizedDescription) — guardado para reintentar."
+            syncQueue.encolar(payload)
+            pendientesEnCola = syncQueue.pendientes().count
         }
+    }
+
+    // MARK: - reintentarPendientes() (A8)
+    // Recorre la cola persistida de payloads que fallaron al enviarse antes
+    // y reintenta cada uno. Idempotente del lado de Luis (external_id, L4):
+    // reintentar un payload ya guardado nunca duplica una fila en el ledger,
+    // así que no hace falta ningún control extra de duplicados acá.
+    func reintentarPendientes() async {
+        guard let cliente = try? clienteAPI() else { return }
+
+        for payload in syncQueue.pendientes() {
+            do {
+                _ = try await cliente.enviarSincronizacion(payload)
+                syncQueue.remover(fecha: payload.fecha)
+            } catch {
+                // Sigue en la cola tal cual — se vuelve a intentar la
+                // próxima vez que se llame a este método.
+            }
+        }
+
+        pendientesEnCola = syncQueue.pendientes().count
     }
 
     // MARK: - sincronizarHistorial() (A9)
