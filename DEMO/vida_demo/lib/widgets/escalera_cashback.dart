@@ -388,7 +388,7 @@ class _Detalle extends StatelessWidget {
       );
     }
     if (n.numero < nivelActual) {
-      return ('Ya lo pasaste', n.rangoTexto);
+      return ('Nivel alcanzado', n.rangoTexto);
     }
     final faltan = 'Te faltan ${_miles(n.puntosMinimos! - puntosTotal)} pts';
 
