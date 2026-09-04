@@ -12,6 +12,7 @@ import '../widgets/desglose_puntos_hoy.dart';
 import '../widgets/escalera_cashback.dart';
 import '../widgets/chip_monedas.dart';
 import '../widgets/hoja_monedas.dart';
+import '../widgets/moneda_animada.dart';
 import '../widgets/panel_objetivo_semana.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/semanas_objetivos.dart';
@@ -1034,11 +1035,7 @@ class _SaldoMonedasChipState extends State<_SaldoMonedasChip> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.monetization_on,
-                size: 16,
-                color: AppColors.accentSecondary,
-              ),
+              const MonedaAnimada(size: 21),
               const SizedBox(width: 5),
               Text(
                 '${widget.monedas}',

@@ -4,6 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:flutter/services.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
+import 'moneda_animada.dart';
 
 /// Las semanas del mes, cada una plegable, con sus 3 objetivos adentro.
 ///
@@ -236,11 +237,7 @@ class _ChipMonedas extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.monetization_on,
-            size: 13,
-            color: AppColors.accentSecondary,
-          ),
+          MonedaAnimada(size: 18, apagado: apagado),
           const SizedBox(width: 3),
           Text(
             '$cantidad',

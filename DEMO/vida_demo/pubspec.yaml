@@ -47,6 +47,10 @@ dependencies:
   shared_preferences: ^2.5.5
   share_plus: ^13.3.0
 
+  # Animaciones de LottieFiles. Lee archivos .lottie (que son un zip con
+  # el JSON adentro) además de los .json sueltos. Licencia MIT.
+  lottie: ^3.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -73,6 +77,9 @@ flutter:
   # únicamente MockVidaRepository — ninguna pantalla toca estos archivos.
   assets:
     - assets/mock/
+    # Animaciones Lottie. La moneda se usa en toda la app vía
+    # lib/widgets/moneda_animada.dart.
+    - assets/lottie/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

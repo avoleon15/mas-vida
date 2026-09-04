@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../datos/fuente_datos.dart';
 import '../rachas_recompensas.dart';
 import '../theme.dart';
+import 'moneda_animada.dart';
 
 // ============================================================
 // TU RACHA.
@@ -240,11 +241,7 @@ class _ProximoHito extends StatelessWidget {
               children: [
                 // La moneda sigue naranja en toda la app: es el único
                 // sitio donde el naranja significa algo por sí solo.
-                const Icon(
-                  Icons.monetization_on,
-                  size: 15,
-                  color: AppColors.accentSecondary,
-                ),
+                const MonedaAnimada(size: 19),
                 const SizedBox(width: 3),
                 Text(
                   '+${hito.monedas}',

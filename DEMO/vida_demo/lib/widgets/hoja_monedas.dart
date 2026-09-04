@@ -4,6 +4,7 @@ import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../rachas_recompensas.dart';
 import '../theme.dart';
+import 'moneda_animada.dart';
 
 // ============================================================
 // HISTORIAL DE MONEDAS.
@@ -164,11 +165,7 @@ class _Total extends StatelessWidget {
               color: AppColors.accentSecondary.withValues(alpha: 0.18),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.monetization_on,
-              color: AppColors.accentSecondary,
-              size: 26,
-            ),
+            child: const Center(child: MonedaAnimada(size: 32)),
           ),
           const SizedBox(width: AppSpacing.entre),
           Expanded(
@@ -346,7 +343,7 @@ class _FilaHito extends StatelessWidget {
             ),
           ),
         ),
-        Icon(Icons.monetization_on, color: color, size: 16),
+        MonedaAnimada(size: 19, apagado: !alcanzado),
         const SizedBox(width: 4),
         Text(
           '+${hito.monedas}',

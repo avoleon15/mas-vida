@@ -13,6 +13,7 @@ import 'screens/social_screen.dart';
 import 'theme.dart';
 import 'widgets/fondo_estudio.dart';
 import 'widgets/iphone_frame.dart';
+import 'widgets/moneda_animada.dart';
 
 Future<void> main() async {
   // Necesario para poder leer assets antes de que arranque la app.
@@ -22,6 +23,10 @@ Future<void> main() async {
   // prueba de assets/mock/). Cuál repositorio se usa lo decide
   // `lib/datos/fuente_datos.dart`, no esta línea.
   await Datos.cargar();
+
+  // La moneda de Lottie se deja lista antes del primer frame: si no, la
+  // primera que se pinta aparece un instante después que su número.
+  await MonedaAnimada.precargar();
 
   runApp(const MyApp());
 }

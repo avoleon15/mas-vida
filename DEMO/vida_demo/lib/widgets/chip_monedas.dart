@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../datos/fuente_datos.dart';
 import '../theme.dart';
+import 'moneda_animada.dart';
 
 // ============================================================
 // EL CHIP DE MONEDAS, UNO SOLO PARA TODA LA APP.
@@ -57,20 +58,24 @@ class ChipMonedas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Fondo PÁLIDO, no naranja sólido. La moneda ahora es dorada y sobre
+    // el naranja de marca desaparecía: quedaban dos amarillos pegados.
+    // Con el chip claro, lo único saturado del bloque es la moneda — que
+    // es justo lo que el naranja tiene que hacer en esta app: señalar,
+    // no vestir.
     final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.accentSecondary,
+        color: AppColors.accentSecondary.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppColors.accentSecondary.withValues(alpha: 0.4),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.monetization_on,
-            color: AppColors.textPrimary,
-            size: 16,
-          ),
+          const MonedaAnimada(size: 22),
           const SizedBox(width: 6),
           Text(
             '$cantidad',

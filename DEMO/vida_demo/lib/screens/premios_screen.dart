@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/chip_monedas.dart';
+import '../widgets/moneda_animada.dart';
 import '../widgets/placeholder_imagen.dart';
 
 // ============================================================
@@ -335,11 +336,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          const Icon(
-                            Icons.monetization_on,
-                            color: AppColors.accentSecondary,
-                            size: 15,
-                          ),
+                          const MonedaAnimada(size: 19),
                           const SizedBox(width: 4),
                           Text(
                             '$costo',
