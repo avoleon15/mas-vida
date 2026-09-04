@@ -6,7 +6,7 @@
 //
 //  Demo: pide permisos de HealthKit y muestra pasos de hoy, ritmo cardíaco
 //  (promedio / más bajo / más alto), entrenamientos recientes, exporta el
-//  JSON #1 del contrato v2 a un archivo (depuración), y — ticket A7/A9 —
+//  JSON #1 del contrato v3 a un archivo (depuración), y — ticket A7/A9 —
 //  lo manda de verdad por POST a /api/v1/sync, con un backfill de los
 //  últimos 7 días.
 //
@@ -44,6 +44,9 @@ struct ContentView: View {
                 Section("Pasos de hoy") {
                     Text("\(Int(healthKitManager.pasosHoy)) pasos")
                         .font(.title2.bold())
+                    Text("Calculado local, sin deduplicar — puede estar inflado si hay más de una fuente activa. El número real es \"pasos_totales_dia\" en la respuesta de Luis, abajo.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Ritmo cardíaco (hoy)") {
@@ -149,6 +152,7 @@ struct ContentView: View {
 
                     if let respuesta = healthKitManager.respuestaEnvioHoy {
                         VStack(alignment: .leading, spacing: 4) {
+                            LabeledContent("Pasos del día (dedup)", value: "\(respuesta.pasos_totales_dia)")
                             LabeledContent("Puntos del día", value: "\(respuesta.puntos_dia)")
                             LabeledContent("Puntos del año", value: "\(respuesta.puntos_ano)")
                             LabeledContent("Nivel", value: "\(respuesta.nivel)")
@@ -188,6 +192,7 @@ struct ContentView: View {
                             Text("\(healthKitManager.respuestasHistorial.count) de 7 días enviados")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                            LabeledContent("Último día — pasos (dedup)", value: "\(ultimoDia.pasos_totales_dia)")
                             LabeledContent("Último día — puntos", value: "\(ultimoDia.puntos_dia)")
                             LabeledContent("Último día — nivel", value: "\(ultimoDia.nivel)")
                         }
