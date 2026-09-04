@@ -1,775 +1,945 @@
 {
-  "_comentario": "Mock de GET /api/v1/historial. El contrato v1 congela el JSON #2 de /api/v1/sync pero no define la forma del historial: los campos que coinciden con el JSON #2 conservan su nombre exacto.",
-  "zona_horaria": "America/Guatemala",
-  "desde": "2026-07-23",
-  "hasta": "2026-08-26",
-  "dias": [
+ "_comentario": "Mock de GET /api/v1/historial. El contrato v1 congela el JSON #2 de /api/v1/sync pero no define la forma del historial: los campos que coinciden con el JSON #2 conservan su nombre exacto.",
+ "zona_horaria": "America/Guatemala",
+ "desde": "2026-07-23",
+ "hasta": "2026-08-26",
+ "dias": [
+  {
+   "fecha": "2026-07-23",
+   "origen_datos": "healthkit",
+   "pasos": 11800,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
     {
-      "fecha": "2026-07-23",
-      "origen_datos": "healthkit",
-      "pasos": 11800,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 11800,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-24",
-      "origen_datos": "healthkit",
-      "pasos": 8600,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 8600,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-25",
-      "origen_datos": "healthkit",
-      "pasos": 13200,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 13200,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-26",
-      "origen_datos": "healthkit",
-      "pasos": 7400,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 7400,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-27",
-      "origen_datos": "healthkit",
-      "pasos": 15600,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 100,
-      "puntos_dia": 100,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 15600,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-28",
-      "origen_datos": "healthkit",
-      "pasos": 6200,
-      "puntos_pasos": 0,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 0,
-      "puntos_dia": 0,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 6200,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-29",
-      "origen_datos": "healthkit",
-      "pasos": 10400,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 10400,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-30",
-      "origen_datos": "healthkit",
-      "pasos": 9800,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 9800,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-07-31",
-      "origen_datos": "healthkit",
-      "pasos": 12100,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 12100,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-01",
-      "origen_datos": "healthkit",
-      "pasos": 5900,
-      "puntos_pasos": 0,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 0,
-      "puntos_dia": 0,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 5900,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-02",
-      "origen_datos": "healthkit",
-      "pasos": 14200,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 14200,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-03",
-      "origen_datos": "healthkit",
-      "pasos": 8900,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 8900,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-04",
-      "origen_datos": "healthkit",
-      "pasos": 11500,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 11500,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-05",
-      "origen_datos": "healthkit",
-      "pasos": 7100,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 7100,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-06",
-      "origen_datos": "healthkit",
-      "pasos": 16800,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 100,
-      "puntos_dia": 100,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 16800,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-07",
-      "origen_datos": "healthkit",
-      "pasos": 9400,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 9400,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-08",
-      "origen_datos": "healthkit",
-      "pasos": 10900,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 10900,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-09",
-      "origen_datos": "healthkit",
-      "pasos": 6800,
-      "puntos_pasos": 0,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 0,
-      "puntos_dia": 0,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 6800,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-10",
-      "origen_datos": "healthkit",
-      "pasos": 13700,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 13700,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-11",
-      "origen_datos": "healthkit",
-      "pasos": 8200,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 8200,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-12",
-      "origen_datos": "healthkit",
-      "pasos": 12600,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 12600,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-13",
-      "origen_datos": "healthkit",
-      "pasos": 7900,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 7900,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-14",
-      "origen_datos": "healthkit",
-      "pasos": 15100,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 100,
-      "puntos_dia": 100,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 15100,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-15",
-      "origen_datos": "healthkit",
-      "pasos": 16200,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 100,
-      "puntos_dia": 100,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 16200,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false,
-      "reversion": {
-        "puntos_revertidos": 25,
-        "fecha_reversion": "2026-08-24",
-        "motivo": "Ajuste de fuente duplicada"
-      }
-    },
-    {
-      "fecha": "2026-08-16",
-      "origen_datos": "healthkit",
-      "pasos": 14350,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 14350,
-          "prevalece": true
-        },
-        {
-          "bundle": "com.apple.health.iphone",
-          "nombre": "iPhone de Diego",
-          "version": "18.4",
-          "pasos": 9200,
-          "prevalece": false
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-17",
-      "origen_datos": "healthkit",
-      "pasos": 58000,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 100,
-      "puntos_dia": 100,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 58000,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": true
-    },
-    {
-      "fecha": "2026-08-18",
-      "origen_datos": "manual",
-      "pasos": 11200,
-      "puntos_pasos": 0,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 0,
-      "puntos_dia": 0,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.Health",
-          "nombre": "Salud (ingreso manual)",
-          "version": "18.4",
-          "pasos": 11200,
-          "prevalece": false
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-19",
-      "origen_datos": "sin_permiso",
-      "pasos": null,
-      "puntos_pasos": 0,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 0,
-      "puntos_dia": 0,
-      "tope_diario_aplicado": false,
-      "fuentes": [],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-20",
-      "origen_datos": "healthkit",
-      "pasos": 7000,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 7000,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-21",
-      "origen_datos": "healthkit",
-      "pasos": 6999,
-      "puntos_pasos": 0,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 0,
-      "puntos_dia": 0,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 6999,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-22",
-      "origen_datos": "healthkit",
-      "pasos": 17800,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 100,
-      "puntos_brutos": 200,
-      "puntos_dia": 200,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 17800,
-          "prevalece": true
-        }
-      ],
-      "sesion": {
-        "inicio": "2026-08-22T17:00:00-06:00",
-        "duracion_min": 42,
-        "continua": true,
-        "tipo_actividad": "running",
-        "fc_promedio": null,
-        "porcentaje_fcm": 74,
-        "cuenta_para_puntos": true,
-        "puntos_intensidad": 100
-      },
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-23",
-      "origen_datos": "healthkit",
-      "pasos": 23000,
-      "puntos_pasos": 100,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 100,
-      "puntos_dia": 100,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 23000,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-24",
-      "origen_datos": "healthkit",
-      "pasos": 12400,
-      "puntos_pasos": 50,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 50,
-      "puntos_dia": 50,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 12400,
-          "prevalece": true
-        }
-      ],
-      "sesion": {
-        "inicio": "2026-08-24T17:00:00-06:00",
-        "duracion_min": 28,
-        "continua": true,
-        "tipo_actividad": "running",
-        "fc_promedio": null,
-        "porcentaje_fcm": 71,
-        "cuenta_para_puntos": false,
-        "puntos_intensidad": 0
-      },
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-25",
-      "origen_datos": "healthkit",
-      "pasos": 9100,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 100,
-      "puntos_brutos": 125,
-      "puntos_dia": 125,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 9100,
-          "prevalece": true
-        }
-      ],
-      "sesion": {
-        "inicio": "2026-08-25T17:00:00-06:00",
-        "duracion_min": 42,
-        "continua": true,
-        "tipo_actividad": "running",
-        "fc_promedio": null,
-        "porcentaje_fcm": 74,
-        "cuenta_para_puntos": true,
-        "puntos_intensidad": 100
-      },
-      "marcado_para_revision": false
-    },
-    {
-      "fecha": "2026-08-26",
-      "origen_datos": "healthkit",
-      "pasos": 8432,
-      "puntos_pasos": 25,
-      "puntos_intensidad": 0,
-      "puntos_brutos": 25,
-      "puntos_dia": 25,
-      "tope_diario_aplicado": false,
-      "fuentes": [
-        {
-          "bundle": "com.apple.health.watch",
-          "nombre": "Apple Watch de Diego",
-          "version": "11.2",
-          "pasos": 8432,
-          "prevalece": true
-        }
-      ],
-      "sesion": null,
-      "marcado_para_revision": false,
-      "dia_en_curso": true
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 11800,
+     "prevalece": true
     }
-  ]
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 60,
+    "minimo_bpm": 48,
+    "maximo_bpm": 146
+   }
+  },
+  {
+   "fecha": "2026-07-24",
+   "origen_datos": "healthkit",
+   "pasos": 8600,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 8600,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 54,
+    "minimo_bpm": 40,
+    "maximo_bpm": 139
+   }
+  },
+  {
+   "fecha": "2026-07-25",
+   "origen_datos": "healthkit",
+   "pasos": 13200,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 13200,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 57,
+    "minimo_bpm": 43,
+    "maximo_bpm": 108
+   }
+  },
+  {
+   "fecha": "2026-07-26",
+   "origen_datos": "healthkit",
+   "pasos": 7400,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 7400,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 63,
+    "minimo_bpm": 54,
+    "maximo_bpm": 110
+   }
+  },
+  {
+   "fecha": "2026-07-27",
+   "origen_datos": "healthkit",
+   "pasos": 15600,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 100,
+   "puntos_dia": 100,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 15600,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 63,
+    "minimo_bpm": 52,
+    "maximo_bpm": 120
+   }
+  },
+  {
+   "fecha": "2026-07-28",
+   "origen_datos": "healthkit",
+   "pasos": 6200,
+   "puntos_pasos": 0,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 0,
+   "puntos_dia": 0,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 6200,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 59,
+    "minimo_bpm": 44,
+    "maximo_bpm": 108
+   }
+  },
+  {
+   "fecha": "2026-07-29",
+   "origen_datos": "healthkit",
+   "pasos": 10400,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 10400,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 63,
+    "minimo_bpm": 54,
+    "maximo_bpm": 145
+   }
+  },
+  {
+   "fecha": "2026-07-30",
+   "origen_datos": "healthkit",
+   "pasos": 9800,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 9800,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 68,
+    "minimo_bpm": 56,
+    "maximo_bpm": 141
+   }
+  },
+  {
+   "fecha": "2026-07-31",
+   "origen_datos": "healthkit",
+   "pasos": 12100,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 12100,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 66,
+    "minimo_bpm": 55,
+    "maximo_bpm": 119
+   }
+  },
+  {
+   "fecha": "2026-08-01",
+   "origen_datos": "healthkit",
+   "pasos": 5900,
+   "puntos_pasos": 0,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 0,
+   "puntos_dia": 0,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 5900,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 58,
+    "minimo_bpm": 40,
+    "maximo_bpm": 113
+   }
+  },
+  {
+   "fecha": "2026-08-02",
+   "origen_datos": "healthkit",
+   "pasos": 14200,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 14200,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 61,
+    "minimo_bpm": 49,
+    "maximo_bpm": 139
+   }
+  },
+  {
+   "fecha": "2026-08-03",
+   "origen_datos": "healthkit",
+   "pasos": 8900,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 8900,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 59,
+    "minimo_bpm": 45,
+    "maximo_bpm": 140
+   }
+  },
+  {
+   "fecha": "2026-08-04",
+   "origen_datos": "healthkit",
+   "pasos": 11500,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 11500,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 65,
+    "minimo_bpm": 56,
+    "maximo_bpm": 142
+   }
+  },
+  {
+   "fecha": "2026-08-05",
+   "origen_datos": "healthkit",
+   "pasos": 7100,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 7100,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 68,
+    "minimo_bpm": 54,
+    "maximo_bpm": 128
+   }
+  },
+  {
+   "fecha": "2026-08-06",
+   "origen_datos": "healthkit",
+   "pasos": 16800,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 100,
+   "puntos_dia": 100,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 16800,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 59,
+    "minimo_bpm": 42,
+    "maximo_bpm": 109
+   }
+  },
+  {
+   "fecha": "2026-08-07",
+   "origen_datos": "healthkit",
+   "pasos": 9400,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 9400,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 63,
+    "minimo_bpm": 51,
+    "maximo_bpm": 118
+   }
+  },
+  {
+   "fecha": "2026-08-08",
+   "origen_datos": "healthkit",
+   "pasos": 10900,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 10900,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 66,
+    "minimo_bpm": 49,
+    "maximo_bpm": 132
+   }
+  },
+  {
+   "fecha": "2026-08-09",
+   "origen_datos": "healthkit",
+   "pasos": 6800,
+   "puntos_pasos": 0,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 0,
+   "puntos_dia": 0,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 6800,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 62,
+    "minimo_bpm": 47,
+    "maximo_bpm": 134
+   }
+  },
+  {
+   "fecha": "2026-08-10",
+   "origen_datos": "healthkit",
+   "pasos": 13700,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 13700,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 61,
+    "minimo_bpm": 50,
+    "maximo_bpm": 155
+   }
+  },
+  {
+   "fecha": "2026-08-11",
+   "origen_datos": "healthkit",
+   "pasos": 8200,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 8200,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 61,
+    "minimo_bpm": 42,
+    "maximo_bpm": 120
+   }
+  },
+  {
+   "fecha": "2026-08-12",
+   "origen_datos": "healthkit",
+   "pasos": 12600,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 12600,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 59,
+    "minimo_bpm": 45,
+    "maximo_bpm": 138
+   }
+  },
+  {
+   "fecha": "2026-08-13",
+   "origen_datos": "healthkit",
+   "pasos": 7900,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 7900,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 63,
+    "minimo_bpm": 48,
+    "maximo_bpm": 133
+   }
+  },
+  {
+   "fecha": "2026-08-14",
+   "origen_datos": "healthkit",
+   "pasos": 15100,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 100,
+   "puntos_dia": 100,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 15100,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 62,
+    "minimo_bpm": 50,
+    "maximo_bpm": 112
+   }
+  },
+  {
+   "fecha": "2026-08-15",
+   "origen_datos": "healthkit",
+   "pasos": 16200,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 100,
+   "puntos_dia": 100,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 16200,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "reversion": {
+    "puntos_revertidos": 25,
+    "fecha_reversion": "2026-08-24",
+    "motivo": "Ajuste de fuente duplicada"
+   },
+   "ritmo_cardiaco": {
+    "promedio_bpm": 65,
+    "minimo_bpm": 53,
+    "maximo_bpm": 153
+   }
+  },
+  {
+   "fecha": "2026-08-16",
+   "origen_datos": "healthkit",
+   "pasos": 14350,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 14350,
+     "prevalece": true
+    },
+    {
+     "bundle": "com.apple.health.iphone",
+     "nombre": "iPhone de Diego",
+     "version": "18.4",
+     "pasos": 9200,
+     "prevalece": false
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 60,
+    "minimo_bpm": 48,
+    "maximo_bpm": 131
+   }
+  },
+  {
+   "fecha": "2026-08-17",
+   "origen_datos": "healthkit",
+   "pasos": 58000,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 100,
+   "puntos_dia": 100,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 58000,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": true,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 59,
+    "minimo_bpm": 46,
+    "maximo_bpm": 153
+   }
+  },
+  {
+   "fecha": "2026-08-18",
+   "origen_datos": "manual",
+   "pasos": 11200,
+   "puntos_pasos": 0,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 0,
+   "puntos_dia": 0,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.Health",
+     "nombre": "Salud (ingreso manual)",
+     "version": "18.4",
+     "pasos": 11200,
+     "prevalece": false
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 66,
+    "minimo_bpm": 48,
+    "maximo_bpm": 125
+   }
+  },
+  {
+   "fecha": "2026-08-19",
+   "origen_datos": "sin_permiso",
+   "pasos": null,
+   "puntos_pasos": 0,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 0,
+   "puntos_dia": 0,
+   "tope_diario_aplicado": false,
+   "fuentes": [],
+   "sesion": null,
+   "marcado_para_revision": false
+  },
+  {
+   "fecha": "2026-08-20",
+   "origen_datos": "healthkit",
+   "pasos": 7000,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 7000,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 64,
+    "minimo_bpm": 49,
+    "maximo_bpm": 143
+   }
+  },
+  {
+   "fecha": "2026-08-21",
+   "origen_datos": "healthkit",
+   "pasos": 6999,
+   "puntos_pasos": 0,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 0,
+   "puntos_dia": 0,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 6999,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 65,
+    "minimo_bpm": 47,
+    "maximo_bpm": 134
+   }
+  },
+  {
+   "fecha": "2026-08-22",
+   "origen_datos": "healthkit",
+   "pasos": 17800,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 100,
+   "puntos_brutos": 200,
+   "puntos_dia": 200,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 17800,
+     "prevalece": true
+    }
+   ],
+   "sesion": {
+    "inicio": "2026-08-22T17:00:00-06:00",
+    "duracion_min": 42,
+    "continua": true,
+    "tipo_actividad": "running",
+    "fc_promedio": 150,
+    "porcentaje_fcm": 74,
+    "cuenta_para_puntos": true,
+    "puntos_intensidad": 100
+   },
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 61,
+    "minimo_bpm": 47,
+    "maximo_bpm": 122
+   }
+  },
+  {
+   "fecha": "2026-08-23",
+   "origen_datos": "healthkit",
+   "pasos": 23000,
+   "puntos_pasos": 100,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 100,
+   "puntos_dia": 100,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 23000,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 64,
+    "minimo_bpm": 56,
+    "maximo_bpm": 151
+   }
+  },
+  {
+   "fecha": "2026-08-24",
+   "origen_datos": "healthkit",
+   "pasos": 12400,
+   "puntos_pasos": 50,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 50,
+   "puntos_dia": 50,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 12400,
+     "prevalece": true
+    }
+   ],
+   "sesion": {
+    "inicio": "2026-08-24T17:00:00-06:00",
+    "duracion_min": 28,
+    "continua": true,
+    "tipo_actividad": "running",
+    "fc_promedio": 137,
+    "porcentaje_fcm": 71,
+    "cuenta_para_puntos": false,
+    "puntos_intensidad": 0
+   },
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 63,
+    "minimo_bpm": 46,
+    "maximo_bpm": 148
+   }
+  },
+  {
+   "fecha": "2026-08-25",
+   "origen_datos": "healthkit",
+   "pasos": 9100,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 100,
+   "puntos_brutos": 125,
+   "puntos_dia": 125,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 9100,
+     "prevalece": true
+    }
+   ],
+   "sesion": {
+    "inicio": "2026-08-25T17:00:00-06:00",
+    "duracion_min": 42,
+    "continua": true,
+    "tipo_actividad": "running",
+    "fc_promedio": 139,
+    "porcentaje_fcm": 74,
+    "cuenta_para_puntos": true,
+    "puntos_intensidad": 100
+   },
+   "marcado_para_revision": false,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 65,
+    "minimo_bpm": 50,
+    "maximo_bpm": 106
+   }
+  },
+  {
+   "fecha": "2026-08-26",
+   "origen_datos": "healthkit",
+   "pasos": 8432,
+   "puntos_pasos": 25,
+   "puntos_intensidad": 0,
+   "puntos_brutos": 25,
+   "puntos_dia": 25,
+   "tope_diario_aplicado": false,
+   "fuentes": [
+    {
+     "bundle": "com.apple.health.watch",
+     "nombre": "Apple Watch de Diego",
+     "version": "11.2",
+     "pasos": 8432,
+     "prevalece": true
+    }
+   ],
+   "sesion": null,
+   "marcado_para_revision": false,
+   "dia_en_curso": true,
+   "ritmo_cardiaco": {
+    "promedio_bpm": 60,
+    "minimo_bpm": 48,
+    "maximo_bpm": 136
+   }
+  }
+ ]
 }

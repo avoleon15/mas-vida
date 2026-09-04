@@ -56,17 +56,28 @@ class FuenteDatos {
 /// Una sesión de ejercicio con ritmo cardíaco.
 class SesionIntensidad {
   const SesionIntensidad({
+    required this.inicio,
     required this.duracionMin,
     required this.continua,
     required this.tipoActividad,
+    required this.fcPromedio,
     required this.porcentajeFcm,
     required this.cuentaParaPuntos,
     required this.puntosIntensidad,
   });
 
+  /// Cuándo arrancó el entrenamiento. Null si HealthKit no lo informó.
+  final DateTime? inicio;
+
   final int duracionMin;
   final bool continua;
   final String tipoActividad;
+
+  /// FC promedio de la sesión, en bpm. Es el dato CRUDO de HealthKit.
+  ///
+  /// Distinto de [porcentajeFcm]: ese es el % de la FCmáx y lo calcula el
+  /// servidor con la edad de la póliza. El teléfono nunca manda la FCmáx.
+  final int? fcPromedio;
 
   /// % de la FCM alcanzado. Lo calcula el servidor: el teléfono manda la
   /// edad y la FC cruda, nunca la FCM ni el porcentaje.
@@ -79,9 +90,13 @@ class SesionIntensidad {
 
   factory SesionIntensidad.desdeJson(Map<String, dynamic> j) =>
       SesionIntensidad(
+        inicio: j['inicio'] == null
+            ? null
+            : DateTime.tryParse(j['inicio'] as String),
         duracionMin: j['duracion_min'] as int,
         continua: j['continua'] as bool,
         tipoActividad: j['tipo_actividad'] as String,
+        fcPromedio: j['fc_promedio'] as int?,
         porcentajeFcm: j['porcentaje_fcm'] as int,
         cuentaParaPuntos: j['cuenta_para_puntos'] as bool,
         puntosIntensidad: j['puntos_intensidad'] as int,
@@ -108,6 +123,29 @@ class Reversion {
   );
 }
 
+/// Ritmo cardíaco del día, tal como lo entrega HealthKit.
+///
+/// Son bpm CRUDOS. No se convierten a % de FCmáx acá: eso lo hace el
+/// servidor con la edad de la póliza.
+class RitmoCardiacoDia {
+  const RitmoCardiacoDia({
+    required this.promedio,
+    required this.minimo,
+    required this.maximo,
+  });
+
+  final int promedio;
+  final int minimo;
+  final int maximo;
+
+  factory RitmoCardiacoDia.desdeJson(Map<String, dynamic> j) =>
+      RitmoCardiacoDia(
+        promedio: j['promedio_bpm'] as int,
+        minimo: j['minimo_bpm'] as int,
+        maximo: j['maximo_bpm'] as int,
+      );
+}
+
 /// Un día del historial.
 class DiaActividad {
   const DiaActividad({
@@ -124,6 +162,7 @@ class DiaActividad {
     required this.marcadoParaRevision,
     required this.reversion,
     required this.enCurso,
+    required this.ritmo,
   });
 
   final DateTime fecha;
@@ -151,6 +190,9 @@ class DiaActividad {
 
   final Reversion? reversion;
   final bool enCurso;
+
+  /// Null cuando ese día no hubo lecturas de ritmo cardíaco.
+  final RitmoCardiacoDia? ritmo;
 
   bool get sinPermiso => origen == OrigenDatos.sinPermiso;
   bool get esManual => origen == OrigenDatos.manual;
@@ -186,6 +228,11 @@ class DiaActividad {
         ? null
         : Reversion.desdeJson(j['reversion'] as Map<String, dynamic>),
     enCurso: j['dia_en_curso'] as bool? ?? false,
+    ritmo: j['ritmo_cardiaco'] == null
+        ? null
+        : RitmoCardiacoDia.desdeJson(
+            j['ritmo_cardiaco'] as Map<String, dynamic>,
+          ),
   );
 }
 
@@ -297,16 +344,18 @@ class SemanaReto {
 
   /// RANGO en el que se jugó esa semana, de 1 a [rangoMaximo].
   ///
-  /// Se llamaba `nivel`, que es el nombre de la escalera ANUAL de
-  /// cashback. Son dos cosas distintas: Nivel viene de los puntos y mueve
-  /// el cashback; Rango viene de los objetivos semanales y paga monedas.
+  /// En el JSON el campo se llama `nivel`, que es como lo nombra el
+  /// contrato. Acá se expone como rango porque Nivel ya es la escalera
+  /// ANUAL de cashback: esa viene de los puntos y mueve el cashback,
+  /// mientras que el rango viene de los objetivos semanales y paga
+  /// monedas. La traducción ocurre en [desdeJson] y en ningún otro lado.
   final int rango;
 
   final bool completado;
 
   factory SemanaReto.desdeJson(Map<String, dynamic> j) => SemanaReto(
     semanaInicio: j['semana_inicio'] as String,
-    rango: j['rango'] as int,
+    rango: j['nivel'] as int,
     completado: j['completado'] as bool,
   );
 }
@@ -321,16 +370,15 @@ class EstadoRetos {
 
   /// De 1 a [rangoMaximo]. NO es el nivel de cashback: ese es anual, sale
   /// de los puntos y se llama Nivel.
+  ///
+  /// Llega como `nivel_actual` en el JSON: ese es el nombre del contrato
+  /// y no se le cambia al backend desde acá — hacerlo sería un v3.
   final int rangoActual;
 
   final List<SemanaReto> historial;
 
-  /// TODO: falta la tabla de dificultad por rango. El contrato dice
-  /// explícitamente que no hay número documentado todavía.
-  Object? get objetivoSemanaActual => null;
-
   factory EstadoRetos.desdeJson(Map<String, dynamic> j) => EstadoRetos(
-    rangoActual: j['rango_actual'] as int,
+    rangoActual: j['nivel_actual'] as int,
     historial: (j['historial'] as List)
         .map((h) => SemanaReto.desdeJson(h as Map<String, dynamic>))
         .toList(),
@@ -477,6 +525,9 @@ class ObjetivosSemana {
   const ObjetivosSemana({required this.rangoActual, required this.semanas});
 
   /// Rango en la escalera. Paga MONEDAS, nunca puntos.
+  ///
+  /// Llega como `nivel_actual`, igual que en [EstadoRetos] y por el mismo
+  /// motivo: es la misma escalera y el JSON usa el nombre del contrato.
   final int rangoActual;
 
   /// Las semanas del mes. Pueden ser 4 o 5: no todos los meses tienen
@@ -501,7 +552,7 @@ class ObjetivosSemana {
   }
 
   factory ObjetivosSemana.desdeJson(Map<String, dynamic> j) => ObjetivosSemana(
-    rangoActual: j['rango_actual'] as int,
+    rangoActual: j['nivel_actual'] as int,
     semanas: (j['semanas'] as List)
         .map((s) => SemanaObjetivos.desdeJson(s as Map<String, dynamic>))
         .toList(),
@@ -692,6 +743,69 @@ class Poliza {
   );
 }
 
+/// Datos de contacto de la aseguradora.
+///
+/// [verificado] es la llave: mientras sea false, ningún número de acá se
+/// puede presentar como bueno. Un teléfono de emergencias inventado es
+/// peligroso de verdad — alguien lo marca en el peor momento de su vida.
+class Aseguradora {
+  const Aseguradora({
+    required this.nombre,
+    required this.telefonoEmergencias,
+    required this.telefonoServicio,
+    required this.correo,
+    required this.horario,
+    required this.verificado,
+  });
+
+  final String nombre;
+  final String telefonoEmergencias;
+  final String telefonoServicio;
+  final String correo;
+  final String horario;
+
+  /// True solo cuando la aseguradora confirmó estos datos.
+  final bool verificado;
+
+  factory Aseguradora.desdeJson(Map<String, dynamic> j) => Aseguradora(
+    nombre: j['nombre'] as String,
+    telefonoEmergencias: j['telefono_emergencias'] as String,
+    telefonoServicio: j['telefono_servicio'] as String,
+    correo: j['correo'] as String,
+    horario: j['horario'] as String,
+    verificado: j['verificado'] as bool? ?? false,
+  );
+}
+
+/// Un paso de "cómo usar tu seguro".
+class PasoUso {
+  const PasoUso({required this.titulo, required this.detalle});
+
+  final String titulo;
+  final String detalle;
+
+  factory PasoUso.desdeJson(Map<String, dynamic> j) =>
+      PasoUso(titulo: j['titulo'] as String, detalle: j['detalle'] as String);
+}
+
+/// El procedimiento para usar el seguro.
+class UsoDelSeguro {
+  const UsoDelSeguro({required this.pasos, required this.verificado});
+
+  final List<PasoUso> pasos;
+
+  /// Igual que en [Aseguradora]: mientras sea false, es un borrador de
+  /// redacción y no un procedimiento que alguien pueda seguir.
+  final bool verificado;
+
+  factory UsoDelSeguro.desdeJson(Map<String, dynamic> j) => UsoDelSeguro(
+    pasos: (j['pasos'] as List)
+        .map((p) => PasoUso.desdeJson(p as Map<String, dynamic>))
+        .toList(),
+    verificado: j['verificado'] as bool? ?? false,
+  );
+}
+
 /// Perfil del asegurado.
 class Perfil {
   const Perfil({
@@ -701,6 +815,8 @@ class Perfil {
     required this.zonaHoraria,
     required this.permisoHealthkit,
     required this.poliza,
+    required this.aseguradora,
+    required this.usoDelSeguro,
   });
 
   final String usuarioId;
@@ -712,6 +828,8 @@ class Perfil {
   final String zonaHoraria;
   final String permisoHealthkit;
   final Poliza poliza;
+  final Aseguradora aseguradora;
+  final UsoDelSeguro usoDelSeguro;
 
   factory Perfil.desdeJson(Map<String, dynamic> j) => Perfil(
     usuarioId: j['usuario_id'] as String,
@@ -720,6 +838,12 @@ class Perfil {
     zonaHoraria: j['zona_horaria'] as String,
     permisoHealthkit: j['permiso_healthkit'] as String,
     poliza: Poliza.desdeJson(j['poliza'] as Map<String, dynamic>),
+    aseguradora: Aseguradora.desdeJson(
+      j['aseguradora'] as Map<String, dynamic>,
+    ),
+    usoDelSeguro: UsoDelSeguro.desdeJson(
+      j['uso_del_seguro'] as Map<String, dynamic>,
+    ),
   );
 }
 
@@ -854,6 +978,29 @@ class Conexion {
   );
 }
 
+/// Una solicitud de amistad, recibida o enviada.
+///
+/// De alguien que TODAVÍA no es tu contacto solo se sabe el nombre, el
+/// usuario y cuántos amigos comparten. Nada de rachas, niveles ni
+/// actividad: eso se gana al aceptar, no al pedir.
+class Solicitud {
+  const Solicitud({
+    required this.nombre,
+    required this.handle,
+    required this.amigosEnComun,
+  });
+
+  final String nombre;
+  final String handle;
+  final int amigosEnComun;
+
+  factory Solicitud.desdeJson(Map<String, dynamic> j) => Solicitud(
+    nombre: j['nombre'] as String,
+    handle: j['handle'] as String,
+    amigosEnComun: j['amigos_en_comun'] as int? ?? 0,
+  );
+}
+
 class RankingPersona {
   const RankingPersona({
     required this.nombre,
@@ -864,52 +1011,278 @@ class RankingPersona {
 
   final String nombre;
 
-  /// Solo se usa para ordenar. El ranking visible es posición, nunca los
-  /// puntos de los demás.
+  /// Puntos de la semana.
+  ///
+  /// SIEMPRE se usan para ordenar. Si se MUESTRAN o no lo decide el
+  /// grupo (ver [GrupoRanking.mostrarPuntos]): entre conocidos se pueden
+  /// ver, con desconocidos nunca.
   final int puntosSemana;
 
   final Tendencia tendencia;
   final bool esUsuario;
 
-  factory RankingPersona.desdeJson(Map<String, dynamic> j) => RankingPersona(
-    nombre: j['nombre'] as String,
-    puntosSemana: j['puntos_semana'] as int,
-    tendencia: Tendencia.desde(j['tendencia'] as String),
-    esUsuario: j['es_usuario'] as bool? ?? false,
-  );
+  /// [yo] son los datos del usuario, que en el JSON se escriben UNA sola
+  /// vez arriba de todo. El usuario aparece en todos los grupos con los
+  /// mismos puntos, así que cada grupo solo lo marca con `es_usuario` y
+  /// de acá se rellena el resto. Si un grupo trae el dato completo, ese
+  /// gana.
+  factory RankingPersona.desdeJson(
+    Map<String, dynamic> j, {
+    Map<String, dynamic>? yo,
+  }) {
+    final esUsuario = j['es_usuario'] as bool? ?? false;
+    final campos = esUsuario && yo != null ? {...yo, ...j} : j;
+
+    return RankingPersona(
+      nombre: campos['nombre'] as String,
+      puntosSemana: campos['puntos_semana'] as int,
+      tendencia: Tendencia.desde(campos['tendencia'] as String? ?? 'igual'),
+      esUsuario: esUsuario,
+    );
+  }
+
+  Map<String, dynamic> aJson() => {
+    'nombre': nombre,
+    'puntos_semana': puntosSemana,
+    'tendencia': tendencia.name,
+    if (esUsuario) 'es_usuario': true,
+  };
+}
+
+/// Con quién compite el usuario en un grupo.
+enum TipoGrupo {
+  /// Gente que el usuario conoce y agregó a mano: oficina, familia,
+  /// amigos. Acá los puntos se pueden mostrar si el grupo lo decidió.
+  conocidos,
+
+  /// Liga local armada por la app entre gente que no se conoce. Los
+  /// puntos NUNCA se muestran: solo la posición.
+  desconocidos;
+
+  static TipoGrupo desde(String s) =>
+      s == 'desconocidos' ? TipoGrupo.desconocidos : TipoGrupo.conocidos;
+}
+
+/// Un grupo de ranking.
+class GrupoRanking {
+  const GrupoRanking({
+    required this.id,
+    required this.nombre,
+    required this.tipo,
+    required bool mostrarPuntos,
+    required this.miembros,
+    this.nivelActividad,
+    this.zona,
+    this.cierra,
+    this.premiosMonedas = const [],
+    this.creadoPorMi = false,
+    String? codigo,
+    // ignore: prefer_initializing_formals
+  }) : _mostrarPuntos = mostrarPuntos,
+       // ignore: prefer_initializing_formals
+       _codigo = codigo;
+
+  final String id;
+  final String nombre;
+  final TipoGrupo tipo;
+
+  /// Si se ven los puntos de cada quien o solo la posición.
+  ///
+  /// Lo elige quien crea el grupo. En un grupo de [TipoGrupo.desconocidos]
+  /// se ignora y siempre va en false: mostrarle a un extraño cuántos
+  /// puntos hace alguien es dar su nivel de actividad a alguien que no
+  /// eligió como contacto.
+  bool get mostrarPuntos =>
+      tipo == TipoGrupo.desconocidos ? false : _mostrarPuntos;
+  final bool _mostrarPuntos;
+
+  final List<RankingPersona> miembros;
+
+  /// Solo en ligas de desconocidos: contra qué nivel de actividad se
+  /// arma la liga, para que compita gente parecida.
+  final String? nivelActividad;
+
+  /// Solo en ligas de desconocidos: la zona contra la que se compite.
+  ///
+  /// Es el área declarada de la liga, NUNCA la ubicación de nadie: la app
+  /// no comparte ubicación de personas.
+  final String? zona;
+
+  /// Cuándo cierra y se reparten los premios.
+  final DateTime? cierra;
+
+  /// MONEDAS que se lleva cada podio, del 1.o al 3.o. Vacío si el grupo
+  /// no premia. Nunca puntos: los puntos no se regalan por competir.
+  final List<int> premiosMonedas;
+
+  /// Si el usuario lo creó o se unió a él desde la app, en vez de venir
+  /// del mock. Solo estos se guardan en el teléfono: los del mock ya
+  /// vuelven solos en cada arranque.
+  final bool creadoPorMi;
+
+  RankingPersona? get usuario {
+    for (final m in miembros) {
+      if (m.esUsuario) return m;
+    }
+    return null;
+  }
+
+  /// Si el usuario está compitiendo en este grupo. Estar en la tabla ES
+  /// estar unido: no hay un estado aparte que se pueda desincronizar.
+  bool get estoyUnido => usuario != null;
+
+  /// El código con el que se invita a alguien a este grupo.
+  ///
+  /// Si el grupo no trae uno, se deriva del id: así el mismo grupo
+  /// muestra siempre el mismo código, arranque tras arranque, en vez de
+  /// uno nuevo cada vez que se abre la pantalla.
+  ///
+  /// TODO: el código real lo tiene que emitir el backend. Uno derivado
+  /// no se puede revocar ni verificar, y quien lo adivine entra.
+  String get codigoInvitacion => _codigo ?? _codigoDesde(id);
+  final String? _codigo;
+
+  /// Seis caracteres estables a partir del id, sin las letras y números
+  /// que se confunden al dictarlos (O/0, I/1).
+  static String _codigoDesde(String id) {
+    const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var semilla = id.codeUnits.fold<int>(7, (a, c) => (a * 31 + c) & 0x7FFFFFF);
+
+    final buffer = StringBuffer();
+    for (var i = 0; i < 6; i++) {
+      buffer.write(alfabeto[semilla % alfabeto.length]);
+      semilla = semilla ~/ alfabeto.length + 13;
+    }
+    return buffer.toString();
+  }
+
+  /// Posición del usuario, empezando en 1.
+  int get posicionUsuario => miembros.indexWhere((m) => m.esUsuario) + 1;
+
+  /// Lo propio de una liga (nivel, cierre, premios) vive en un bloque
+  /// `liga` aparte, para que un grupo normal no cargue cuatro campos
+  /// vacíos que no le aplican.
+  factory GrupoRanking.desdeJson(
+    Map<String, dynamic> j, {
+    Map<String, dynamic>? yo,
+  }) {
+    final liga = (j['liga'] as Map<String, dynamic>?) ?? const {};
+
+    return GrupoRanking(
+      id: j['id'] as String,
+      nombre: j['nombre'] as String,
+      tipo: TipoGrupo.desde(j['tipo'] as String? ?? 'conocidos'),
+      mostrarPuntos: j['mostrar_puntos'] as bool? ?? false,
+      miembros: (j['miembros'] as List)
+          .map(
+            (m) => RankingPersona.desdeJson(m as Map<String, dynamic>, yo: yo),
+          )
+          .toList(),
+      nivelActividad: liga['nivel_actividad'] as String?,
+      zona: liga['zona'] as String?,
+      cierra: liga['cierra'] == null
+          ? null
+          : DateTime.tryParse(liga['cierra'] as String),
+      premiosMonedas: ((liga['premios_monedas'] as List?) ?? const [])
+          .cast<int>()
+          .toList(),
+      creadoPorMi: j['creado_por_mi'] as bool? ?? false,
+      codigo: j['codigo'] as String?,
+    );
+  }
+
+  /// Misma forma que un grupo de `social.json`, para que lo guardado en el
+  /// teléfono se pueda volver a leer con el mismo parser.
+  Map<String, dynamic> aJson() => {
+    'id': id,
+    'nombre': nombre,
+    'tipo': tipo.name,
+    'mostrar_puntos': _mostrarPuntos,
+    'miembros': miembros.map((m) => m.aJson()).toList(),
+    if (nivelActividad != null ||
+        zona != null ||
+        cierra != null ||
+        premiosMonedas.isNotEmpty)
+      'liga': {
+        if (nivelActividad != null) 'nivel_actividad': nivelActividad,
+        if (zona != null) 'zona': zona,
+        if (cierra != null) 'cierra': cierra!.toIso8601String(),
+        if (premiosMonedas.isNotEmpty) 'premios_monedas': premiosMonedas,
+      },
+    if (creadoPorMi) 'creado_por_mi': true,
+    if (_codigo != null) 'codigo': _codigo,
+  };
 }
 
 class DatosSociales {
-  const DatosSociales({
+  DatosSociales({
     required this.duelo,
     required this.historialDuelos,
     required this.conexiones,
-    required this.gruposRanking,
-    required this.rankingPorGrupo,
+    required this.grupos,
+    required this.solicitudesRecibidas,
+    required this.solicitudesEnviadas,
   });
 
   final Duelo duelo;
   final List<DueloHistorial> historialDuelos;
-  final List<Conexion> conexiones;
-  final List<String> gruposRanking;
-  final Map<String, List<RankingPersona>> rankingPorGrupo;
 
-  factory DatosSociales.desdeJson(Map<String, dynamic> j) => DatosSociales(
-    duelo: Duelo.desdeJson(j['duelo'] as Map<String, dynamic>),
-    historialDuelos: (j['historial_duelos'] as List)
-        .map((d) => DueloHistorial.desdeJson(d as Map<String, dynamic>))
-        .toList(),
-    conexiones: (j['conexiones'] as List)
-        .map((c) => Conexion.desdeJson(c as Map<String, dynamic>))
-        .toList(),
-    gruposRanking: (j['grupos_ranking'] as List).cast<String>(),
-    rankingPorGrupo: (j['ranking_por_grupo'] as Map<String, dynamic>).map(
-      (grupo, personas) => MapEntry(
-        grupo,
-        (personas as List)
-            .map((p) => RankingPersona.desdeJson(p as Map<String, dynamic>))
-            .toList(),
-      ),
-    ),
-  );
+  /// Tus amigos. MUTABLE: aceptar una solicitud agrega uno.
+  final List<Conexion> conexiones;
+
+  /// Quién te pidió ser tu amigo. MUTABLE: aceptar o rechazar la saca.
+  final List<Solicitud> solicitudesRecibidas;
+
+  /// A quién le pediste vos. MUTABLE: cancelar la saca.
+  final List<Solicitud> solicitudesEnviadas;
+
+  /// Los grupos de ranking. Es una lista MUTABLE a propósito: crear o
+  /// unirse a un grupo la modifica en el acto.
+  ///
+  /// Los del mock se leen de `social.json`; los que creó el usuario se
+  /// pegan encima desde `AlmacenSocial`.
+  ///
+  /// TODO: cuando exista el backend, crear y unirse pasan por él y esto
+  /// se hidrata de la API.
+  final List<GrupoRanking> grupos;
+
+  /// Los grupos de gente conocida, que son los únicos que pueden mostrar
+  /// puntos.
+  List<GrupoRanking> get deConocidos =>
+      grupos.where((g) => g.tipo == TipoGrupo.conocidos).toList();
+
+  /// La liga local con desconocidos, si el usuario está en alguna.
+  GrupoRanking? get ligaLocal {
+    for (final g in grupos) {
+      if (g.tipo == TipoGrupo.desconocidos) return g;
+    }
+    return null;
+  }
+
+  factory DatosSociales.desdeJson(Map<String, dynamic> j) {
+    final duelos = j['duelos'] as Map<String, dynamic>;
+    // Los datos del usuario se escriben una sola vez y cada grupo los
+    // hereda: así sus puntos no quedan repetidos (y desincronizables) en
+    // cada ranking.
+    final yo = j['yo'] as Map<String, dynamic>?;
+
+    return DatosSociales(
+      duelo: Duelo.desdeJson(duelos['activo'] as Map<String, dynamic>),
+      historialDuelos: (duelos['historial'] as List)
+          .map((d) => DueloHistorial.desdeJson(d as Map<String, dynamic>))
+          .toList(),
+      conexiones: (j['conexiones'] as List)
+          .map((c) => Conexion.desdeJson(c as Map<String, dynamic>))
+          .toList(),
+      grupos: (j['grupos'] as List)
+          .map((g) => GrupoRanking.desdeJson(g as Map<String, dynamic>, yo: yo))
+          .toList(),
+      solicitudesRecibidas: ((j['solicitudes_recibidas'] as List?) ?? const [])
+          .map((s) => Solicitud.desdeJson(s as Map<String, dynamic>))
+          .toList(),
+      solicitudesEnviadas: ((j['solicitudes_enviadas'] as List?) ?? const [])
+          .map((s) => Solicitud.desdeJson(s as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }

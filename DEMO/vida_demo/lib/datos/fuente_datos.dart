@@ -1,3 +1,4 @@
+import 'almacen_social.dart';
 import 'api_vida_repository.dart';
 import 'mock_vida_repository.dart';
 import 'modelos.dart';
@@ -48,12 +49,22 @@ class Datos {
       repositorio.social(),
     ]);
 
+    final social = resultados[4] as DatosSociales;
+
+    // Encima de los grupos del mock van los que creó el usuario en
+    // arranques anteriores. Se filtran por id para que unirse dos veces al
+    // mismo grupo no lo muestre duplicado.
+    final ids = social.grupos.map((g) => g.id).toSet();
+    for (final g in await AlmacenSocial.leer()) {
+      if (ids.add(g.id)) social.grupos.add(g);
+    }
+
     i = Datos(
       perfil: resultados[0] as Perfil,
       historial: resultados[1] as Historial,
       resumen: resultados[2] as ResumenAnual,
       catalogo: resultados[3] as Catalogo,
-      social: resultados[4] as DatosSociales,
+      social: social,
     );
   }
 }

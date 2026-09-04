@@ -42,16 +42,18 @@
   "racha_historial": [true, true, true, true, true, true, true, true],
 
   "retos_semanales": {
-    "_comentario": "Estado de los OBJETIVOS SEMANALES. La escalera se llama RANGO, no Nivel: Nivel es la escalera anual de cashback que sale de los puntos, y son cosas distintas. Cumplir los 3 objetivos sube un rango, no cumplirlos baja uno. Piso 1, techo 4.",
-    "_nota_correccion": "El historial traia un rango 5, que no existe. Ahora la secuencia es coherente: cada semana arranca donde la dejo la anterior y ninguna pasa de 4.",
-    "rango_actual": 4,
+    "_comentario": "Estado de los OBJETIVOS SEMANALES, tal como los devolveria GET /api/v1/retos/estado. Cumplir los 3 objetivos sube un escalon, no cumplirlos baja uno. Piso 1, techo 4.",
+    "_nota_nombre": "El campo se llama nivel_actual porque asi lo nombra el contrato, y el JSON habla el idioma del backend. Del lado Flutter el modelo lo expone como rangoActual: Nivel ya es la escalera ANUAL de cashback que sale de los puntos, y son dos cosas distintas. La traduccion ocurre en desdeJson y en ningun otro lado.",
+    "_todo_nombre": "TODO: acordar el nombre con Luis. Si el backend adopta rango, es un v3 del contrato, no un parche silencioso a este mock.",
+    "_nota_correccion": "El historial traia un 5, que no existe. Ahora la secuencia es coherente: cada semana arranca donde la dejo la anterior y ninguna pasa de 4.",
+    "nivel_actual": 4,
     "historial": [
-      { "semana_inicio": "2026-07-27", "rango": 2, "completado": true },
-      { "semana_inicio": "2026-08-03", "rango": 3, "completado": true },
-      { "semana_inicio": "2026-08-10", "rango": 4, "completado": false },
-      { "semana_inicio": "2026-08-17", "rango": 3, "completado": true }
+      { "semana_inicio": "2026-07-27", "nivel": 2, "completado": true },
+      { "semana_inicio": "2026-08-03", "nivel": 3, "completado": true },
+      { "semana_inicio": "2026-08-10", "nivel": 4, "completado": false },
+      { "semana_inicio": "2026-08-17", "nivel": 3, "completado": true }
     ],
-    "_todo_dificultad": "TODO: falta la tabla de dificultad por rango. El contrato v1 dice explicitamente que no hay numero documentado todavia; lo define Luis en el motor de reglas."
+    "_todo_dificultad": "TODO: falta la tabla de dificultad por escalon. El contrato dice explicitamente que no hay numero documentado todavia; lo define Luis en el motor de reglas."
   },
 
   "ritmo_cardiaco": {
@@ -70,7 +72,8 @@
     "_todo_objetivos": "TODO: cuales son los 3 objetivos es PROVISIONAL. Entran como datos, asi que cambiarlos no toca el motor de reglas.",
     "_todo_monedas": "TODO: cuantas monedas paga cada objetivo tampoco esta documentado. Los valores de aca suman 8 por semana, que es el unico numero que existe (techo mensual de monedas en CLAUDE.md) y hay que reconciliarlo.",
     "_nota_semanas": "Un mes puede tener 5 semanas. La app no asume 4: renderiza las que vengan.",
-    "rango_actual": 2,
+    "_nota_nombre": "nivel_actual, igual que en retos_semanales y por el mismo motivo: es la misma escalera y el JSON usa el nombre del contrato. El modelo Dart la expone como rangoActual.",
+    "nivel_actual": 2,
     "semanas": [
     {
       "numero": 1,
