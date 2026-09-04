@@ -130,6 +130,11 @@ final class HealthKitManager: ObservableObject {
 
     private static let claveBackfillInicialHecho = "vida.backfillInicialHecho"
 
+    /// El último backfill recorrió los días pedidos sin abortar por un error
+    /// permanente. Días encolados por falta de red no cuentan como abortar:
+    /// quedaron a salvo en la cola de reintentos.
+    private var huboRecorridoCompleto = false
+
     // MARK: - Estado publicado para el envío real al backend (A7)
 
     /// URL base del backend de Luis. Mientras no exista una pantalla de
@@ -431,6 +436,23 @@ final class HealthKitManager: ObservableObject {
                 // se habrían perdido para siempre (Luis deduplica por
                 // external_id y nunca los volvería a recibir).
                 let payload = try await construirPayload(fecha: fecha)
+
+                // Ante la duda, el día se queda pendiente. Un payload vacío
+                // puede ser un día sin actividad, pero también un permiso de
+                // HealthKit denegado — HealthKit no permite distinguirlos:
+                // cuando no hay permiso devuelve arrays vacíos, no un error.
+                // Mandarlo sería fatal: Luis respondería 200, el día saldría
+                // de la cola dado por entregado con cero datos, y nunca se
+                // volvería a mandar. Este método corre solo (al abrir la app,
+                // al volver del background), así que puede ejecutarse antes
+                // de que el permiso esté concedido.
+                guard !payload.pasos.isEmpty
+                        || !payload.sesiones.isEmpty
+                        || !payload.frecuencia_cardiaca.isEmpty else {
+                    fallaron += 1
+                    continue
+                }
+
                 _ = try await cliente.enviarSincronizacion(payload)
                 syncQueue.remover(fecha: dia)
                 // Se actualiza día por día, no al final del loop: el contador
@@ -495,6 +517,7 @@ final class HealthKitManager: ObservableObject {
         payloadsHistorial = []
         respuestasHistorial = []
         var encolados = 0
+        huboRecorridoCompleto = true
 
         for fecha in fechas {
             let dia = FormatoFechas.diaCalendario.string(from: fecha)
@@ -515,6 +538,7 @@ final class HealthKitManager: ObservableObject {
                     encolados += 1
                 } else {
                     errorBackfill = "Día \(dia): \(error.localizedDescription)"
+                    huboRecorridoCompleto = false
                     break   // permanente: el resto va a fallar por lo mismo
                 }
             }
@@ -534,8 +558,17 @@ final class HealthKitManager: ObservableObject {
     /// prende apenas el backfill termina sin error.
     func sincronizarHistorialSiEsPrimeraVez(dias: Int = 7) async {
         guard !UserDefaults.standard.bool(forKey: Self.claveBackfillInicialHecho) else { return }
+
         await sincronizarHistorial(dias: dias)
-        guard errorBackfill == nil else { return }
+
+        // La bandera se prende si el backfill llegó a recorrer los días, aunque
+        // alguno haya quedado encolado: esos días están a salvo en la cola y el
+        // reintento automático se encarga. Antes bastaba un día con mala red
+        // para que la bandera nunca se prendiera y el backfill de 7 días se
+        // re-corriera entero en cada intento, duplicando trabajo que la cola ya
+        // estaba haciendo. Solo un fallo permanente (4xx) deja el backfill sin
+        // marcar, porque ahí sí no se recorrió todo.
+        guard huboRecorridoCompleto else { return }
         UserDefaults.standard.set(true, forKey: Self.claveBackfillInicialHecho)
     }
 

@@ -154,7 +154,10 @@ struct ContentView: View {
                     if let respuesta = healthKitManager.respuestaEnvioHoy {
                         VStack(alignment: .leading, spacing: 4) {
                             if let cuando = healthKitManager.respuestaEnvioHoyEn {
-                                Text("Resultado de las \(cuando.formatted(date: .omitted, time: .shortened))")
+                                // Relativo y no la hora sola: si la app pasó
+                                // un día en segundo plano, "1:33 PM" puede ser
+                                // de anteayer y se lee como si fuera de recién.
+                                Text("Recibido \(cuando.formatted(.relative(presentation: .named)))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -176,40 +179,59 @@ struct ContentView: View {
                             .foregroundStyle(.red)
                     }
 
-                    if healthKitManager.pendientesEnCola > 0 {
-                        HStack {
-                            Image(systemName: "tray.and.arrow.up")
-                                .foregroundStyle(.orange)
-                            Text("^[\(healthKitManager.pendientesEnCola) día](inflect: true) sin enviar")
-                                .foregroundStyle(.orange)
-                                .contentTransition(.numericText())
-
-                            Spacer()
-
-                            Button {
-                                Task { await healthKitManager.reintentarPendientes() }
-                            } label: {
-                                if healthKitManager.reintentando {
-                                    ProgressView()
-                                } else {
-                                    Text("Reintentar")
-                                }
-                            }
-                            .disabled(healthKitManager.ocupado || !healthKitManager.urlBackendValida)
-                        }
-                        .font(.footnote)
-                        .transition(.opacity)
-                    }
-
-                    if let errorReintento = healthKitManager.errorReintento {
-                        Text(errorReintento)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
                 } header: {
                     Text("Enviar hoy a Luis")
                 } footer: {
                     Text("POST /api/v1/sync del día de hoy (A7). El resultado de acá arriba es siempre el de hoy — nunca el del backfill de abajo.")
+                }
+
+                // Sección propia y no dentro de "Enviar hoy": la cola la
+                // alimentan las dos acciones (el envío de hoy y el backfill),
+                // así que el control para vaciarla no puede vivir dentro de
+                // una sola de ellas. Antes el backfill avisaba "quedaron 3
+                // días encolados" en su sección y el botón para resolverlo
+                // estaba en otra, más arriba.
+                if healthKitManager.pendientesEnCola > 0 || healthKitManager.errorReintento != nil {
+                    Section {
+                        if healthKitManager.pendientesEnCola > 0 {
+                            HStack {
+                                Image(systemName: "tray.and.arrow.up")
+                                    .foregroundStyle(.orange)
+                                Text("^[\(healthKitManager.pendientesEnCola) día](inflect: true) sin enviar")
+                                    .foregroundStyle(.orange)
+                                    .contentTransition(.numericText())
+
+                                Spacer()
+
+                                Button {
+                                    Task { await healthKitManager.reintentarPendientes() }
+                                } label: {
+                                    if healthKitManager.reintentando {
+                                        ProgressView()
+                                    } else {
+                                        Text("Reintentar")
+                                    }
+                                }
+                                // Ancho fijo: sin esto la fila se recorre al
+                                // tocar, porque el spinner y el texto miden
+                                // distinto.
+                                .frame(minWidth: 72, alignment: .trailing)
+                                .disabled(healthKitManager.ocupado || !healthKitManager.urlBackendValida)
+                            }
+                            .font(.footnote)
+                            .transition(.opacity)
+                        }
+
+                        if let errorReintento = healthKitManager.errorReintento {
+                            Text(errorReintento)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    } header: {
+                        Text("Cola de reintentos")
+                    } footer: {
+                        Text("Días que no se pudieron enviar (A8). Se reintentan solos al abrir la app y al volver del segundo plano; los datos se releen de HealthKit en cada intento, así que un día que siguió sumando pasos después del fallo se manda completo.")
+                    }
                 }
 
                 Section {
