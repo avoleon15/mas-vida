@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/placeholder_imagen.dart';
+import '../widgets/moneda_animada.dart';
 import 'premios_screen.dart' show monedasUsuario;
 
 /// Detalle de un premio: recibe los datos del premio seleccionado como
@@ -100,16 +101,10 @@ class PremioDetalleScreen extends StatelessWidget {
                               },
                             )
                           : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.black,
-                        disabledBackgroundColor: AppColors.cardBorder,
-                        disabledForegroundColor: AppColors.textSecondary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                      ),
+                      // El color y la forma los pone el tema
+                      // (elevatedButtonTheme). Antes acá había un
+                      // foregroundColor negro sobre el azul de marca y
+                      // el botón no se leía.
                       child: Text(
                         alcanza
                             ? 'CANJEAR POR $costo MONEDAS'
@@ -171,11 +166,7 @@ class PremioDetalleScreen extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.monetization_on,
-                color: AppColors.accentSecondary,
-                size: 16,
-              ),
+              const MonedaAnimada(size: 21),
               const SizedBox(width: 6),
               Text(
                 '$costo monedas',

@@ -307,7 +307,13 @@ class AppTheme {
         primary: AppColors.accent,
         secondary: AppColors.accentSecondary,
         surface: AppColors.card,
-        onPrimary: Colors.black,
+        // BLANCO, no negro. `accent` es #012096, un azul casi noche:
+        // encima de él el texto negro no se lee. Decía negro desde
+        // cuando el azul de marca era claro; al oscurecerlo quedó así y
+        // los botones de Premios se volvieron ilegibles.
+        onPrimary: Colors.white,
+        // El naranja es claro, así que ahí manda el texto oscuro.
+        onSecondary: AppColors.textPrimary,
         onSurface: AppColors.textPrimary,
       ),
       textTheme: _textTheme,
@@ -322,6 +328,22 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: AppColors.cardBorder),
+        ),
+      ),
+      // Un botón azul de +Vida se ve igual en toda la app y su texto
+      // SIEMPRE es blanco. Definido acá y no en cada pantalla: así nadie
+      // vuelve a escribir un botón con texto negro sobre azul.
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.accent,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.cardBorder,
+          disabledForegroundColor: AppColors.textSecondary,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
