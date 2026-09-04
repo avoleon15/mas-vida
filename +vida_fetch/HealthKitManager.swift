@@ -9,15 +9,15 @@
 //  de Luis — este spike solo prueba la lectura cruda de HealthKit.
 //
 //  OJO — nombres: `actualizarVistaHoy()` de acá abajo NO es el `sincronizar`
-//  que define el contrato (ver contrato-v2.md). Ese método de acá es solo
+//  que define el contrato (ver contrato-v3_1.md). Ese método de acá es solo
 //  para refrescar la pantalla de depuración con los datos de hoy. El
 //  `sincronizar` real del contrato — el que arma el JSON #1, hace el POST y
 //  devuelve el JSON #2 — es `enviarSincronizacion()`. Cuando A10 conecte el
 //  MethodChannel, el método `sincronizar` de Flutter debe apuntar a
 //  `enviarSincronizacion()`, no a `actualizarVistaHoy()`.
 //
-//  También incluye `exportarJSON`, que arma el JSON #1 del contrato v2
-//  (ver "contrato-v2.md" y SyncPayload.swift) a partir de datos crudos de
+//  También incluye `exportarJSON`, que arma el JSON #1 del contrato v3
+//  (ver "contrato-v3_1.md" y SyncPayload.swift) a partir de datos crudos de
 //  HealthKit y lo guarda como archivo para compartirlo/inspeccionarlo a
 //  mano — útil para depurar, pero ya no es el camino real de sincronización
 //  (ver `enviarSincronizacion` / `sincronizarHistorial`, tickets A7/A9).
@@ -110,7 +110,7 @@ final class HealthKitManager: ObservableObject {
     @Published var entrenamientos: [WorkoutSummary] = []
     @Published var ultimaSincronizacion: Date?
 
-    // MARK: - Estado publicado para la exportación del contrato v2
+    // MARK: - Estado publicado para la exportación del contrato v3
 
     /// `usuario_id` del payload. Editable desde la UI mientras no exista login
     /// real — no es el HealthKit userID, es el id interno que espera Luis.
@@ -149,6 +149,22 @@ final class HealthKitManager: ObservableObject {
     /// sobre la misma cola — eso mandaría los mismos días dos veces.
     @Published var reintentando: Bool = false
     @Published var errorReintento: String?
+
+    /// Hay una operación de red en curso. Las tres acciones (enviar hoy,
+    /// reintentar, backfill) pegan al mismo endpoint y tocan la misma cola,
+    /// así que nunca deben correr en paralelo: si "enviar hoy" fallara y
+    /// encolara el día justo mientras el loop de reintentos termina y llama
+    /// a `remover(fecha:)` para ese mismo día, se borraría de la cola un día
+    /// que acaba de fallar. Los tres botones se deshabilitan juntos.
+    var ocupado: Bool { enviando || reintentando || backfillEnProgreso }
+
+    init() {
+        // Sin esto el aviso de la UI arranca en 0 aunque haya días esperando
+        // en disco: cerrás la app con 3 días pendientes, la volvés a abrir, y
+        // no se ve nada hasta que toques algo. Es justo el escenario para el
+        // que existe la cola.
+        pendientesEnCola = syncQueue.pendientes().count
+    }
 
     /// Respuesta del envío de HOY (`enviarSincronizacion`) — separada de
     /// `respuestasHistorial` (el backfill) a propósito. Antes había un solo
@@ -221,7 +237,7 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - construirPayload() (A9)
-    // Arma el JSON #1 del contrato v2 para un día calendario cualquiera —
+    // Arma el JSON #1 del contrato v3 para un día calendario cualquiera —
     // extraído de exportarJSON() para que tanto la exportación a archivo
     // como el envío real (enviarSincronizacion) y el backfill
     // (sincronizarHistorial) compartan exactamente la misma lógica.
@@ -250,7 +266,7 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - exportarJSON()
-    // Arma el JSON #1 del contrato v2 para un día calendario completo y lo
+    // Arma el JSON #1 del contrato v3 para un día calendario completo y lo
     // guarda como archivo para compartir/inspeccionar a mano. Herramienta de
     // depuración — para el envío real usar `enviarSincronizacion`.
 
@@ -310,19 +326,45 @@ final class HealthKitManager: ObservableObject {
             let respuesta = try await cliente.enviarSincronizacion(payload)
             respuestaEnvioHoy = respuesta
             ultimaSincronizacion = Date()
+            // Este envío trae el día ya completo, así que si estaba en la
+            // cola por un intento anterior, deja de estar pendiente.
             syncQueue.remover(fecha: payload.fecha)
             pendientesEnCola = syncQueue.pendientes().count
             // Si esto sí llegó, probablemente ya hay red — aprovechamos para
             // intentar vaciar lo que haya quedado pendiente de antes.
             await reintentarPendientes()
-        } catch ApiError.urlInvalida {
-            // Error de configuración, no de red: encolarlo llenaría la cola
-            // de días pendientes por un typo en la URL, no por falta de señal.
-            errorEnvio = "La URL del backend no es válida — corregila antes de enviar."
         } catch {
-            errorEnvio = "Error al enviar a Luis: \(error.localizedDescription) — guardado para reintentar."
-            syncQueue.encolar(payload)
-            pendientesEnCola = syncQueue.pendientes().count
+            if esReintentable(error) {
+                syncQueue.encolar(fecha: payload.fecha)
+                pendientesEnCola = syncQueue.pendientes().count
+                errorEnvio = "No se pudo enviar: \(error.localizedDescription) — guardado para reintentar."
+            } else {
+                // Permanente: encolarlo solo dejaría la cola atascada.
+                errorEnvio = "No se pudo enviar: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    // MARK: - esReintentable() (A8)
+    /// ¿Este error se arregla solo con reintentar más tarde, o va a fallar
+    /// siempre? Encolar un error permanente deja la cola atascada para
+    /// siempre, mostrando un aviso que el usuario no puede resolver.
+    ///
+    /// - Errores de red (sin señal, timeout, DNS): sí, son transitorios.
+    /// - 5xx / 408 / 429: el servidor está caído o saturado, sí.
+    /// - Resto de 4xx: el payload o la ruta están mal — reintentar no arregla nada.
+    /// - URL inválida: es configuración, no conectividad.
+    /// - Respuesta ilegible: el servidor YA guardó los datos (respondió 2xx),
+    ///   solo no pudimos leer su respuesta. Reencolar el día sería pedirle
+    ///   que guarde algo que ya tiene.
+    private func esReintentable(_ error: Error) -> Bool {
+        guard let apiError = error as? ApiError else { return true }
+
+        switch apiError {
+        case .urlInvalida, .respuestaInvalida, .respuestaIlegible:
+            return false
+        case .servidor(let codigo, _):
+            return codigo >= 500 || codigo == 408 || codigo == 429
         }
     }
 
@@ -333,6 +375,14 @@ final class HealthKitManager: ObservableObject {
     // así que no hace falta ningún control extra de duplicados acá.
     func reintentarPendientes() async {
         guard !reintentando else { return }   // un solo loop a la vez
+
+        let dias = syncQueue.pendientes()
+        pendientesEnCola = dias.count
+        // Si no hay nada pendiente no validamos la URL: hacerlo pintaría un
+        // error rojo de "URL inválida" en cada arranque de la app sin que
+        // haya realmente nada que reintentar.
+        guard !dias.isEmpty else { return }
+
         guard let cliente = try? clienteAPI() else {
             errorReintento = "La URL del backend no es válida."
             return
@@ -343,23 +393,48 @@ final class HealthKitManager: ObservableObject {
         defer { reintentando = false }
 
         var fallaron = 0
-        for payload in syncQueue.pendientes() {
+
+        for dia in dias {
+            guard let fecha = FormatoFechas.diaCalendario.date(from: dia) else {
+                syncQueue.remover(fecha: dia)   // entrada corrupta, no se puede reconstruir
+                continue
+            }
+
             do {
+                // Se reconstruye el día desde HealthKit en vez de mandar una
+                // foto vieja: si el día siguió acumulando pasos después del
+                // fallo, esos pasos van incluidos. Con el payload congelado
+                // se habrían perdido para siempre (Luis deduplica por
+                // external_id y nunca los volvería a recibir).
+                let payload = try await construirPayload(fecha: fecha)
                 _ = try await cliente.enviarSincronizacion(payload)
-                syncQueue.remover(fecha: payload.fecha)
+                syncQueue.remover(fecha: dia)
                 // Se actualiza día por día, no al final del loop: el contador
                 // baja en vivo mientras la cola se vacía.
                 pendientesEnCola = syncQueue.pendientes().count
             } catch {
                 fallaron += 1
-                // Sigue en la cola tal cual — se vuelve a intentar la
-                // próxima vez que se llame a este método.
+
+                if !esReintentable(error) {
+                    // Permanente (4xx, o el servidor ya lo guardó y no
+                    // pudimos leer su respuesta): se saca de la cola para que
+                    // pueda drenar. No se pierde nada — los datos siguen en
+                    // HealthKit y ese día se puede reenviar con el backfill.
+                    syncQueue.remover(fecha: dia)
+                    errorReintento = "Día \(dia): \(error.localizedDescription)"
+                    break   // el resto de días va a fallar por lo mismo
+                }
             }
         }
 
         pendientesEnCola = syncQueue.pendientes().count
-        if fallaron > 0 {
-            errorReintento = "^[\(fallaron) día](inflect: true) sigue sin poder enviarse."
+
+        if fallaron > 0 && errorReintento == nil {
+            // Ojo: esto es un String, no un Text — la sintaxis ^[...](inflect:)
+            // solo funciona en literales de Text, acá saldría tal cual.
+            errorReintento = fallaron == 1
+                ? "1 día sigue sin poder enviarse."
+                : "\(fallaron) días siguen sin poder enviarse."
         }
     }
 
@@ -367,7 +442,7 @@ final class HealthKitManager: ObservableObject {
     // Trae los últimos `dias` días (hoy incluido), uno por uno, y los manda
     // por el mismo POST /api/v1/sync — el campo `fecha` de cada payload le
     // dice a Luis de qué día son los datos, no hace falta un endpoint
-    // separado (ver contrato-v2.md, nota "ventana de sync" para Luis).
+    // separado (ver contrato-v3_1.md, nota "ventana de sync" para Luis).
     // Secuencial a propósito: varias HKSampleQuery en paralelo para el mismo
     // tipo no ganan velocidad, solo compiten entre sí.
     //
@@ -384,22 +459,49 @@ final class HealthKitManager: ObservableObject {
             Calendar.current.date(byAdding: .day, value: -$0, to: hoy)
         }
 
-        do {
-            let cliente = try clienteAPI()
-            var payloads: [SyncPayload] = []
-            var respuestas: [RespuestaSincronizacion] = []
+        guard let cliente = try? clienteAPI() else {
+            errorBackfill = "La URL del backend no es válida."
+            return
+        }
 
-            for fecha in fechas {
+        // Se limpian y se van llenando día por día: antes se asignaban al
+        // final del loop, así que si el día 3 fallaba, los días 1 y 2 que SÍ
+        // habían llegado a Luis no aparecían en pantalla — el usuario veía un
+        // error y cero días, con dos días ya guardados en la base.
+        payloadsHistorial = []
+        respuestasHistorial = []
+        var encolados = 0
+
+        for fecha in fechas {
+            let dia = FormatoFechas.diaCalendario.string(from: fecha)
+
+            do {
                 let payload = try await construirPayload(fecha: fecha)
                 let respuesta = try await cliente.enviarSincronizacion(payload)
-                payloads.append(payload)
-                respuestas.append(respuesta)
+                payloadsHistorial.append(payload)
+                respuestasHistorial.append(respuesta)
+                syncQueue.remover(fecha: dia)
+            } catch {
+                // Un día que falla ya no aborta los otros seis, y no se
+                // pierde: entra a la cola de reintentos igual que el envío
+                // de hoy (antes el backfill era el único camino sin red de
+                // seguridad, justo el que arriesga 7 días de una).
+                if esReintentable(error) {
+                    syncQueue.encolar(fecha: dia)
+                    encolados += 1
+                } else {
+                    errorBackfill = "Día \(dia): \(error.localizedDescription)"
+                    break   // permanente: el resto va a fallar por lo mismo
+                }
             }
+        }
 
-            payloadsHistorial = payloads
-            respuestasHistorial = respuestas
-        } catch {
-            errorBackfill = "Error al traer historial: \(error.localizedDescription)"
+        pendientesEnCola = syncQueue.pendientes().count
+
+        if encolados > 0 && errorBackfill == nil {
+            errorBackfill = encolados == 1
+                ? "1 día no se pudo enviar — quedó en la cola de reintentos."
+                : "\(encolados) días no se pudieron enviar — quedaron en la cola de reintentos."
         }
     }
 
@@ -502,7 +604,8 @@ final class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Frecuencia cardíaca cruda del día (una entrada por HKQuantitySample)
-    // Nuevo en el contrato v2 — reemplaza lo que iba a ser el ticket A4
+    // Agregado en el contrato v2, sin cambios en v3 — reemplaza lo que
+    // iba a ser el ticket A4
     // ("detectar sesión intensa en Swift"): ahora A4 es solo exportar este
     // HR crudo, esté o no dentro de un workout. La detección de sesiones
     // intensas sin workout la hace el backend (L7) sobre este dato.
@@ -571,7 +674,7 @@ final class HealthKitManager: ObservableObject {
         return resumenes
     }
 
-    // MARK: - Sesiones (HKWorkout) de un día calendario, para el export del contrato v1
+    // MARK: - Sesiones (HKWorkout) de un día calendario, para el export del contrato v3
 
     private func fetchSesiones(desde inicio: Date, hasta fin: Date) async throws -> [SesionMuestra] {
         let predicado = HKQuery.predicateForSamples(withStart: inicio, end: fin, options: .strictStartDate)

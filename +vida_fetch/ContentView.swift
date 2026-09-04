@@ -148,7 +148,7 @@ struct ContentView: View {
                             Text("Enviar hoy a Luis")
                         }
                     }
-                    .disabled(healthKitManager.enviando || URL(string: healthKitManager.baseURLTexto)?.host == nil)
+                    .disabled(healthKitManager.ocupado || URL(string: healthKitManager.baseURLTexto)?.host == nil)
 
                     if let respuesta = healthKitManager.respuestaEnvioHoy {
                         VStack(alignment: .leading, spacing: 4) {
@@ -189,7 +189,7 @@ struct ContentView: View {
                                     Text("Reintentar")
                                 }
                             }
-                            .disabled(healthKitManager.reintentando
+                            .disabled(healthKitManager.ocupado
                                       || URL(string: healthKitManager.baseURLTexto)?.host == nil)
                         }
                         .font(.footnote)
@@ -217,7 +217,7 @@ struct ContentView: View {
                             Text("Traer últimos 7 días")
                         }
                     }
-                    .disabled(healthKitManager.backfillEnProgreso || URL(string: healthKitManager.baseURLTexto)?.host == nil)
+                    .disabled(healthKitManager.ocupado || URL(string: healthKitManager.baseURLTexto)?.host == nil)
 
                     if let ultimoDia = healthKitManager.respuestasHistorial.last {
                         VStack(alignment: .leading, spacing: 4) {

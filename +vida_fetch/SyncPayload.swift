@@ -3,7 +3,7 @@
 //  +vida_fetch
 //
 //  Modelos del JSON #1 y JSON #2 del contrato v3 (iOS ↔ Backend), tal como
-//  está congelado en "contrato-v3.md":
+//  está congelado en "contrato-v3_1.md":
 //
 //    POST /api/v1/sync
 //    → { usuario_id, fecha, zona_horaria, pasos[], sesiones[], frecuencia_cardiaca[],
@@ -21,7 +21,7 @@
 //
 //  Se evaluó agregar `fc_promedio_dia` en el mismo cambio y se descartó por
 //  ahora — no es necesario. Los niveles de reto semanal siguen sin viajar acá
-//  a propósito (ver contrato-v3.md, sección de retos): cambian una vez por
+//  a propósito (ver contrato-v3_1.md, sección de retos): cambian una vez por
 //  semana, no por cada sync, y viven en su propio endpoint separado.
 //
 //  Novedad de v2 (30 ago 2026): se agrega `frecuencia_cardiaca[]` al request,
@@ -66,7 +66,8 @@ struct SesionMuestra: Codable {
 }
 
 /// Una muestra cruda de `.heartRate` (un `HKQuantitySample`), del día
-/// completo — esté o no dentro de una sesión. Nuevo en v2 del contrato.
+/// completo — esté o no dentro de una sesión. Agregado en v2 del contrato,
+/// sin cambios en v3.
 struct FrecuenciaCardiacaMuestra: Codable {
     let external_id: String
     let inicio: String
@@ -92,7 +93,7 @@ struct SyncPayload: Codable {
 /// A propósito no trae nada que explique *por qué* se descartó una muestra,
 /// se detectó (o no) una sesión intensa sin workout, o se aplicó un techo —
 /// esa lógica es del backend y no debe ser visible para el cliente (ver
-/// contrato-v3.md).
+/// contrato-v3_1.md).
 ///
 /// OJO: `nivel` acá es el nivel ANUAL (0-4, define % de cashback) — no tiene
 /// nada que ver con el nivel de reto semanal (1, 2, 3... dificultad

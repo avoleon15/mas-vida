@@ -2,47 +2,65 @@
 //  SyncQueue.swift
 //  +vida_fetch
 //
-//  Cola de reintentos con persistencia local (ticket A8). Cuando
-//  `enviarSincronizacion()` falla (sin red, timeout, servidor caído), el
-//  payload de ese día se guarda acá en vez de perderse. Se persiste en
-//  UserDefaults — alcanza para el piloto, que maneja como mucho unos pocos
-//  días pendientes por usuario a la vez.
+//  Cola de reintentos con persistencia local (ticket A8). Cuando un envío a
+//  /api/v1/sync falla por red, el día queda anotado acá para reintentarlo
+//  después en vez de perderse.
+//
+//  IMPORTANTE — la cola guarda FECHAS, no payloads. La primera versión
+//  guardaba el `SyncPayload` entero y eso tenía dos problemas serios:
+//
+//  1. Se congelaba una foto vieja del día. Si el envío fallaba a las 8pm y
+//     el usuario seguía caminando, el reintento del día siguiente mandaba la
+//     foto de las 8pm; como Luis deduplica por `external_id`, esas muestras
+//     nuevas no se mandaban NUNCA y el usuario perdía puntos que sí ganó.
+//  2. Cada día con `frecuencia_cardiaca[]` cruda pesa cientos de KB, y
+//     UserDefaults se carga entero en memoria al arrancar la app.
+//
+//  Guardando solo la fecha, el reintento reconstruye el día completo desde
+//  HealthKit — que es la fuente de verdad y siempre está disponible local —
+//  y la cola pesa bytes. Además, sacar un día de la cola ya no destruye nada:
+//  los datos siguen en HealthKit y ese día se puede reenviar cuando sea.
 //
 //  No hace falta lógica propia de deduplicación: el `external_id` de cada
-//  muestra ya es idempotente del lado de Luis (constraint único, L4), así
-//  que reintentar un payload ya guardado nunca duplica una fila en el
-//  ledger aunque se reintente más de una vez.
+//  muestra ya es idempotente del lado de Luis (constraint único, L4).
 //
 
 import Foundation
 
 final class SyncQueue {
-    private static let clave = "vida.syncPendientes"
+    /// Clave nueva a propósito: la versión anterior guardaba `Data` con los
+    /// payloads serializados bajo otra clave, y ese formato ya no se lee.
+    private static let clave = "vida.diasPendientes"
 
-    /// Encola un payload que falló al enviarse. Si ya había uno pendiente
-    /// para el mismo día (`fecha`), lo reemplaza — no tiene sentido guardar
-    /// dos versiones del mismo día, la más nueva ya incluye todo.
-    func encolar(_ payload: SyncPayload) {
+    /// Techo de seguridad. Un usuario meses sin red no debería acumular una
+    /// lista infinita; con 30 días hay de sobra para el piloto.
+    private static let maximoDias = 30
+
+    /// Anota un día como pendiente de reenviar. Si ya estaba, no se duplica.
+    func encolar(fecha: String) {
         var actuales = pendientes()
-        actuales.removeAll { $0.fecha == payload.fecha }
-        actuales.append(payload)
+        guard !actuales.contains(fecha) else { return }
+
+        actuales.append(fecha)
+        if actuales.count > Self.maximoDias {
+            actuales.removeFirst(actuales.count - Self.maximoDias)
+        }
         guardar(actuales)
     }
 
-    /// Los payloads que siguen esperando a ser reenviados, en el orden en
-    /// que se encolaron.
-    func pendientes() -> [SyncPayload] {
-        guard let datos = UserDefaults.standard.data(forKey: Self.clave) else { return [] }
-        return (try? JSONDecoder().decode([SyncPayload].self, from: datos)) ?? []
+    /// Los días que siguen esperando, en el orden en que se encolaron.
+    /// Formato `yyyy-MM-dd`, el mismo del campo `fecha` del contrato.
+    func pendientes() -> [String] {
+        UserDefaults.standard.stringArray(forKey: Self.clave) ?? []
     }
 
-    /// Saca de la cola el payload de `fecha` — se llama después de que un
-    /// reintento sí llegó a Luis con éxito (200).
+    /// Saca un día de la cola: o porque el reenvío llegó bien, o porque el
+    /// servidor lo rechazó de forma permanente y reintentarlo no cambia nada.
     func remover(fecha: String) {
-        guardar(pendientes().filter { $0.fecha != fecha })
+        guardar(pendientes().filter { $0 != fecha })
     }
 
-    private func guardar(_ payloads: [SyncPayload]) {
-        UserDefaults.standard.set(try? JSONEncoder().encode(payloads), forKey: Self.clave)
+    private func guardar(_ fechas: [String]) {
+        UserDefaults.standard.set(fechas, forKey: Self.clave)
     }
 }
