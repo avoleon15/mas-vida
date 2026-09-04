@@ -174,15 +174,32 @@ struct ContentView: View {
                         HStack {
                             Image(systemName: "tray.and.arrow.up")
                                 .foregroundStyle(.orange)
-                            Text("\(healthKitManager.pendientesEnCola) día(s) pendiente(s) de reenviar (A8)")
-                                .font(.footnote)
+                            Text("^[\(healthKitManager.pendientesEnCola) día](inflect: true) sin enviar")
                                 .foregroundStyle(.orange)
+                                .contentTransition(.numericText())
+
                             Spacer()
-                            Button("Reintentar ahora") {
+
+                            Button {
                                 Task { await healthKitManager.reintentarPendientes() }
+                            } label: {
+                                if healthKitManager.reintentando {
+                                    ProgressView()
+                                } else {
+                                    Text("Reintentar")
+                                }
                             }
-                            .font(.footnote)
+                            .disabled(healthKitManager.reintentando
+                                      || URL(string: healthKitManager.baseURLTexto)?.host == nil)
                         }
+                        .font(.footnote)
+                        .transition(.opacity)
+                    }
+
+                    if let errorReintento = healthKitManager.errorReintento {
+                        Text(errorReintento)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
                     }
                 } header: {
                     Text("Enviar hoy a Luis")
@@ -224,6 +241,7 @@ struct ContentView: View {
                     Text("Trae y manda los últimos 7 días, uno por uno (A9). El resultado de acá arriba es siempre el del backfill — nunca el de \"Enviar hoy a Luis\".")
                 }
             }
+            .animation(.spring(duration: 0.3, bounce: 0), value: healthKitManager.pendientesEnCola)
             .navigationTitle("+Vida — Spike HealthKit")
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {

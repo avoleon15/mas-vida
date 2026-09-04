@@ -144,6 +144,12 @@ final class HealthKitManager: ObservableObject {
     /// en la UI que hay algo pendiente aunque el usuario no vea el error.
     @Published var pendientesEnCola: Int = 0
 
+    /// Un reintento en curso (A8). Sirve para dos cosas: mostrar progreso en
+    /// la UI, y evitar que dos taps seguidos lancen dos loops concurrentes
+    /// sobre la misma cola — eso mandaría los mismos días dos veces.
+    @Published var reintentando: Bool = false
+    @Published var errorReintento: String?
+
     /// Respuesta del envío de HOY (`enviarSincronizacion`) — separada de
     /// `respuestasHistorial` (el backfill) a propósito. Antes había un solo
     /// `ultimaRespuesta` compartido entre las dos acciones: tocabas
@@ -309,6 +315,10 @@ final class HealthKitManager: ObservableObject {
             // Si esto sí llegó, probablemente ya hay red — aprovechamos para
             // intentar vaciar lo que haya quedado pendiente de antes.
             await reintentarPendientes()
+        } catch ApiError.urlInvalida {
+            // Error de configuración, no de red: encolarlo llenaría la cola
+            // de días pendientes por un typo en la URL, no por falta de señal.
+            errorEnvio = "La URL del backend no es válida — corregila antes de enviar."
         } catch {
             errorEnvio = "Error al enviar a Luis: \(error.localizedDescription) — guardado para reintentar."
             syncQueue.encolar(payload)
@@ -322,19 +332,35 @@ final class HealthKitManager: ObservableObject {
     // reintentar un payload ya guardado nunca duplica una fila en el ledger,
     // así que no hace falta ningún control extra de duplicados acá.
     func reintentarPendientes() async {
-        guard let cliente = try? clienteAPI() else { return }
+        guard !reintentando else { return }   // un solo loop a la vez
+        guard let cliente = try? clienteAPI() else {
+            errorReintento = "La URL del backend no es válida."
+            return
+        }
 
+        reintentando = true
+        errorReintento = nil
+        defer { reintentando = false }
+
+        var fallaron = 0
         for payload in syncQueue.pendientes() {
             do {
                 _ = try await cliente.enviarSincronizacion(payload)
                 syncQueue.remover(fecha: payload.fecha)
+                // Se actualiza día por día, no al final del loop: el contador
+                // baja en vivo mientras la cola se vacía.
+                pendientesEnCola = syncQueue.pendientes().count
             } catch {
+                fallaron += 1
                 // Sigue en la cola tal cual — se vuelve a intentar la
                 // próxima vez que se llame a este método.
             }
         }
 
         pendientesEnCola = syncQueue.pendientes().count
+        if fallaron > 0 {
+            errorReintento = "^[\(fallaron) día](inflect: true) sigue sin poder enviarse."
+        }
     }
 
     // MARK: - sincronizarHistorial() (A9)
