@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../datos/fuente_datos.dart';
-import '../rachas_recompensas.dart';
 import '../theme.dart';
+import '../widgets/actividad_fisica.dart';
 import '../widgets/app_header.dart';
 import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/calendario_actividad.dart';
 import '../widgets/tarjeta_puntos.dart';
+import '../widgets/tarjeta_racha.dart';
 
 // ============================================================
 // Pantalla de PROGRESO.
@@ -25,11 +26,13 @@ import '../widgets/tarjeta_puntos.dart';
 //   - "Ritmo Cardíaco": la barra apilada de zonas no agregaba nada que no
 //     dijera ya el resto de la pantalla.
 //
+// "Recompensas por constancia" también se fue: se mudó a la hoja que se
+// abre desde el chip de monedas de Hoy, al lado de los objetivos que las
+// pagan. Suelta acá no se entendía con qué se relacionaba.
+//
 // El número del período y las barras de actividad, que eran dos tarjetas
 // distintas diciendo lo mismo, ahora son una sola: `TarjetaPuntos`.
 // ============================================================
-
-int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -78,7 +81,17 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    _buildRecompensasConstancia(context),
+                    // La racha: lo único de la pantalla que mide
+                    // constancia y no esfuerzo de un día. Va en todos los
+                    // períodos porque no pertenece a ninguno.
+                    const TarjetaRacha(),
+                    const SizedBox(height: 20),
+
+                    // Los entrenamientos, tal como los entrega HealthKit.
+                    // Solo en Semana, que es el horizonte al que
+                    // pertenecen.
+                    if (_periodo == Periodo.semana)
+                      EntrenamientosRecientes(dias: Datos.i.historial.dias),
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -111,85 +124,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
           icono: Icons.military_tech_outlined,
           anchoCompleto: false,
           onPressed: () => Navigator.of(context).pushNamed('/records'),
-        ),
-      ],
-    );
-  }
-
-  /// Los cinco hitos de racha, con su check y las monedas que pagan.
-  Widget _buildRecompensasConstancia(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.emoji_events_outlined,
-                color: AppColors.textPrimary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Recompensas por constancia',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          for (var i = 0; i < hitosRacha.length; i++) ...[
-            _buildFilaHito(context, hitosRacha[i]),
-            if (i != hitosRacha.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilaHito(BuildContext context, HitoRacha hito) {
-    final alcanzado = rachaSemanas >= hito.semanas;
-    final color = alcanzado
-        ? AppColors.accentSecondary
-        : AppColors.textSecondary;
-
-    return Row(
-      children: [
-        Icon(
-          alcanzado ? Icons.check_circle : Icons.radio_button_unchecked,
-          color: color,
-          size: 20,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            '${hito.semanas} semanas seguidas',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: alcanzado
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
-              fontWeight: alcanzado ? FontWeight.w600 : FontWeight.w500,
-            ),
-          ),
-        ),
-        Icon(Icons.monetization_on, color: color, size: 16),
-        const SizedBox(width: 4),
-        Text(
-          '+${hito.monedas}',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
         ),
       ],
     );

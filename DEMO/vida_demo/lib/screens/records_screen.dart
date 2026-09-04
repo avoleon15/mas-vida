@@ -4,6 +4,7 @@ import '../datos/modelos.dart';
 import '../rachas_recompensas.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
+import '../widgets/app_header.dart';
 
 // ============================================================
 // RÉCORDS PERSONALES.
@@ -60,47 +61,50 @@ class RecordsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Mismo encabezado que el resto de la app en vez de un SliverAppBar.
+    //
+    // El SliverAppBar arrancaba pegado al borde de arriba y la isla
+    // dinámica del iPhone le tapaba el título y la flecha de volver.
+    // AppHeader ya tiene resuelto ese espacio y trae el botón de volver.
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              backgroundColor: AppColors.fondoDePantalla,
-              surfaceTintColor: Colors.transparent,
-              foregroundColor: AppColors.textPrimary,
-              title: const Text('Tus récords'),
-              titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: AppHeader(showBackButton: true),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-              sliver: SliverList.list(
-                children: [
-                  _buildDestacado(context),
-                  const SizedBox(height: AppSpacing.seccion),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tus récords', style: AppTheme.sectionTitle),
+                    const SizedBox(height: 20),
+                    _buildDestacado(context),
+                    const SizedBox(height: AppSpacing.seccion),
 
-                  _Etiqueta('TUS MEJORES MARCAS'),
-                  const SizedBox(height: AppSpacing.dentro),
-                  _GrillaRecords(records: _mejoresMarcas()),
-                  const SizedBox(height: AppSpacing.seccion),
+                    _Etiqueta('TUS MEJORES MARCAS'),
+                    const SizedBox(height: AppSpacing.dentro),
+                    _GrillaRecords(records: _mejoresMarcas()),
+                    const SizedBox(height: AppSpacing.seccion),
 
-                  _Etiqueta('CONSTANCIA'),
-                  const SizedBox(height: AppSpacing.dentro),
-                  _GrillaRecords(records: _constancia()),
-                  const SizedBox(height: AppSpacing.seccion),
+                    _Etiqueta('CONSTANCIA'),
+                    const SizedBox(height: AppSpacing.dentro),
+                    _GrillaRecords(records: _constancia()),
+                    const SizedBox(height: AppSpacing.seccion),
 
-                  _Etiqueta('TOTALES DE SIEMPRE'),
-                  const SizedBox(height: AppSpacing.dentro),
-                  _TarjetaTotales(),
-                  const SizedBox(height: AppSpacing.seccion),
+                    _Etiqueta('TOTALES DE SIEMPRE'),
+                    const SizedBox(height: AppSpacing.dentro),
+                    _TarjetaTotales(),
+                    const SizedBox(height: AppSpacing.seccion),
 
-                  _Etiqueta('DE DÓNDE SALEN TUS DATOS'),
-                  const SizedBox(height: AppSpacing.dentro),
-                  _TarjetaFuentes(),
-                ],
+                    _Etiqueta('DE DÓNDE SALEN TUS DATOS'),
+                    const SizedBox(height: AppSpacing.dentro),
+                    _TarjetaFuentes(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -134,7 +138,7 @@ class RecordsScreen extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             AppColors.card,
-            Color.lerp(AppColors.accentSecondary, AppColors.card, 0.88)!,
+            Color.lerp(AppColors.accent, AppColors.card, 0.93)!,
           ],
         ),
         borderRadius: BorderRadius.circular(22),

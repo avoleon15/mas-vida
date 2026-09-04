@@ -44,14 +44,28 @@ class AppHeader extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            // GFAvatar de getwidget: mismo lugar, pero con el borde y
-            // el tamaño estandarizados de la librería. Los colores siguen
-            // saliendo de nuestros tokens.
-            const GFAvatar(
-              size: GFSize.SMALL,
-              shape: GFAvatarShape.circle,
-              backgroundColor: AppColors.cardBorder,
-              child: Icon(Icons.person, color: AppColors.textSecondary),
+            // El avatar es el acceso a Perfil desde cualquier pantalla.
+            //
+            // El área de toque se agranda con el padding: el avatar mide
+            // 40 y apuntarle justo a eso con el dedo cuesta.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                // Si ya estamos en Perfil, no se apila otra copia.
+                if (ModalRoute.of(context)?.settings.name == '/perfil') return;
+                Navigator.of(context).pushNamed('/perfil');
+              },
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                // GFAvatar de getwidget: los colores siguen saliendo de
+                // nuestros tokens, no de la paleta de la librería.
+                child: GFAvatar(
+                  size: GFSize.SMALL,
+                  shape: GFAvatarShape.circle,
+                  backgroundColor: AppColors.cardBorder,
+                  child: Icon(Icons.person, color: AppColors.textSecondary),
+                ),
+              ),
             ),
           ],
         ),
