@@ -21,7 +21,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(430, 3000));
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.temaClaro,
         home: const TemaVida(child: HomeScreen()),
       ),
     );

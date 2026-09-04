@@ -16,7 +16,7 @@ void main() {
   Future<void> montar(WidgetTester tester, double escala) {
     return tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.temaClaro,
         home: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(escala)),
           child: const TemaVida(

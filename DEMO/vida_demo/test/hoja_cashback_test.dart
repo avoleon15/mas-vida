@@ -22,7 +22,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.temaClaro,
         home: const TemaVida(child: HomeScreen()),
       ),
     );

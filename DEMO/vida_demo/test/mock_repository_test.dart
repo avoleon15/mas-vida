@@ -189,7 +189,7 @@ void main() {
     Future<void> montar(WidgetTester tester, Widget pantalla) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: AppTheme.darkTheme,
+          theme: AppTheme.temaClaro,
           home: TemaVida(child: pantalla),
         ),
       );
@@ -209,7 +209,14 @@ void main() {
       // que tambien se llama Progreso ahora que dejo de estar en ingles.
       expect(find.text('Progreso'), findsNWidgets(2));
       expect(find.text('Puntos'), findsOneWidget);
-      expect(find.text('Recompensas por constancia'), findsOneWidget);
+      // "Recompensas por constancia" se mudo a la hoja de monedas que se
+      // abre desde el chip de Hoy: ya no vive en esta pantalla.
+      expect(find.text('Recompensas por constancia'), findsNothing);
+      // "Ritmo cardiaco de hoy" tambien salio: era un dato suelto que no
+      // se conectaba con nada de la pantalla. En su lugar va la racha,
+      // que es lo unico que mide constancia y no esfuerzo de un dia.
+      expect(find.text('Ritmo cardíaco de hoy'), findsNothing);
+      expect(find.text('Tu racha'), findsOneWidget);
     });
 
     testWidgets('Social', (t) async {

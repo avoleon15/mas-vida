@@ -26,7 +26,7 @@ void main() {
     // cual el test de "texto en grande" no probaba nada.
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.darkTheme,
+        theme: AppTheme.temaClaro,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,

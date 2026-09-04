@@ -214,6 +214,31 @@ es por TAMAÑO de superficie:
 El naranja **nunca** rellena una superficie grande: a ese tamaño compite con
 todo. Su trabajo es señalar, no vestir.
 
+**Toda superficie se pinta con la escala de azules** (confirmado por Daniel,
+4 de septiembre de 2026). Es un solo azul en cinco luminosidades, no cinco
+colores: lo que cambia es qué tan claro, nunca el matiz. Cuanto más grande
+la superficie, más pálido el tono.
+
+| Token | Para qué |
+|---|---|
+| `azulNiebla` `#F2F4FB` | fondo de una tarjeta entera |
+| `azulBruma` `#E4E9F8` | relleno de un estado activo o seleccionado |
+| `azulSuave` `#B9C4E8` | bordes y separadores con color |
+| `azulMedio` `#5468BC` | íconos y texto de apoyo |
+| `accent` `#012096` | botones, números grandes, lo que decide |
+
+**El naranja queda reservado a cuatro cosas, y a ninguna más:**
+
+1. **Monedas** — el ícono, el chip de saldo y los premios del podio. Es el
+   único lugar donde el naranja significa algo por sí solo.
+2. **La llama de la racha** — el ícono, nunca el fondo que lo rodea.
+3. **Alertas reales** — datos sin verificar, el teléfono de emergencias.
+4. **El check de una etapa completada** — el ícono suelto sobre azul.
+
+Todo lo demás que hoy esté en naranja es del modelo viejo y hay que
+migrarlo. Seleccionar algo es **siempre** azul: si dos pantallas marcan la
+selección con colores distintos, la app se lee como dos apps.
+
 (Esto reemplaza a la paleta anterior de este documento — azul `#4A90D9` y
 verde `#5FAE85`. Si encontrás esos dos hex o el verde de salud en el código,
 son del tema viejo.)
@@ -323,8 +348,17 @@ resuelven, no por cómo se ven de fábrica.
 **Social** (`lib/screens/social_screen.dart`) — construida, dos pestañas
 - Amigos: alerta de racha en riesgo, Duelo (activo/invitación), superación
   del propio baseline (nunca comparación directa), historial W/L, lista de
-  conexiones (racha, categoría, monedas — NUNCA pasos ni historial crudo),
-  bloquear/eliminar
+  conexiones y contadores de amigos / solicitudes recibidas / enviadas,
+  con aceptar, rechazar, cancelar y eliminar
+- **De otra persona SOLO se muestra la racha.** El nivel y las monedas
+  quedaron prohibidos (decisión de Daniel, 4 de septiembre de 2026): el
+  nivel se deriva del % de cashback sobre la prima, y las monedas son
+  saldo. Juntos dejan estimar cuánta plata mueve alguien, y eso es
+  exposición patrimonial — más en Guatemala. Esto reemplaza a la versión
+  anterior de este documento, que pedía mostrar racha, categoría y
+  monedas.
+- De alguien que todavía NO aceptó la solicitud solo se ven nombre,
+  usuario y amigos en común. Ni siquiera la racha.
 - Ranking: selector de grupos, posición propia, cuánto falta para subir,
   lista completa
 
