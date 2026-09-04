@@ -60,8 +60,11 @@ class _HojaInvitarState extends State<_HojaInvitar> {
   }
 
   String get _mensaje =>
+      // Ya no dice "esta semana": una competencia puede durar hasta
+      // tres meses, así que prometer una semana sería mentirle a quien
+      // recibe la invitación.
       'Te invito a "${grupo.nombre}" en +Vida. Entrá con el código '
-      '${grupo.codigoInvitacion} y competimos esta semana.';
+      '${grupo.codigoInvitacion} y competí conmigo.';
 
   /// Copia el código y COMPRUEBA que haya quedado.
   ///
@@ -213,8 +216,9 @@ class _HojaInvitarState extends State<_HojaInvitar> {
                 // Que quede claro qué está pasando: invitar no es lo
                 // mismo que mostrarle tus datos a alguien.
                 grupo.mostrarPuntos
-                    ? 'En este grupo todos ven los puntos de cada quien.'
-                    : 'En este grupo solo se ve la posición, no los puntos.',
+                    ? 'En esta competencia todos ven los puntos de cada quien.'
+                    : 'En esta competencia solo se ve la posición, no los '
+                          'puntos.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

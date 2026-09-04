@@ -84,7 +84,7 @@ class _AmigosScreenState extends State<AmigosScreen> {
         title: Text('¿Eliminar a ${c.nombre}?'),
         content: const Padding(
           padding: EdgeInsets.only(top: 8),
-          child: Text('Van a dejar de verse en tus grupos y duelos.'),
+          child: Text('Van a dejar de verse en tus competencias y duelos.'),
         ),
         actions: [
           CupertinoDialogAction(

@@ -693,7 +693,7 @@ class _SocialScreenState extends State<SocialScreen> {
         title: Text('¿Eliminar a ${conexion.nombre}?'),
         content: const Padding(
           padding: EdgeInsets.only(top: 8),
-          child: Text('Van a dejar de verse en tus grupos y duelos.'),
+          child: Text('Van a dejar de verse en tus competencias y duelos.'),
         ),
         actions: [
           CupertinoDialogAction(
@@ -758,13 +758,13 @@ class _SocialScreenState extends State<SocialScreen> {
     return [
       _ResumenSocial(grupos: grupos),
       const SizedBox(height: 24),
-      const EtiquetaSeccion('MIS GRUPOS'),
+      const EtiquetaSeccion('MIS COMPETENCIAS'),
       const SizedBox(height: 12),
       // El buscador aparece recién cuando hay suficientes grupos como
       // para necesitarlo. Con dos, solo ocupa lugar.
       if (grupos.length >= 5) ...[
         CupertinoSearchTextField(
-          placeholder: 'Buscar grupo',
+          placeholder: 'Buscar competencia',
           onChanged: (t) => setState(() => _busqueda = t),
           style: Theme.of(
             context,
@@ -797,7 +797,7 @@ class _SocialScreenState extends State<SocialScreen> {
     padding: const EdgeInsets.symmetric(vertical: 32),
     child: Center(
       child: Text(
-        'Ningún grupo se llama así.',
+        'Ninguna competencia se llama así.',
         style: Theme.of(
           context,
         ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
@@ -823,7 +823,7 @@ class _SocialScreenState extends State<SocialScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Todavía no estás en ningún grupo.',
+            'Todavía no estás en ninguna competencia.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.textPrimary,
@@ -1069,7 +1069,7 @@ class _SocialScreenState extends State<SocialScreen> {
     final accion = await showCupertinoModalPopup<String>(
       context: context,
       builder: (ctx) => CupertinoActionSheet(
-        title: const Text('Grupos'),
+        title: const Text('Competencias'),
         message: const Text(
           'Competí en tabla con gente que ya conocés: la oficina, la '
           'familia, tus amigos.',
@@ -1077,7 +1077,7 @@ class _SocialScreenState extends State<SocialScreen> {
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(ctx).pop('crear'),
-            child: const Text('Crear un grupo'),
+            child: const Text('Crear una competencia'),
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(ctx).pop('unirse'),
@@ -1275,9 +1275,9 @@ class _ResumenSocial extends StatelessWidget {
               Expanded(
                 child: Text(
                   primeros == 0
-                      ? 'Todavía no vas primero en ningún grupo'
+                      ? 'Todavía no vas primero en ninguna competencia'
                       : 'Vas primero en $primeros de ${grupos.length} '
-                            '${grupos.length == 1 ? "grupo" : "grupos"}',
+                            '${grupos.length == 1 ? "competencia" : "competencias"}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -1346,7 +1346,7 @@ class _SelectorVista extends StatelessWidget {
 
   static const _opciones = [
     (
-      label: 'Mis grupos',
+      label: 'Mis competencias',
       icono: CupertinoIcons.person_2_fill,
       valor: _VistaRanking.misGrupos,
     ),
@@ -1437,6 +1437,28 @@ class _FilaGrupo extends StatelessWidget {
   final GrupoRanking grupo;
   final VoidCallback onTap;
 
+  /// Cuánta gente hay y cuánto le queda a la competencia.
+  ///
+  /// El plazo solo aplica a las competencias que alguien creó con una
+  /// fecha de cierre. La liga local no cierra: se reinicia sola cada
+  /// semana, y decirle "quedan 3 días" sería mentir.
+  static String _subtituloGrupo(GrupoRanking g) {
+    final n = g.miembros.length;
+    final base = '$n ${n == 1 ? "integrante" : "integrantes"}';
+
+    final cierra = g.cierra;
+    if (cierra == null || g.tipo != TipoGrupo.conocidos) return base;
+
+    final dias = cierra.difference(DateTime.now()).inDays;
+    if (dias < 0) return '$base · terminó';
+    if (dias == 0) return '$base · termina hoy';
+    if (dias == 1) return '$base · queda 1 día';
+    if (dias < 30) return '$base · quedan $dias días';
+
+    final meses = (dias / 30).round();
+    return '$base · ${meses == 1 ? "queda 1 mes" : "quedan $meses meses"}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final posicion = grupo.miembros.indexWhere((m) => m.esUsuario) + 1;
@@ -1470,8 +1492,7 @@ class _FilaGrupo extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${grupo.miembros.length} '
-                    '${grupo.miembros.length == 1 ? "integrante" : "integrantes"}',
+                    _subtituloGrupo(grupo),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1604,7 +1625,7 @@ class _FilaCrearGrupo extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Crear o unirme a un grupo',
+            'Crear o unirme a una competencia',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppColors.accent,
               fontWeight: FontWeight.w700,

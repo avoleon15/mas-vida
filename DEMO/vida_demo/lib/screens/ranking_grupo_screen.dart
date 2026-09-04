@@ -196,8 +196,8 @@ class _NotaPrivacidad extends StatelessWidget {
       const SizedBox(width: 6),
       Expanded(
         child: Text(
-          'Este grupo eligió no mostrar los puntos de cada quien. Solo se '
-          've la posición.',
+          'Esta competencia eligió no mostrar los puntos de cada quien. Solo '
+          'se ve la posición.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: AppColors.textSecondary,
             height: 1.35,

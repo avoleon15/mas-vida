@@ -20,7 +20,29 @@ import '../theme.dart';
 // lista para cuando exista la API.
 // ============================================================
 
-/// Crear un grupo nuevo.
+/// Cuánto puede durar una competencia, en meses.
+///
+/// El tope de 3 meses no es arbitrario: una competencia sin final no es
+/// una competencia, es una tabla. Y más allá de un trimestre nadie se
+/// acuerda de que estaba compitiendo.
+const List<int> mesesDeCompetencia = [1, 2, 3];
+
+/// La fecha en que cierra una competencia que arranca hoy y dura [meses].
+///
+/// Suma meses al calendario, no 30 días: "2 meses" tiene que caer el
+/// mismo día del mes. Si ese día no existe en el mes destino (31 de enero
+/// + 1 mes), se corta al último día de ese mes en vez de irse a marzo.
+DateTime cierreDeCompetencia(int meses, {DateTime? desde}) {
+  final hoy = desde ?? DateTime.now();
+  final ultimoDelMes = DateTime(hoy.year, hoy.month + meses + 1, 0).day;
+  return DateTime(
+    hoy.year,
+    hoy.month + meses,
+    hoy.day < ultimoDelMes ? hoy.day : ultimoDelMes,
+  );
+}
+
+/// Crear una competencia nueva.
 ///
 /// Pregunta explícitamente si se muestran los puntos, porque es una
 /// decisión de privacidad y no puede quedar en un default silencioso:
@@ -47,6 +69,11 @@ class _CrearGrupoState extends State<_CrearGrupo> {
   final _nombre = TextEditingController();
   bool _mostrarPuntos = false;
 
+  /// Arranca en 1 mes: es el compromiso más chico y el más fácil de
+  /// aceptar. Que el usuario suba a 2 o 3 es una decisión suya, no algo
+  /// que la app le deje puesto por default.
+  int _meses = 1;
+
   @override
   void dispose() {
     _nombre.dispose();
@@ -67,6 +94,7 @@ class _CrearGrupoState extends State<_CrearGrupo> {
         nombre: nombre,
         tipo: TipoGrupo.conocidos,
         mostrarPuntos: _mostrarPuntos,
+        cierra: cierreDeCompetencia(_meses),
         // Arranca solo con el usuario: los demás entran con el código.
         miembros: [
           RankingPersona(
@@ -88,13 +116,22 @@ class _CrearGrupoState extends State<_CrearGrupo> {
   @override
   Widget build(BuildContext context) {
     return _Hoja(
-      titulo: 'Crear un grupo',
+      titulo: 'Crear una competencia',
       children: [
         _CampoTexto(
           controlador: _nombre,
-          etiqueta: 'Nombre del grupo',
+          etiqueta: 'Nombre de la competencia',
           ejemplo: 'Oficina, Familia, Los del gym…',
           onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: AppSpacing.entre),
+
+        _CuantoDura(
+          meses: _meses,
+          onChanged: (m) {
+            HapticFeedback.selectionClick();
+            setState(() => _meses = m);
+          },
         ),
         const SizedBox(height: AppSpacing.entre),
 
@@ -144,13 +181,103 @@ class _CrearGrupoState extends State<_CrearGrupo> {
         ),
         const SizedBox(height: AppSpacing.grupo),
         _BotonHoja(
-          texto: 'Crear grupo',
+          texto: 'Crear competencia',
           habilitado: _valido,
           onPressed: _crear,
         ),
       ],
     );
   }
+}
+
+/// Cuánto dura la competencia: 1, 2 o 3 meses.
+///
+/// Es un [CupertinoSlidingSegmentedControl] y no un picker de fecha a
+/// propósito. Son tres opciones y ninguna otra es válida: un calendario
+/// abierto invita a elegir algo que la app después tiene que rechazar.
+class _CuantoDura extends StatelessWidget {
+  const _CuantoDura({required this.meses, required this.onChanged});
+
+  final int meses;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cierre = cierreDeCompetencia(meses);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '¿CUÁNTO DURA?',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.6,
+          ),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          width: double.infinity,
+          child: CupertinoSlidingSegmentedControl<int>(
+            groupValue: meses,
+            backgroundColor: AppColors.azulNiebla,
+            thumbColor: AppColors.card,
+            onValueChanged: (m) {
+              if (m != null) onChanged(m);
+            },
+            children: {
+              for (final m in mesesDeCompetencia)
+                m: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    m == 1 ? '1 mes' : '$m meses',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: m == meses
+                          ? AppColors.accent
+                          : AppColors.textSecondary,
+                      fontWeight: m == meses
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
+                  ),
+                ),
+            },
+          ),
+        ),
+        const SizedBox(height: 6),
+        // La fecha exacta, para que "3 meses" no sea una abstracción:
+        // el usuario ve el día en que se cierra y se define quién ganó.
+        //
+        // No dice que 3 es el máximo: el selector solo ofrece 1, 2 y 3,
+        // así que decirlo es explicar algo que ya está a la vista.
+        Text(
+          'Termina el ${_fechaLarga(cierre)}.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static const _meses = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  static String _fechaLarga(DateTime d) => '${d.day} de ${_meses[d.month - 1]}';
 }
 
 /// Unirse a un grupo con el código que le pasaron.
@@ -199,10 +326,10 @@ class _UnirseGrupoState extends State<_UnirseGrupo> {
   @override
   Widget build(BuildContext context) {
     return _Hoja(
-      titulo: 'Unirse a un grupo',
+      titulo: 'Unirse a una competencia',
       children: [
         Text(
-          'Pedile el código de 6 letras a quien creó el grupo.',
+          'Pedile el código de 6 letras a quien creó la competencia.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
