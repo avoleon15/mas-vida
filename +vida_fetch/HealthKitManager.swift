@@ -174,6 +174,13 @@ final class HealthKitManager: ObservableObject {
     /// ahora tiene su propio resultado, mostrado junto a su propio botón.
     @Published var respuestaEnvioHoy: RespuestaSincronizacion?
 
+    /// Cuándo se obtuvo `respuestaEnvioHoy`. Sin esto, un resultado viejo se
+    /// queda en pantalla junto al error de un intento posterior y no hay
+    /// forma de saber si esos puntos son de ahora o de hace dos intentos.
+    /// No se reusa `ultimaSincronizacion` porque esa la pisa también
+    /// `actualizarVistaHoy()`, que es otra acción distinta.
+    @Published var respuestaEnvioHoyEn: Date?
+
     // MARK: - Tipos de HealthKit que leemos (v1: pasos, ritmo cardíaco, workouts)
     // Elevación descartada, sueño fuera de alcance en v1 — ver reglas del proyecto.
 
@@ -296,8 +303,18 @@ final class HealthKitManager: ObservableObject {
     // de configuración real — se valida acá en vez de guardar una URL
     // potencialmente inválida.
 
+    /// La URL del backend es usable. Vive acá y no en la vista porque antes
+    /// estaba escrita tres veces en los `.disabled` de la UI y ninguna de las
+    /// tres coincidía con esta validación (la UI no miraba `scheme`), así que
+    /// un botón podía verse habilitado para una URL que `clienteAPI()` iba a
+    /// rechazar igual.
+    var urlBackendValida: Bool {
+        guard let url = URL(string: baseURLTexto) else { return false }
+        return url.scheme != nil && url.host != nil
+    }
+
     private func clienteAPI() throws -> ApiClient {
-        guard let url = URL(string: baseURLTexto), url.scheme != nil, url.host != nil else {
+        guard urlBackendValida, let url = URL(string: baseURLTexto) else {
             throw ApiError.urlInvalida
         }
         return ApiClient(baseURL: url)
@@ -316,8 +333,14 @@ final class HealthKitManager: ObservableObject {
         errorEnvio = nil
         defer { enviando = false }
 
-        guard let payload = try? await construirPayload(fecha: fecha) else {
-            errorEnvio = "Error al armar el payload de HealthKit."
+        let payload: SyncPayload
+        do {
+            payload = try await construirPayload(fecha: fecha)
+        } catch {
+            // Se conserva el motivo real: "permiso denegado" y "rango de
+            // fechas inválido" son problemas muy distintos y con un `try?`
+            // los dos salían como el mismo mensaje genérico.
+            errorEnvio = "No se pudo leer HealthKit: \(error.localizedDescription)"
             return
         }
 
@@ -325,6 +348,7 @@ final class HealthKitManager: ObservableObject {
             let cliente = try clienteAPI()
             let respuesta = try await cliente.enviarSincronizacion(payload)
             respuestaEnvioHoy = respuesta
+            respuestaEnvioHoyEn = Date()
             ultimaSincronizacion = Date()
             // Este envío trae el día ya completo, así que si estaba en la
             // cola por un intento anterior, deja de estar pendiente.

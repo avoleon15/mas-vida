@@ -15,6 +15,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var healthKitManager = HealthKitManager()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -148,10 +149,15 @@ struct ContentView: View {
                             Text("Enviar hoy a Luis")
                         }
                     }
-                    .disabled(healthKitManager.ocupado || URL(string: healthKitManager.baseURLTexto)?.host == nil)
+                    .disabled(healthKitManager.ocupado || !healthKitManager.urlBackendValida)
 
                     if let respuesta = healthKitManager.respuestaEnvioHoy {
                         VStack(alignment: .leading, spacing: 4) {
+                            if let cuando = healthKitManager.respuestaEnvioHoyEn {
+                                Text("Resultado de las \(cuando.formatted(date: .omitted, time: .shortened))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             LabeledContent("Pasos del día (dedup)", value: "\(respuesta.pasos_totales_dia)")
                             LabeledContent("Puntos del día", value: "\(respuesta.puntos_dia)")
                             LabeledContent("Puntos del año", value: "\(respuesta.puntos_ano)")
@@ -189,8 +195,7 @@ struct ContentView: View {
                                     Text("Reintentar")
                                 }
                             }
-                            .disabled(healthKitManager.ocupado
-                                      || URL(string: healthKitManager.baseURLTexto)?.host == nil)
+                            .disabled(healthKitManager.ocupado || !healthKitManager.urlBackendValida)
                         }
                         .font(.footnote)
                         .transition(.opacity)
@@ -217,7 +222,7 @@ struct ContentView: View {
                             Text("Traer últimos 7 días")
                         }
                     }
-                    .disabled(healthKitManager.ocupado || URL(string: healthKitManager.baseURLTexto)?.host == nil)
+                    .disabled(healthKitManager.ocupado || !healthKitManager.urlBackendValida)
 
                     if let ultimoDia = healthKitManager.respuestasHistorial.last {
                         VStack(alignment: .leading, spacing: 4) {
@@ -242,6 +247,19 @@ struct ContentView: View {
                 }
             }
             .animation(.spring(duration: 0.3, bounce: 0), value: healthKitManager.pendientesEnCola)
+            // La cola se drena sola en los dos momentos en que realmente
+            // puede haber vuelto la red: al abrir la app y al traerla de
+            // vuelta del background. Antes solo se intentaba desde el botón
+            // "Solicitar permisos", que el usuario toca una vez y nunca más.
+            // Si la cola está vacía, `reintentarPendientes()` sale de
+            // inmediato sin tocar la red.
+            .task {
+                await healthKitManager.reintentarPendientes()
+            }
+            .onChange(of: scenePhase) { _, fase in
+                guard fase == .active else { return }
+                Task { await healthKitManager.reintentarPendientes() }
+            }
             .navigationTitle("+Vida — Spike HealthKit")
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {

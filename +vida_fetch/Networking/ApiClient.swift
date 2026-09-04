@@ -43,9 +43,24 @@ final class ApiClient {
 
     private let session: URLSession
 
-    init(baseURL: URL, session: URLSession = .shared) {
+    /// Sesión compartida con timeout propio. `URLSession.shared` espera 60s
+    /// por request: con el backend caído, el backfill de 7 días dejaba al
+    /// usuario 7 minutos mirando un spinner sin poder cancelar. Con 20s la
+    /// cola de reintentos (A8) entra en acción mucho antes, que es
+    /// exactamente lo que queremos cuando no hay red.
+    ///
+    /// Es `static` a propósito: `clienteAPI()` crea un `ApiClient` nuevo en
+    /// cada envío, y una URLSession por request desperdicia recursos.
+    private static let sesionCompartida: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config)
+    }()
+
+    init(baseURL: URL, session: URLSession? = nil) {
         self.baseURL = baseURL
-        self.session = session
+        self.session = session ?? Self.sesionCompartida
     }
 
     /// `POST /api/v1/sync` — manda el JSON #1 y devuelve el JSON #2 ya
