@@ -47,14 +47,14 @@ class _PintorFondo extends CustomPainter {
     final centro = Offset(size.width / 2, size.height / 2);
     final rect = Offset.zero & size;
 
-    // 1) Halo verde detrás del celular: da la sensación de que el
+    // 1) Halo azul detrás del celular: da la sensación de que el
     // dispositivo está iluminado y lo despega del fondo.
     final radioHalo = size.shortestSide * 0.78;
     final halo = Paint()
       ..shader = RadialGradient(
         colors: [
-          AppColors.accentSecondary.withValues(alpha: 0.13),
-          AppColors.accentSecondary.withValues(alpha: 0.04),
+          AppColors.accent.withValues(alpha: 0.10),
+          AppColors.accent.withValues(alpha: 0.03),
           Colors.transparent,
         ],
         stops: const [0.0, 0.45, 1.0],

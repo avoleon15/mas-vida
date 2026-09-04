@@ -34,6 +34,36 @@ class AppColors {
   /// Azul de marca. Acciones y elementos medianos.
   static const Color accent = Color(0xFF012096);
 
+  // ============================================================
+  // LA ESCALA DE AZULES.
+  //
+  // Toda la app se pinta con estos cinco tonos del MISMO azul de marca.
+  // Lo que cambia entre uno y otro es la luminosidad, nunca el matiz: así
+  // se leen como una sola familia y no como cinco colores distintos.
+  //
+  // Cuanto más grande la superficie, más pálido el tono. El azul entero
+  // (`accent`) es solo para lo chico y decidido: un botón, un número, un
+  // ícono.
+  //
+  //   azulNiebla  -> fondos de tarjeta enteros
+  //   azulBruma   -> tintes y rellenos de estado
+  //   azulSuave   -> bordes, separadores con color
+  //   azulMedio   -> texto secundario con color, íconos de apoyo
+  //   accent      -> botones, números grandes, lo que decide
+  // ============================================================
+
+  /// Casi blanco con azul adentro. Para el fondo de una tarjeta entera.
+  static const Color azulNiebla = Color(0xFFF2F4FB);
+
+  /// Un paso más presente. Relleno de un estado activo o seleccionado.
+  static const Color azulBruma = Color(0xFFE4E9F8);
+
+  /// Bordes y separadores que necesitan color en vez de gris.
+  static const Color azulSuave = Color(0xFFB9C4E8);
+
+  /// Íconos y texto de apoyo que tienen que leerse sin gritar.
+  static const Color azulMedio = Color(0xFF5468BC);
+
   /// Naranja de marca. Detalles chicos: estados de éxito, checks,
   /// marcadores, chips. Antes acá vivía el verde de salud.
   static const Color accentSecondary = Color(0xFFF58700);
@@ -154,7 +184,7 @@ class AppColors {
   // Tarjeta con borde animado del saludo de Home. Existe para que la
   // pantalla no se sienta tan blanca.
   //
-  // Los dos salen del accent #4A90D9, así que combinan con los azules del
+  // Los dos salen del accent #012096, así que combinan con los azules del
   // resto de la app. OJO: los dos son OPACOS a propósito. Un fondo con
   // alpha deja pasar lo que hay detrás y la tarjeta se ensucia.
   //
@@ -268,7 +298,7 @@ class AppTheme {
     height: 1,
   );
 
-  static ThemeData get darkTheme {
+  static ThemeData get temaClaro {
     return ThemeData(
       brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.fondoDePantalla,

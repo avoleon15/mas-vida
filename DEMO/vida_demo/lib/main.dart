@@ -5,6 +5,7 @@ import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
 import 'screens/premio_detalle_screen.dart';
+import 'screens/perfil_screen.dart';
 import 'screens/premios_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/records_screen.dart';
@@ -33,7 +34,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: '+Vida',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.temaClaro,
       initialRoute: '/home',
       // Rutas nombradas: BottomNavBar navega por nombre de ruta.
       // '/premio-detalle' y '/canje-exitoso' reciben los datos del
@@ -43,6 +44,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/progress': (context) => const ProgressScreen(),
         '/records': (context) => const RecordsScreen(),
+        '/perfil': (context) => const PerfilScreen(),
         '/social': (context) => const SocialScreen(),
         '/premios': (context) => const PremiosScreen(),
         '/mi-plan': (context) => const MiPlanScreen(),

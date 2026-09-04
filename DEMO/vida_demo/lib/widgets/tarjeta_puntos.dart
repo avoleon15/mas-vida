@@ -806,9 +806,11 @@ class GraficaBarrasPuntos extends StatelessWidget {
                           borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(4),
                           ),
+                          // La barra del período en curso, en azul de
+                          // marca; las de contexto, en azul lavado.
                           color: i == actual
-                              ? AppColors.accentSecondary
-                              : AppColors.cardBorder,
+                              ? AppColors.accent
+                              : AppColors.azulBruma,
                         ),
                       ],
                       // El número de puntos arriba de cada barra, en color de

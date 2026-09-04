@@ -187,7 +187,7 @@ class _Insignia extends StatelessWidget {
   Widget build(BuildContext context) {
     final (fondo, icono, colorIcono) = switch (semana.estado) {
       EstadoSemana.cerrada when semana.subioDeRango => (
-        AppColors.accentSecondary,
+        AppColors.accent,
         Icons.check_rounded,
         Colors.white,
       ),
@@ -316,9 +316,7 @@ class _FilaObjetivo extends StatelessWidget {
                   ? Icons.check_circle_rounded
                   : Icons.radio_button_unchecked_rounded,
               size: 17,
-              color: hecho
-                  ? AppColors.accentSecondary
-                  : AppColors.textSecondary,
+              color: hecho ? AppColors.accent : AppColors.textSecondary,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -346,10 +344,10 @@ class _FilaObjetivo extends StatelessWidget {
           margin: EdgeInsets.zero,
           animation: true,
           animationDuration: 500,
-          backgroundColor: AppColors.cardBorder,
-          progressBarColor: hecho
-              ? AppColors.accentSecondary
-              : AppColors.accent,
+          backgroundColor: AppColors.azulBruma,
+          // Cumplido va en azul entero; en curso, en azul medio. La
+          // diferencia la hace la luminosidad, no un color distinto.
+          progressBarColor: hecho ? AppColors.accent : AppColors.azulMedio,
         ),
         const SizedBox(height: 4),
         Text(

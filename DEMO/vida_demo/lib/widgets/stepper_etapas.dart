@@ -176,10 +176,12 @@ class _TarjetaEtapa extends StatelessWidget {
     return ((pasos - desde) / largo).clamp(0.0, 1.0);
   }
 
-  /// Color que manda en la tarjeta. La etapa completada va en el NARANJA
-  /// de marca, y la etapa en curso en el metal de su aro, para que se lea
+  /// Color que manda en la tarjeta. La etapa completada va en el AZUL de
+  /// marca, y la etapa en curso en el metal de su aro, para que se lea
   /// junto con el anillo.
-  Color get _acento => alcanzada ? AppColors.accentSecondary : color;
+  ///
+  /// Lo único naranja que queda es el check: el naranja marca, no viste.
+  Color get _acento => alcanzada ? AppColors.accent : color;
 
   @override
   Widget build(BuildContext context) {
@@ -189,7 +191,7 @@ class _TarjetaEtapa extends StatelessWidget {
     final fondo = alcanzada
         // Tinte de fondo, no relleno pleno: a esta escala el relleno
         // pleno tapaba el texto de puntos.
-        ? AppColors.accentSecondary.withValues(alpha: 0.12)
+        ? AppColors.azulBruma
         : activa
         ? AppColors.card
         : AppColors.cardBorder.withValues(alpha: 0.3);
@@ -201,7 +203,7 @@ class _TarjetaEtapa extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: alcanzada
-              ? AppColors.accentSecondary.withValues(alpha: 0.55)
+              ? AppColors.azulSuave
               : activa
               ? color
               : AppColors.cardBorder,
@@ -310,7 +312,7 @@ class _TarjetaEtapa extends StatelessWidget {
                           // en la primera etapa y ahí la barra no se leía
                           // como progreso.
                           valueColor: const AlwaysStoppedAnimation(
-                            AppColors.accentSecondary,
+                            AppColors.accent,
                           ),
                         ),
                       ),
@@ -332,6 +334,8 @@ class _TarjetaEtapa extends StatelessWidget {
                             ? Icons.check_circle_rounded
                             : Icons.lock_outline_rounded,
                         size: 14,
+                        // El check sí va naranja: es el detalle chico
+                        // que tiene que saltar sobre el azul.
                         color: alcanzada
                             ? AppColors.accentSecondary
                             : AppColors.textSecondary,
@@ -345,7 +349,7 @@ class _TarjetaEtapa extends StatelessWidget {
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: alcanzada
-                                    ? AppColors.accentSecondary
+                                    ? AppColors.accent
                                     : AppColors.textSecondary,
                                 fontWeight: FontWeight.w700,
                               ),

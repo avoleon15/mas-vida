@@ -48,16 +48,16 @@ class _DesglosePuntosHoyState extends State<DesglosePuntosHoy> {
           end: Alignment.bottomRight,
           colors: [
             AppColors.card,
-            Color.lerp(AppColors.accentSecondary, AppColors.card, 0.88)!,
+            Color.lerp(AppColors.accent, AppColors.card, 0.93)!,
           ],
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: AppColors.cardBorder),
         boxShadow: [
-          // Sombra suave anaranjada, nunca un glow: sobre fondo claro un
+          // Sombra suave azulada, nunca un glow: sobre fondo claro un
           // brillo saturado se ve mal (ver CLAUDE.md).
           BoxShadow(
-            color: AppColors.accentSecondary.withValues(alpha: 0.10),
+            color: AppColors.accent.withValues(alpha: 0.10),
             blurRadius: 18,
             offset: const Offset(0, 6),
           ),
@@ -131,12 +131,12 @@ class _CabeceraPresionableState extends State<_CabeceraPresionable> {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: AppColors.accentSecondary.withValues(alpha: 0.16),
+                  color: AppColors.azulBruma,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.bolt,
-                  color: AppColors.accentSecondary,
+                  color: AppColors.accent,
                   size: 28,
                 ),
               ),
@@ -287,14 +287,14 @@ class _Fila extends StatelessWidget {
           height: 38,
           decoration: BoxDecoration(
             color: activa
-                ? AppColors.accentSecondary.withValues(alpha: 0.14)
+                ? AppColors.azulBruma
                 : AppColors.cardBorder.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             icono,
             size: 20,
-            color: activa ? AppColors.accentSecondary : AppColors.textSecondary,
+            color: activa ? AppColors.accent : AppColors.textSecondary,
           ),
         ),
         const SizedBox(width: AppSpacing.entre),
@@ -321,7 +321,7 @@ class _Fila extends StatelessWidget {
         Text(
           '+$puntos',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: activa ? AppColors.accentSecondary : AppColors.textSecondary,
+            color: activa ? AppColors.accent : AppColors.textSecondary,
             fontWeight: FontWeight.w700,
           ),
         ),

@@ -10,6 +10,8 @@ import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/desglose_puntos_hoy.dart';
 import '../widgets/escalera_cashback.dart';
+import '../widgets/chip_monedas.dart';
+import '../widgets/hoja_monedas.dart';
 import '../widgets/panel_objetivo_semana.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/semanas_objetivos.dart';
@@ -216,22 +218,29 @@ class HomeScreen extends StatelessWidget {
     return Text.rich(
       TextSpan(
         children: [
-          // El saludo es el envoltorio: peso liviano y gris secundario.
+          // El saludo es el envoltorio: cursiva, peso liviano y gris. La
+          // cursiva le da tono de dedicatoria escrita a mano y separa el
+          // envoltorio del nombre sin usar tamaño.
           TextSpan(
             text: '${_saludoSegunHora()}, ',
             style: base?.copyWith(
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w400,
+              fontStyle: FontStyle.italic,
               letterSpacing: AppTheme.trackingPara(24),
             ),
           ),
-          // El nombre es lo que hace que se sienta personalizado.
+          // El nombre es lo que hace que se sienta personalizado: va
+          // derecho, más oscuro y más pesado. Derecho contra cursiva ya
+          // es un contraste fuerte, así que no necesita ser más grande.
           TextSpan(
             text: nombreUsuario,
             style: base?.copyWith(
               color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: AppTheme.trackingPara(24),
+              fontWeight: FontWeight.w800,
+              // Un pelo más de aire entre letras: el nombre propio tiene
+              // que poder leerse letra por letra sin dudar.
+              letterSpacing: AppTheme.trackingPara(24) + 0.3,
               shadows: sombra,
             ),
           ),
@@ -468,7 +477,10 @@ class HomeScreen extends StatelessWidget {
           // El saldo de MONEDAS vive acá arriba, no en una tarjeta aparte
           // al final: es el marcador de toda la sección y sube cada vez
           // que se completa un objetivo.
-          accion: _SaldoMonedasChip(monedas: semana.monedasGanadas),
+          // El SALDO, no lo ganado este mes: es el mismo número que se ve
+          // en Premios. Para el usuario es una sola billetera, y ver 40
+          // en una pantalla y 3 en otra se lee como un error de la app.
+          accion: _SaldoMonedasChip(monedas: saldoMonedas),
         ),
         const SizedBox(height: AppSpacing.grupo),
         SemanasObjetivos(semanas: semana.semanas),
@@ -974,46 +986,75 @@ class _PresionableState extends State<_Presionable> {
 }
 
 /// MONEDAS ganadas con los objetivos, en la esquina superior derecha de
-/// la sección.
+/// la sección. Se toca para ver de dónde salieron.
 ///
-/// Es el marcador de la sección: es la SUMA de lo que dieron las semanas
-/// que se ven abajo, y sube cada vez que se completa un objetivo. No es
-/// el saldo de la billetera —ese incluye meses anteriores y descuenta lo
-/// gastado en Premios—, porque acá tiene que cuadrar con lo que el
-/// usuario puede sumar a ojo en las tarjetas.
+/// Es la SUMA de lo que dieron las semanas que se ven abajo, y sube cada
+/// vez que se completa un objetivo. No es el saldo de la billetera —ese
+/// incluye meses anteriores y descuenta lo gastado en Premios—, porque
+/// acá tiene que cuadrar con lo que el usuario puede sumar a ojo.
 ///
 /// Son MONEDAS: se gastan en Premios y caducan a los 6 meses. Nunca
 /// puntos.
-class _SaldoMonedasChip extends StatelessWidget {
+class _SaldoMonedasChip extends StatefulWidget {
   const _SaldoMonedasChip({required this.monedas});
 
   final int monedas;
 
   @override
+  State<_SaldoMonedasChip> createState() => _SaldoMonedasChipState();
+}
+
+class _SaldoMonedasChipState extends State<_SaldoMonedasChip> {
+  bool _presionado = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.accentSecondary.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.monetization_on,
-            size: 16,
-            color: AppColors.accentSecondary,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            '$monedas',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      // El hundido responde en el press, no al soltar.
+      onTapDown: (_) => setState(() => _presionado = true),
+      onTapUp: (_) => setState(() => _presionado = false),
+      onTapCancel: () => setState(() => _presionado = false),
+      onTap: () => mostrarHojaMonedas(context),
+      child: AnimatedScale(
+        scale: _presionado ? 0.94 : 1,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+          decoration: BoxDecoration(
+            color: AppColors.accentSecondary.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(12),
+            // El borde y el chevron son lo que dice que esto se toca. Sin
+            // ellos parecía una etiqueta más y nadie lo intentaba.
+            border: Border.all(
+              color: AppColors.accentSecondary.withValues(alpha: 0.45),
             ),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.monetization_on,
+                size: 16,
+                color: AppColors.accentSecondary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '${widget.monedas}',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                size: 17,
+                color: AppColors.accentSecondary,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

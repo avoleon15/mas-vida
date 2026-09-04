@@ -15,8 +15,14 @@ class TarjetaBordeAnimado extends StatefulWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    this.fondo = const Color.fromARGB(255, 245, 246, 247),
-    this.colorBorde = AppColors.tarjetaBordeAzul,
+    // Azul de marca lavadísimo. Suficiente para que la tarjeta no sea un
+    // rectángulo blanco sobre fondo casi blanco, y lo bastante pálido
+    // como para no competir con el anillo ni con los botones.
+    //
+    // OPACO a propósito (ver [fondo]): el color se calculó ya mezclado
+    // con el fondo de pantalla, no con alpha.
+    this.fondo = AppColors.azulNiebla,
+    this.colorBorde = AppColors.accent,
     this.radio = 10,
     // Fino a propósito: el borde tiene que dar color, no robar la
     // atención del contenido.
@@ -86,7 +92,7 @@ class _TarjetaBordeAnimadoState extends State<TarjetaBordeAnimado>
         borderRadius: BorderRadius.circular(widget.radio),
         child: Stack(
           children: [
-            // 1. Base del borde: lo que se ve donde la franja naranja no
+            // 1. Base del borde: lo que se ve donde la franja azul no
             // está pasando en este momento.
             const Positioned.fill(
               child: ColoredBox(color: AppColors.cardBorder),

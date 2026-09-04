@@ -39,7 +39,7 @@ class DemoAnilloApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.temaClaro,
       home: Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(

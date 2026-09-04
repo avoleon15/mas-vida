@@ -92,8 +92,8 @@ class PanelObjetivoSemana extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   decoration: BoxDecoration(
                     color: semana.completado
-                        ? AppColors.accentSecondary
-                        : AppColors.cardBorder,
+                        ? AppColors.accent
+                        : AppColors.azulBruma,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
