@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../datos/modelos.dart';
 import '../theme.dart';
+import 'moneda_animada.dart';
 
 // ============================================================
 // Piezas de ranking que comparten la pantalla Social y la pantalla de un
@@ -126,11 +127,7 @@ class PremioPodio extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.monetization_on,
-                  size: 14,
-                  color: AppColors.accentSecondary,
-                ),
+                const MonedaAnimada(size: 19),
                 const SizedBox(width: 3),
                 Text(
                   '$monedas',
@@ -148,21 +145,232 @@ class PremioPodio extends StatelessWidget {
   }
 }
 
-/// La tabla completa de un grupo.
+/// El podio: los tres primeros puestos como barras de distinta altura.
+///
+/// Las columnas van en el orden del podio real —2.o, 1.o, 3.o— para que
+/// el más alto quede al centro. La altura de cada barra se lee antes que
+/// cualquier número: el que ganó se ve, no se cuenta.
+class PodioRanking extends StatelessWidget {
+  const PodioRanking({super.key, required this.grupo});
+
+  final GrupoRanking grupo;
+
+  /// Alturas por PUESTO (1.o, 2.o, 3.o), no por columna.
+  static const _alturas = [124.0, 96.0, 80.0];
+
+  /// Un solo azul en tres luminosidades: lo que separa un puesto del
+  /// siguiente es qué tan oscuro, no el matiz.
+  static const _barras = [AppColors.accent, AppColors.nivel3, AppColors.nivel2];
+
+  @override
+  Widget build(BuildContext context) {
+    final podio = grupo.miembros.take(3).toList();
+    if (podio.length < 3) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // El orden de las columnas: 2.o a la izquierda, 1.o al centro.
+          for (final puesto in const [2, 1, 3])
+            _ColumnaPodio(
+              puesto: puesto,
+              persona: podio[puesto - 1],
+              grupo: grupo,
+              alto: _alturas[puesto - 1],
+              color: _barras[puesto - 1],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ColumnaPodio extends StatelessWidget {
+  const _ColumnaPodio({
+    required this.puesto,
+    required this.persona,
+    required this.grupo,
+    required this.alto,
+    required this.color,
+  });
+
+  final int puesto;
+  final RankingPersona persona;
+  final GrupoRanking grupo;
+  final double alto;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    // La MISMA regla que en la tabla: los puntos de los demás solo se ven
+    // si el grupo lo decidió; los propios siempre.
+    final verPuntos = grupo.mostrarPuntos || persona.esUsuario;
+    final esPrimero = puesto == 1;
+    final nombre = persona.esUsuario ? 'Tú' : persona.nombre;
+    final diametro = esPrimero ? 54.0 : 44.0;
+
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: diametro,
+            height: diametro,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 2),
+            ),
+            child: Text(
+              nombre.characters.first.toUpperCase(),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: esPrimero ? 22 : 18,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(
+              nombre,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: persona.esUsuario
+                    ? FontWeight.w800
+                    : FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // La barra crece al entrar: el podio se arma delante del
+          // usuario en vez de aparecer ya escrito.
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutQuart,
+            builder: (context, t, child) =>
+                SizedBox(height: alto * t, child: child),
+            child: _Barra(
+              puesto: puesto,
+              color: color,
+              puntos: verPuntos ? persona.puntosSemana : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Barra extends StatelessWidget {
+  const _Barra({
+    required this.puesto,
+    required this.color,
+    required this.puntos,
+  });
+
+  final int puesto;
+  final Color color;
+  final int? puntos;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      // Si la barra todavía no creció lo suficiente, el contenido no
+      // entra: recortarlo es preferible a que reviente el layout.
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          maxHeight: double.infinity,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: AppColors.card,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$puesto',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (puntos != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '$puntos',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.card,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La tabla completa de un grupo: el podio arriba y del 4.o para abajo
+/// las filas de siempre.
 class ListaRanking extends StatelessWidget {
   const ListaRanking({super.key, required this.grupo});
 
   final GrupoRanking grupo;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      for (var i = 0; i < grupo.miembros.length; i++) ...[
-        FilaRanking(posicion: i + 1, persona: grupo.miembros[i], grupo: grupo),
-        if (i != grupo.miembros.length - 1) const SizedBox(height: 8),
+  Widget build(BuildContext context) {
+    // Con menos de tres no hay podio que armar: se listan todos.
+    final hayPodio = grupo.miembros.length >= 3;
+    final desde = hayPodio ? 3 : 0;
+
+    return Column(
+      children: [
+        if (hayPodio) ...[
+          PodioRanking(grupo: grupo),
+          if (grupo.miembros.length > 3) const SizedBox(height: 12),
+        ],
+        for (var i = desde; i < grupo.miembros.length; i++) ...[
+          FilaRanking(
+            posicion: i + 1,
+            persona: grupo.miembros[i],
+            grupo: grupo,
+          ),
+          if (i != grupo.miembros.length - 1) const SizedBox(height: 8),
+        ],
       ],
-    ],
-  );
+    );
+  }
 }
 
 /// Una fila de la tabla.
@@ -237,11 +445,7 @@ class FilaRanking extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           if (enPodio) ...[
-            const Icon(
-              Icons.monetization_on,
-              size: 14,
-              color: AppColors.accentSecondary,
-            ),
+            const MonedaAnimada(size: 18),
             const SizedBox(width: 3),
             Text(
               '${grupo.premiosMonedas[posicion - 1]}',

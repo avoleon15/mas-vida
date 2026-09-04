@@ -1,11 +1,12 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/screens/ranking_grupo_screen.dart';
 import 'package:vida_demo/screens/social_screen.dart';
-import 'package:vida_demo/theme.dart';
+import 'package:vida_demo/widgets/ranking_widgets.dart';
+
+import 'ayudas.dart';
 
 // ============================================================
 // La pestaña Ranking separa dos mundos que NO se pueden mezclar: los
@@ -16,12 +17,7 @@ import 'package:vida_demo/theme.dart';
 // ============================================================
 
 Future<void> _montar(WidgetTester tester) async {
-  await tester.pumpWidget(
-    MaterialApp(
-      theme: AppTheme.temaClaro,
-      home: const TemaVida(child: SocialScreen()),
-    ),
-  );
+  await montarPantalla(tester, const SocialScreen());
   // Ir a la pestaña Ranking (la pantalla abre en Amigos).
   await tester.tap(find.text('Ranking'));
   await tester.pumpAndSettle();
@@ -97,6 +93,30 @@ void main() {
     });
   });
 
+  group('Podio', () {
+    testWidgets('los tres primeros salen en el podio y no en la tabla', (
+      tester,
+    ) async {
+      final grupo = Datos.i.social.deConocidos.firstWhere(
+        (g) => g.miembros.length > 3,
+      );
+
+      await montarPantalla(tester, RankingGrupoScreen(grupo: grupo));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PodioRanking), findsOneWidget);
+      // Del 4.o para abajo: ni una fila de más, ni el podio repetido.
+      expect(
+        find.byType(FilaRanking),
+        findsNWidgets(grupo.miembros.length - 3),
+      );
+      // Y cada uno del podio aparece UNA sola vez.
+      for (final p in grupo.miembros.take(3)) {
+        expect(find.text(p.esUsuario ? 'Tú' : p.nombre), findsOneWidget);
+      }
+    });
+  });
+
   group('Privacidad de los puntos', () {
     test('una liga de desconocidos nunca muestra puntos', () {
       // Aunque el JSON diga que sí: el tipo manda.
@@ -126,12 +146,7 @@ void main() {
     testWidgets('en la liga solo se ven los puntos propios', (tester) async {
       final liga = Datos.i.social.ligaLocal!;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.temaClaro,
-          home: TemaVida(child: RankingGrupoScreen(grupo: liga)),
-        ),
-      );
+      await montarPantalla(tester, RankingGrupoScreen(grupo: liga));
       await tester.pumpAndSettle();
 
       final yo = liga.miembros.firstWhere((m) => m.esUsuario);
