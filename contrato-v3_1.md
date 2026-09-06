@@ -427,9 +427,13 @@ usuario no abre la app entre el domingo a la noche y el lunes al mediodía, sus
 días atrasados no llegan y el período de gracia no compra nada. Y para alguien
 que estuvo inactivo el fin de semana, ese es justamente el caso probable.
 
-Si se quiere que la gracia sirva de verdad, hay que habilitar alguna forma de
-sync en segundo plano. Es una decisión con costo real —más escrutinio de Apple
-sobre permisos de salud, batería, complejidad— y hoy no está en ningún ticket.
+**Decidido (5 sep 2026): no se habilita sync en segundo plano.** El período de
+gracia es un extra sobre lo que el usuario ya debería haber hecho —sincronizar
+antes de que cerrara la semana—, no una garantía. Quien no abra la app en esas 12
+horas simplemente no lo aprovecha, y eso es aceptable. Se descarta HealthKit
+Background Delivery por ahora: tiene costo real en escrutinio de Apple sobre
+permisos de salud, batería y complejidad, a cambio de cubrir un caso que es
+responsabilidad del usuario.
 
 ---
 
@@ -564,9 +568,8 @@ evaluación el lunes 12:00 (ver la sección de retos). Queda pendiente:
 - Definir las tres cosas que abre el período de gracia: qué ve el usuario durante
   esas 12 horas, cuándo se fija la meta de la semana nueva, y en qué huso horario
   corre el mediodía.
-- Decidir si se habilita sync en segundo plano. Sin eso, el período de gracia
-  solo sirve para usuarios que abren la app en esa ventana — que no son los que
-  más lo necesitan.
+
+El sync en segundo plano quedó **descartado** el 5 sep — ver "Días sin actividad".
 
 ### 3. `usuario_id` sigue siendo un placeholder
 
