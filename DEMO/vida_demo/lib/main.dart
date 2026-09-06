@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'datos/fuente_datos.dart';
+import 'debug/pantalla_prueba_healthkit.dart'; // TEMP A10
 import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
@@ -40,13 +41,15 @@ class MyApp extends StatelessWidget {
       title: '+Vida',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.temaClaro,
-      initialRoute: '/home',
+      initialRoute: '/debug-healthkit', // TEMP A10 - revertir a '/home'
       // Rutas nombradas: BottomNavBar navega por nombre de ruta.
       // '/premio-detalle' y '/canje-exitoso' reciben los datos del
       // premio como argumento (Navigator.pushNamed(..., arguments:)), no
       // como parte de la ruta.
       routes: {
         '/home': (context) => const HomeScreen(),
+        // TEMP A10 - quitar junto con lib/debug/
+        '/debug-healthkit': (context) => const PantallaPruebaHealthKit(),
         '/progress': (context) => const ProgressScreen(),
         '/records': (context) => const RecordsScreen(),
         '/perfil': (context) => const PerfilScreen(),

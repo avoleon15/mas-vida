@@ -16,6 +16,21 @@
 
 import Foundation
 import HealthKit
+import os
+
+/// Diagnostico de la capa de salud. Global `let` a proposito: `Logger` es
+/// `Sendable`, asi que se puede usar desde el callback de una HKSampleQuery
+/// (que llega en una cola cualquiera) sin pelear con el aislamiento del
+/// @MainActor de la clase.
+///
+/// REGLA: aca nunca entra un valor de salud — ni un conteo de pasos ni un
+/// bpm. Solo hechos estructurales (que tipo se ve, que fallo). Los logs de
+/// `os` se persisten y se leen desde un archivo de diagnostico del
+/// dispositivo; un dato de salud ahi seria una fuga.
+private let logSalud = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.assures.masvida",
+    category: "HealthKit"
+)
 
 /// Estadísticas de ritmo cardíaco (bpm) para un rango de fechas.
 struct HeartRateStats {
@@ -42,18 +57,40 @@ enum HealthKitError: LocalizedError {
     }
 }
 
-/// Resultado de pedir permisos. Tiene tres casos y no un `Bool` a propósito:
-/// HealthKit NUNCA informa si el usuario negó el permiso de lectura — cuando
-/// está negado devuelve arrays vacíos, no un error. Lo único que se puede
-/// hacer es consultar y ver si vuelve algo, y eso deja un caso genuinamente
-/// ambiguo (`sinDatosVisibles`) que hay que mostrarle al usuario como tal en
-/// vez de afirmarle que todo está bien.
+/// Los tipos de dato que la app lee. Es un enum con `rawValue` y no tres
+/// booleanos sueltos por dos razones: el `rawValue` es el nombre que viaja
+/// por el MethodChannel (una sola fuente de verdad para la serialización), y
+/// cuando en v2 entre sueño la forma del resultado no cambia.
+enum TipoDatoSalud: String, CaseIterable {
+    case pasos = "pasos"
+    case ritmoCardiaco = "ritmo_cardiaco"
+    case entrenamientos = "entrenamientos"
+}
+
+/// Resultado de pedir permisos.
+///
+/// Los permisos de HealthKit son **por tipo**: el usuario puede conceder
+/// pasos y negar ritmo cardíaco en el mismo diálogo. Y HealthKit NUNCA
+/// informa qué negó — con el permiso negado devuelve arrays vacíos, no un
+/// error. Lo único posible es consultar cada tipo y ver si vuelve algo.
+///
+/// Por eso los dos casos que sondearon cargan `visibles`: un sí/no global
+/// mentiría. Pero ojo con cómo se lee ese conjunto — la ambigüedad NO es la
+/// misma en los tres tipos:
+///
+/// - `pasos` vacío ⇒ casi seguro permiso negado. Con permiso, cualquier
+///   usuario tiene pasos en 30 días.
+/// - `ritmoCardiaco` / `entrenamientos` vacíos ⇒ lo más probable es que no
+///   tenga reloj, NO que haya negado. En el piloto la mayoría no va a tener
+///   uno. Tratar esto como "negaste el permiso" sería ruido para casi todos.
 enum ResultadoPermisos {
-    /// Se vieron datos reales: el acceso está concedido, sin ambigüedad.
-    case concedido
-    /// No se vio ningún dato en 30 días. Puede ser permiso negado, o un
-    /// usuario real sin actividad registrada — no se pueden distinguir.
-    case sinDatosVisibles
+    /// Se ven pasos: la app puede hacer su trabajo base. `visibles` dice qué
+    /// más se ve, que es lo que decide si el usuario puede ganar puntos por
+    /// intensidad además de por pasos.
+    case concedido(visibles: Set<TipoDatoSalud>)
+    /// No se ven pasos, que son el piso del puntaje. Puede ser permiso
+    /// negado, o un usuario real sin actividad en 30 días — indistinguibles.
+    case sinDatosVisibles(visibles: Set<TipoDatoSalud>)
     case noDisponible(detalle: String)
     case error(detalle: String)
 }
@@ -152,6 +189,7 @@ final class HealthKitManager {
     func solicitarPermisos() async -> ResultadoPermisos {
         guard HKHealthStore.isHealthDataAvailable() else {
             autorizado = false
+            logSalud.error("HealthKit no disponible en este dispositivo")
             return .noDisponible(detalle: HealthKitError.noDisponible.localizedDescription)
         }
 
@@ -159,15 +197,22 @@ final class HealthKitManager {
             try await healthStore.requestAuthorization(toShare: [], read: tiposLectura)
         } catch {
             autorizado = false
+            logSalud.error("requestAuthorization falló: \(error.localizedDescription, privacy: .public)")
             return .error(detalle: "No se pudo solicitar autorización: \(error.localizedDescription)")
         }
 
         // `requestAuthorization` termina sin error aunque el usuario haya
         // negado TODO — "se mostró el diálogo" no es "hay acceso". La única
-        // forma de saberlo es consultar y ver si vuelve algo.
-        guard await hayDatosDeSaludVisibles() else {
+        // forma de saberlo es consultar cada tipo y ver si vuelve algo.
+        let visibles = await tiposVisibles()
+        logSalud.notice("Tipos visibles: \(Self.describir(visibles), privacy: .public)")
+
+        // Los pasos son el piso: sin ellos no hay puntaje de ningún tipo, ni
+        // por tabla de pasos ni por intensidad. Que falte ritmo cardíaco es
+        // degradado pero usable; que falten pasos no.
+        guard visibles.contains(.pasos) else {
             autorizado = false
-            return .sinDatosVisibles
+            return .sinDatosVisibles(visibles: visibles)
         }
 
         autorizado = true
@@ -187,33 +232,70 @@ final class HealthKitManager {
         // datos guardados.
         Task { await self.sincronizarHistorialSiEsPrimeraVez() }
 
-        return .concedido
+        return .concedido(visibles: visibles)
     }
 
-    /// ¿Se ve algún dato de salud? Es la única forma de inferir si el permiso
-    /// de lectura fue concedido, porque con el permiso negado HealthKit
-    /// devuelve arrays vacíos en vez de un error.
+    /// Qué tipos devuelven al menos una muestra en los últimos 30 días.
     ///
-    /// OJO con la ambigüedad: un `false` acá también puede ser un usuario real
-    /// sin ninguna actividad registrada en 30 días. Por eso el llamador lo
-    /// reporta como `sinDatosVisibles` y no como "permiso denegado".
-    private func hayDatosDeSaludVisibles() async -> Bool {
+    /// Es la única forma de inferir el permiso de lectura: con el permiso
+    /// negado HealthKit devuelve arrays vacíos, no un error. Y hay que
+    /// preguntarlo por tipo porque el permiso se concede por tipo — sondear
+    /// solo pasos y opinar sobre los tres fue exactamente el bug que esto
+    /// arregla (un usuario que negaba ritmo cardíaco quedaba "concedido" y
+    /// nunca ganaba un punto de intensidad, sin señal para nadie).
+    ///
+    /// Las tres consultas van en paralelo: son tipos distintos, así que no
+    /// compiten entre sí como sí lo harían varias del mismo tipo.
+    private func tiposVisibles() async -> Set<TipoDatoSalud> {
+        async let pasos = hayMuestras(de: tipoPasos)
+        async let ritmo = hayMuestras(de: tipoFrecuenciaCardiaca)
+        async let entrenamientos = hayMuestras(de: tipoEntrenamiento)
+
+        var visibles: Set<TipoDatoSalud> = []
+        if await pasos { visibles.insert(.pasos) }
+        if await ritmo { visibles.insert(.ritmoCardiaco) }
+        if await entrenamientos { visibles.insert(.entrenamientos) }
+        return visibles
+    }
+
+    /// ¿Vuelve al menos una muestra de este tipo en 30 días?
+    ///
+    /// A diferencia de antes, el error de la consulta ya no se traga en
+    /// silencio: un fallo real de HealthKit y un "no hay nada" llevan al mismo
+    /// `false`, pero el primero deja rastro en el log. Sin eso, un problema de
+    /// entitlements se le presentaba al usuario como "andá a Ajustes", consejo
+    /// que no lo iba a ayudar.
+    private func hayMuestras(de tipo: HKSampleType) async -> Bool {
         let desde = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
         let predicado = HKQuery.predicateForSamples(withStart: desde, end: Date(), options: .strictStartDate)
+        // Se saca el identificador ANTES del closure: es un String (Sendable),
+        // mientras que el HKSampleType no lo es y el callback llega en otra cola.
+        let idTipo = tipo.identifier
 
         return await withCheckedContinuation { continuation in
             let query = HKSampleQuery(
-                sampleType: tipoPasos,
+                sampleType: tipo,
                 predicate: predicado,
                 limit: 1,
                 sortDescriptors: nil
-            ) { _, resultados, _ in
-                // El error se ignora a propósito: para una sonda, "falló la
-                // consulta" y "no hay nada" llevan a la misma conclusión.
+            ) { _, resultados, error in
+                if let error {
+                    logSalud.error("Sonda de \(idTipo, privacy: .public) falló: \(error.localizedDescription, privacy: .public)")
+                }
                 continuation.resume(returning: !(resultados ?? []).isEmpty)
             }
             healthStore.execute(query)
         }
+    }
+
+    /// Los tipos visibles como texto estable para el log. Nunca incluye
+    /// valores de salud, solo qué tipos se ven.
+    private static func describir(_ visibles: Set<TipoDatoSalud>) -> String {
+        guard !visibles.isEmpty else { return "ninguno" }
+        return TipoDatoSalud.allCases
+            .filter(visibles.contains)
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 
     // MARK: - construirPayload() (A9)

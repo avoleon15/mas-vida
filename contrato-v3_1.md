@@ -8,6 +8,34 @@ Cualquier cambio de campo, tipo o forma es un **v4**, no un parche silencioso a 
 archivo. Si algo no está aquí, no existe todavía. Este documento es autocontenido:
 no hace falta abrir `contrato-v2.md` ni `contrato-v1.md` para nada de lo que sigue.
 
+> **Qué cambió de v3.2 a v3.3 (6 sep 2026):** otra vez **solo el MethodChannel**.
+> El JSON #1 y el JSON #2 siguen byte por byte iguales — tercera versión seguida
+> en que Luis no se entera de nada.
+>
+> 1. **`solicitarPermisos` ahora dice QUÉ tipos de dato ve, no solo si ve
+>    alguno.** La sonda de v3.2 consultaba únicamente pasos y emitía un veredicto
+>    sobre los tres tipos. Pero los permisos de HealthKit son **por tipo**: el
+>    usuario puede conceder pasos y negar ritmo cardíaco en el mismo diálogo. En
+>    ese caso v3.2 respondía `concedido` y el usuario nunca ganaba un solo punto
+>    de intensidad — sin señal para él, para Daniel ni para Luis. Ahora la
+>    respuesta trae un mapa `tipos`.
+> 2. **Se eliminan los booleanos `concedido` y `ok`.** Cada uno era exactamente
+>    `estado == "concedido"` y `estado == "ok"`: un segundo lugar donde la misma
+>    verdad podía desincronizarse, que es literalmente el bug que arreglamos en
+>    v3.2. Se sacan ahora porque Daniel todavía no había escrito la pantalla —
+>    es el único momento en que quitar un campo cuesta cero.
+> 3. **Se agrega logging (`os.Logger`) a la capa de HealthKit.** No cambia el
+>    contrato; se anota acá porque es lo que va a permitir diagnosticar un
+>    "no me contó los pasos del martes" durante el piloto sin reproducirlo.
+>    Regla fija: al log nunca entra un valor de salud, solo hechos estructurales.
+>
+> Se evaluó y **se descartó** exponer `statusForAuthorizationRequest` (el API que
+> dice si iOS va a mostrar diálogo). Para servir de algo, Flutter tendría que
+> consultarlo **antes** de llamar a `solicitarPermisos`, y eso exige un tercer
+> método en el canal — el contrato de 2 métodos es una decisión cerrada del
+> proyecto. Su otro uso (detectar tipos nuevos en v2) ya lo resuelve solo
+> `requestAuthorization`, que presenta el diálogo del tipo nuevo sin ayuda.
+>
 > **Qué cambió de v3.1 a v3.2 (5 sep 2026):** cambian **las dos respuestas del
 > MethodChannel** (Swift ↔ Flutter). El JSON #1 y el JSON #2 — o sea todo lo que
 > Luis recibe y devuelve — **no cambian en absolutamente nada**. Por eso esto es un
@@ -290,9 +318,11 @@ progreso** (Daniel), que ya asumen este endpoint separado.
 
 ## Los 2 métodos — MethodChannel (Swift ↔ Flutter)
 
-> **Cambiado en v3.2.** Los nombres de los métodos y sus entradas (ninguna) no
-> cambian. Lo que cambia son **las dos respuestas**, que ahora traen un campo
-> `estado`. Esto no toca a Luis en nada.
+> **Cambiado en v3.2 y otra vez en v3.3.** Los nombres de los métodos y sus
+> entradas (ninguna) no cambian, y siguen siendo 2. Lo que cambió son **las dos
+> respuestas**: en v3.2 pasaron a traer `estado`, y en v3.3 se les quitaron los
+> booleanos redundantes (`concedido`, `ok`) y `solicitarPermisos` ganó el mapa
+> `tipos`. Nada de esto toca a Luis.
 
 Todo lo que no sea leer HealthKit va por HTTP directo de Daniel contra la API
 de Luis. El puente nativo se reduce a estos 2 métodos — nada de dashboard,
@@ -301,46 +331,79 @@ niveles, retos ni historial pasa por acá.
 ```dart
 // 1. Pide permiso de HealthKit la primera vez (o revalida si el usuario lo cambió en Ajustes)
 final resultado = await canal.invokeMethod('solicitarPermisos');
-// → { "concedido": true, "estado": "concedido" }
+// → { "estado": "concedido",
+//     "tipos": { "pasos": true, "ritmo_cardiaco": false, "entrenamientos": false } }
 
 // 2. Lee HealthKit, arma el JSON #1 y lo manda a /api/v1/sync
 final resultado = await canal.invokeMethod('sincronizar');
-// → { "ok": true, "estado": "ok", "sincronizado_en": "2026-09-05T20:15:00-06:00" }
+// → { "estado": "ok", "sincronizado_en": "2026-09-05T20:15:00-06:00" }
 ```
 
 ### `solicitarPermisos`
 
-Entrada: ninguna. Salida: `{ "concedido": bool, "estado": string, "detalle": string? }`
+Entrada: ninguna.
+Salida: `{ "estado": string, "tipos": {string: bool}?, "detalle": string? }`
 
-| `estado` | `concedido` | Qué significa | Qué debe hacer Flutter |
-|---|---|---|---|
-| `concedido` | `true` | Se vieron datos reales de HealthKit. Hay acceso, sin ambigüedad | Seguir el flujo normal |
-| `sin_datos_visibles` | `false` | No se vio ningún dato en 30 días. Puede ser permiso negado **o** un usuario real sin actividad registrada — HealthKit no permite distinguirlos | Mensaje del tipo "No vemos datos de actividad. Si negaste el acceso, activalo en Ajustes › Salud › +Vida". **Nunca** un "listo" ni un "permiso denegado" categórico |
-| `no_disponible` | `false` | El dispositivo no soporta HealthKit (iPad, simulador) | Ocultar la función |
+| `estado` | Qué significa | Qué debe hacer Flutter |
+|---|---|---|
+| `concedido` | Se ven pasos: la app puede puntuar | Seguir el flujo normal, **pero mirar `tipos`** — ver abajo |
+| `sin_datos_visibles` | No se ven pasos, que son el piso del puntaje. Puede ser permiso negado **o** un usuario real sin actividad en 30 días — HealthKit no permite distinguirlos | Mensaje del tipo "No vemos datos de actividad. Si negaste el acceso, activalo en Ajustes › Salud › +Vida". **Nunca** un "listo" ni un "permiso denegado" categórico |
+| `no_disponible` | El dispositivo no soporta HealthKit (iPad, simulador) | Ocultar la función. Caso terminal |
 
 Si falla la solicitud en sí, llega como `FlutterError` con código `PERMISOS_ERROR`
 — no como un `estado`.
 
-**Por qué cambió:** `HKHealthStore.requestAuthorization` termina **sin error**
-aunque el usuario haya negado todos los permisos — HealthKit nunca informa un
-permiso de lectura negado. El `concedido: true` de v3.1 solo significaba "se
-mostró el diálogo", así que la app le decía "listo" a alguien que había negado
-todo y después nunca sincronizaba nada sin explicación. Ahora el lado nativo
-hace una consulta de sondeo (pasos, 30 días, `limit: 1`) y reporta lo que
-realmente puede ver.
+#### El mapa `tipos` — nuevo en v3.3
+
+```json
+{ "pasos": true, "ritmo_cardiaco": false, "entrenamientos": false }
+```
+
+Viaja **solo** en `concedido` y `sin_datos_visibles`, que son los dos estados en
+los que la sonda efectivamente corrió. En `no_disponible` no hay HealthKit en el
+aparato y nunca se consultó nada: inventar ahí un mapa de `false` diría "miramos
+y no había", que no es lo mismo que "no se pudo mirar". Cuando viaja, trae
+**siempre las tres claves** — el lado nativo las serializa desde `allCases`, así
+que Flutter nunca tiene que distinguir `false` de "no vino la clave".
+
+**Cómo NO leerlo.** La ambigüedad no es igual en los tres tipos, y tratarlos
+parejo produce un mensaje equivocado para casi todo el piloto:
+
+| tipo | qué significa `false` |
+|---|---|
+| `pasos` | Casi seguro **permiso negado**. Con permiso, cualquier usuario tiene pasos en 30 días |
+| `ritmo_cardiaco` | Lo más probable es que **no tenga reloj**, no que haya negado. Es también el tipo que hace falta para las sesiones intensas |
+| `entrenamientos` | Igual que el anterior: sale del reloj o de que registre workouts a mano |
+
+Por eso el texto para el usuario tiene que ser **condicional, no acusatorio**:
+"No vemos datos de ritmo cardíaco. Si usás un reloj, revisá que +Vida tenga
+permiso en Ajustes › Salud." Mandar a arreglar un permiso a todo el que no tiene
+reloj sería ruido para la mayoría.
+
+**Por qué cambió (v3.2):** `HKHealthStore.requestAuthorization` termina **sin
+error** aunque el usuario haya negado todos los permisos — HealthKit nunca
+informa un permiso de lectura negado. El `concedido: true` de v3.1 solo
+significaba "se mostró el diálogo", así que la app le decía "listo" a alguien que
+había negado todo y después nunca sincronizaba nada sin explicación.
+
+**Por qué volvió a cambiar (v3.3):** la sonda de v3.2 consultaba solo pasos. Como
+el permiso se concede por tipo, un usuario que concedía pasos y negaba ritmo
+cardíaco recibía `concedido` y nunca ganaba un punto de intensidad, en silencio.
+Ahora se sondean los tres tipos en paralelo y se reporta cada uno.
 
 ### `sincronizar`
 
-Entrada: ninguna. Salida: `{ "ok": bool, "estado": string, "sincronizado_en": string?, "detalle": string? }`
+Entrada: ninguna.
+Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 
-| `estado` | `ok` | Qué significa | Qué debe hacer Flutter |
-|---|---|---|---|
-| `ok` | `true` | Llegó a Luis y quedó guardado. `sincronizado_en` viene con el timestamp ISO 8601 | Confirmación normal |
-| `encolado` | `false` | Sin red o backend caído. El día quedó en la cola local y se reintenta solo al volver del background (A8) | Aviso suave. **No** presentarlo como falla — el dato no se perdió |
-| `sin_acceso_a_salud` | `false` | No se pudo leer HealthKit. Casi siempre permisos | Guiar a Ajustes › Salud › +Vida |
-| `error_permanente` | `false` | URL mal configurada, o el backend rechazó el payload (4xx). No se reintenta | El usuario no puede resolverlo; registrar y reportar |
+| `estado` | Qué significa | Qué debe hacer Flutter |
+|---|---|---|
+| `ok` | Llegó a Luis y quedó guardado. `sincronizado_en` viene con el timestamp ISO 8601 | Confirmación normal |
+| `encolado` | Sin red o backend caído. El día quedó en la cola local y se reintenta solo al volver del background (A8) | Aviso suave. **No** presentarlo como falla — el dato no se perdió |
+| `sin_acceso_a_salud` | No se pudo leer HealthKit. Casi siempre permisos | Guiar a Ajustes › Salud › +Vida |
+| `error_permanente` | URL mal configurada, o el backend rechazó el payload (4xx). No se reintenta | El usuario no puede resolverlo; registrar y reportar |
 
-- `sincronizado_en` **solo viene cuando `ok` es `true`.** En v3.1 llegaba como
+- `sincronizado_en` **solo viene cuando `estado` es `ok`.** En v3.1 llegaba como
   string vacío en los fallos; ahora directamente no está en la respuesta.
   Leerlo como `String?`, no como `String`.
 - `detalle` es texto técnico para logs. No mostrárselo crudo al usuario — el
@@ -353,9 +416,13 @@ Ajustes" son mensajes opuestos, y Flutter no tenía con qué distinguirlos.
 ### Wrapper de Dart
 
 `lib/datos/healthkit_bridge.dart` ya expone los dos métodos tipados, con
-`EstadoPermisos` y `EstadoSync` como enums de Dart. Usándolo no hace falta
-parsear strings a mano, y los estados desconocidos caen en un caso
-`desconocido` en vez de romper.
+`EstadoPermisos` y `EstadoSync` como enums de Dart y `TiposVisibles` como clase.
+Usándolo no hace falta parsear strings ni mapas a mano, y los estados
+desconocidos caen en un caso `desconocido` en vez de romper.
+
+Ese archivo es la **frontera del contrato**, no UI: lo mantiene Alvaro junto con
+el lado Swift, porque los dos tienen que moverse a la vez. Daniel lo consume, no
+lo edita — si algo le falta ahí, es un cambio de contrato, no un parche local.
 
 ### Backfill de los últimos 7 días
 
@@ -500,23 +567,39 @@ responsabilidad del usuario.
 
 - Todo lo que no sea leer HealthKit va por HTTP directo contra la API de
   Luis — el MethodChannel es solo `solicitarPermisos` y `sincronizar`.
-- **Cambiado en v3.2 — las dos respuestas traen `estado`.** Ver las tablas de
-  la sección del MethodChannel. Los dos cambios que pueden romper código
-  escrito contra v3.1:
-  1. `concedido` cambió de significado aunque se llame igual. Antes era "se
-     mostró el diálogo" (prácticamente siempre `true`); ahora es "confirmamos
-     que hay acceso". Código que solo lea `concedido` sigue compilando pero
-     ahora va a recibir `false` en casos donde antes recibía `true`.
-  2. `sincronizado_en` ya no viene siempre — leerlo como `String?`.
+- **La forma final es la de v3.3.** Si empezás la pantalla ahora, arrancá
+  directo contra esta y olvidate de v3.1/v3.2 — nada de lo anterior llegó a
+  código tuyo. Lo que tenés que saber:
+  1. **Los booleanos `concedido` y `ok` ya no existen.** Cada uno era
+     exactamente `estado == "concedido"` / `estado == "ok"`. Se leen desde
+     `estado` y punto.
+  2. **`solicitarPermisos` trae un mapa `tipos`** con `pasos`,
+     `ritmo_cardiaco` y `entrenamientos`. `estado: concedido` significa que se
+     ven pasos — no que se vean los tres. Leé los tres antes de decirle al
+     usuario que quedó todo listo.
+  3. **`ritmo_cardiaco: false` casi nunca significa "negó el permiso"** —
+     significa que probablemente no tiene reloj, y en el piloto eso va a ser la
+     mayoría. El mensaje va condicional ("si usás un reloj, revisá..."), nunca
+     imperativo. Ver la tabla de la sección del canal.
+  4. **`sincronizado_en` solo viene con `estado: ok`** — leerlo como `String?`.
 - **Usá `lib/datos/healthkit_bridge.dart`**, que ya expone los dos métodos
-  tipados con enums de Dart. Evita parsear strings a mano.
+  tipados con enums de Dart y `TiposVisibles`. Evita parsear strings y mapas a
+  mano. Ese archivo lo mantiene Alvaro junto con el Swift — si te falta algo
+  ahí, es un cambio de contrato, no un parche local.
+- **Cómo probar el canal sin escribir UI:** `lib/debug/pantalla_prueba_healthkit.dart`
+  es un banco de pruebas con los dos botones y el resultado crudo. No está
+  ruteado (no llega al build); las instrucciones para conectarlo están en la
+  cabecera del archivo. Necesita iPhone físico — HealthKit no existe en el
+  simulador.
 - **`pasos_totales_dia` no viene por el canal.** Se pide por HTTP al endpoint de
   resumen de Luis, junto con el resto de los datos del dashboard (decidido el
   5 sep — ver "Puntos abiertos"). El canal solo confirma que el sync ocurrió;
   los números para mostrar salen siempre de la API de Luis. Los campos de ese
   endpoint los definís vos.
-- `ok: false` ya no es un solo caso. `encolado` **no** es una falla que mostrar
-  como error — el dato quedó a salvo y se reintenta solo.
+- Fallar no es un solo caso. `encolado` **no** es una falla que mostrar como
+  error — el dato quedó a salvo y se reintenta solo.
+- **No implementes reintentos.** Ya corren solos del lado nativo cuando la app
+  vuelve a primer plano (`SceneDelegate`). Vos solo disparás el sync manual.
 - El nivel de reto semanal (D12) sigue sin venir en la respuesta del sync —
   pedirlo aparte con `GET /api/v1/retos/estado` cuando se necesite mostrar en
   la pantalla de retos. No lo confundas con `nivel` (el anual, de cashback)

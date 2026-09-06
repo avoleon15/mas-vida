@@ -104,7 +104,9 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
 
   Future<void> _pedirPermisos() => _correr('PERMISOS', (tag) async {
         final r = await _bridge.solicitarPermisos();
-        final texto = 'estado=${r.estado.name}  concedido=${r.concedido}'
+        final texto = 'estado=${r.estado.name}'
+            '\npasos=${r.tipos.pasos}  ritmo=${r.tipos.ritmoCardiaco}'
+            '  entren=${r.tipos.entrenamientos}'
             '${r.detalle != null ? '\ndetalle=${r.detalle}' : ''}';
         _fijar(tag, texto, r.estado == EstadoPermisos.concedido);
         _anotar(tag, texto.replaceAll('\n', '  '));
@@ -115,7 +117,7 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
 
   Future<void> _sincronizar() => _correr('SYNC', (tag) async {
         final r = await _bridge.sincronizar();
-        final texto = 'estado=${r.estado.name}  ok=${r.ok}'
+        final texto = 'estado=${r.estado.name}'
             '${r.sincronizadoEn != null ? '\nsincronizado_en=${r.sincronizadoEn}' : ''}'
             '${r.detalle != null ? '\ndetalle=${r.detalle}' : ''}';
         _fijar(tag, texto, r.estado == EstadoSync.ok);
