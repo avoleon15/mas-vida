@@ -1,3 +1,4 @@
+import logging
 from django.db import transaction
 from django.db.utils import DataError, IntegrityError
 from rest_framework.decorators import api_view
@@ -7,11 +8,11 @@ from rest_framework import status
 from Apps.users.models import Usuario
 from .models import Muestra, MuestraBPM, Sesion
 
-
+logger = logging.getLogger(__name__)
 @api_view(['POST'])
 def sync(request):
     payload = request.data
-    print("PAYLOAD RECIBIDO:", payload)
+    logger.debug("Payload recibido: %s", payload)
     usuario_id = payload.get('usuario_id')
 
 
@@ -101,7 +102,8 @@ def sync(request):
             "tope_diario_aplicado": False,
             "puntos_ano": 0,
             "tope_anual_aplicado": False,
-            "nivel": 0
+            "nivel": 0,
+            "pasos_totales_dia": 0
         },
         status=status.HTTP_200_OK
     )
