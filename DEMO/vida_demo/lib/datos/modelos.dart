@@ -859,6 +859,8 @@ class Premio {
     required this.condiciones,
     required this.costoMonedas,
     required this.vence,
+    this.foto,
+    this.fondo,
   });
 
   final String id;
@@ -871,6 +873,22 @@ class Premio {
   final int costoMonedas;
   final String vence;
 
+  /// Ruta del asset con el logo del comercio, o null si todavía no hay.
+  ///
+  /// Opcional a propósito: un premio sin logo tiene que seguir saliendo
+  /// en el catálogo con el placeholder, no desaparecer ni reventar.
+  final String? foto;
+
+  /// Color de fondo detrás del logo, en hex "#RRGGBB".
+  ///
+  /// Null (blanco) sirve para casi todos. Se pone solo cuando el logo es
+  /// claro y necesita fondo oscuro para leerse: Montanos y Frutalle son
+  /// blancos sobre negro y sobre blanco desaparecen.
+  ///
+  /// Queda como String y no como Color a propósito: este archivo no
+  /// importa Flutter, y el que sabe de colores es el widget.
+  final String? fondo;
+
   factory Premio.desdeJson(Map<String, dynamic> j) => Premio(
     id: j['id'] as String,
     nombre: j['nombre'] as String,
@@ -881,6 +899,8 @@ class Premio {
     condiciones: j['condiciones'] as String,
     costoMonedas: j['costo_monedas'] as int,
     vence: j['vence'] as String,
+    foto: j['foto'] as String?,
+    fondo: j['fondo'] as String?,
   );
 }
 

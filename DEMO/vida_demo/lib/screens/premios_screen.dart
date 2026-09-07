@@ -55,7 +55,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
           _categoriaSeleccionada == 'Todos' ||
           p.categoria == _categoriaSeleccionada;
       // Se busca por comercio y por lo que dan: alguien puede acordarse
-      // de "vitaminas" y no del nombre de la farmacia.
+      // de "almuerzo" y no del nombre del restaurante.
       final coincide =
           texto.isEmpty ||
           p.nombre.toLowerCase().contains(texto) ||
@@ -286,84 +286,78 @@ class _PremiosScreenState extends State<PremiosScreen> {
     );
   }
 
+  /// Todas las tarjetas se ven igual, alcance o no el saldo.
+  ///
+  /// Antes las que no alcanzaban iban atenuadas y con un "te faltan N"
+  /// en la tarjeta. Se leía como si el premio estuviera agotado o
+  /// bloqueado, cuando en realidad es al revés: son justo los que hay
+  /// que querer. Cuánto falta se dice adentro, al abrir el premio.
   Widget _buildTarjetaPremio(BuildContext context, Premio premio) {
     final costo = premio.costoMonedas;
-    final alcanza = monedasUsuario >= costo;
-    final faltan = costo - monedasUsuario;
 
     return GestureDetector(
       onTap: () =>
           Navigator.of(context).pushNamed('/premio-detalle', arguments: premio),
-      child: Opacity(
-        opacity: alcanza ? 1 : 0.55,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              border: Border.all(color: AppColors.cardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const AspectRatio(
-                  aspectRatio: 1.4,
-                  child: PlaceholderImagen(texto: 'LOGO'),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            border: Border.all(color: AppColors.cardBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1.4,
+                child: FotoComercio(
+                  ruta: premio.foto,
+                  fondo: premio.fondo,
+                  texto: 'LOGO',
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        premio.nombre,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      premio.nombre,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        premio.descripcion,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      premio.descripcion,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
                       ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const MonedaAnimada(size: 19),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$costo',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: AppColors.accentSecondary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          if (!alcanza) ...[
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'te faltan $faltan',
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        const MonedaAnimada(size: 19),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$costo',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.accentSecondary,
+                                fontWeight: FontWeight.w700,
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

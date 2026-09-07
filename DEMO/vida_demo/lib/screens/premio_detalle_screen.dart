@@ -28,10 +28,18 @@ class PremioDetalleScreen extends StatelessWidget {
                 children: [
                   Stack(
                     children: [
-                      const SizedBox(
+                      SizedBox(
                         width: double.infinity,
                         height: 240,
-                        child: PlaceholderImagen(texto: 'FOTO DEL COMERCIO'),
+                        child: FotoComercio(
+                          ruta: premio.foto,
+                          fondo: premio.fondo,
+                          texto: 'LOGO DEL COMERCIO',
+                          // Más aire que en la tarjeta: acá el logo tiene
+                          // 240 px de alto y a ancho completo se ve como
+                          // un cartel si toca los bordes.
+                          margen: 34,
+                        ),
                       ),
                       Positioned(
                         top: MediaQuery.paddingOf(context).top + 12,

@@ -80,6 +80,14 @@ flutter:
     # Animaciones Lottie. La moneda se usa en toda la app vía
     # lib/widgets/moneda_animada.dart.
     - assets/lottie/
+    # Fotos de los comercios aliados, una carpeta por filtro de Premios.
+    # Flutter NO recorre subcarpetas solo: cada una va listada aparte, y
+    # si mañana se agrega un filtro nuevo hay que agregar su línea acá.
+    - assets/img/premios/restaurantes/
+    - assets/img/premios/ropa/
+    - assets/img/premios/cafecitos/
+    - assets/img/premios/conveniencia/
+    - assets/img/premios/deportes-ejercicio/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
