@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:getwidget/getwidget.dart';
 import '../datos/fuente_datos.dart';
 import '../theme.dart';
@@ -268,10 +269,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
     );
   }
 
+  /// Cerrar sesión, simulado.
+  ///
+  /// TODO: no hay login todavía. Cuando exista, acá va: borrar el token,
+  /// limpiar lo guardado en el teléfono (ver `AlmacenSocial`) y mandar a
+  /// la pantalla de ingreso. Por ahora confirma y devuelve al arranque
+  /// de la app, que es lo que se ve al cerrar sesión de verdad.
   void _cerrarSesion(BuildContext context) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
+      builder: (dialogo) => CupertinoAlertDialog(
         title: const Text('¿Cerrar sesión?'),
         content: const Text(
           '\nTus puntos y monedas quedan guardados. Al volver a entrar '
@@ -279,12 +286,21 @@ class _PerfilScreenState extends State<PerfilScreen> {
         ),
         actions: [
           CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(),
+            // El que NO destruye es el que queda resaltado: así el dedo
+            // apurado cancela, no cierra la sesión.
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogo).pop(),
             child: const Text('Cancelar'),
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              Navigator.of(dialogo).pop();
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/home', (ruta) => false);
+            },
             child: const Text('Cerrar sesión'),
           ),
         ],
@@ -653,7 +669,11 @@ class _Separador extends StatelessWidget {
   );
 }
 
-/// Acción destructiva. Va en rojo y confirma antes de ejecutarse.
+/// Acción destructiva. Va en rojo lleno y confirma antes de ejecutarse.
+///
+/// Antes era una tarjeta blanca con la letra roja y se perdía entre las
+/// otras filas de la pantalla. Cerrar sesión tiene que verse distinto de
+/// todo lo demás: es lo único acá que te saca de la app.
 class _BotonPeligro extends StatelessWidget {
   const _BotonPeligro({required this.texto, required this.onPressed});
 
@@ -664,17 +684,30 @@ class _BotonPeligro extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
+      // CupertinoButton y no un botón propio: el atenuado al presionar
+      // viene de fábrica y es el que un usuario de iPhone espera.
       child: CupertinoButton(
-        color: AppColors.card,
+        color: AppColors.peligro,
         borderRadius: BorderRadius.circular(14),
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 15),
         onPressed: onPressed,
-        child: Text(
-          texto,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: const Color(0xFFB3261E),
-            fontWeight: FontWeight.w700,
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              CupertinoIcons.square_arrow_right,
+              size: 19,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              texto,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );

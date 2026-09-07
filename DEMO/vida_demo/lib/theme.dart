@@ -83,6 +83,16 @@ class AppColors {
   /// el fondo tintado, que es el caso más exigente.
   static const Color textSecondary = Color(0xFF666D7A);
 
+  /// Rojo de acción destructiva: cerrar sesión, borrar la cuenta.
+  ///
+  /// Es la ÚNICA excepción a la paleta azul/naranja/blanco, y no es una
+  /// decisión estética: en iOS el rojo significa "esto deshace algo" y
+  /// el usuario ya lo lee así antes de leer el texto. Pintar de azul un
+  /// botón de cerrar sesión lo haría ver como una acción más.
+  ///
+  /// No usarlo para nada que no destruya o revierta algo.
+  static const Color peligro = Color(0xFFB3261E);
+
   // Color de cada categoría/liga de cashback. Progresión del azul de
   // marca, de más claro a más profundo, terminando exactamente en
   // [accent].
@@ -386,7 +396,7 @@ final ShadThemeData temaShad = ShadThemeData(
     mutedForeground: AppColors.textSecondary,
     accent: AppColors.accentSecondary,
     accentForeground: Colors.white,
-    destructive: Color(0xFFB3261E),
+    destructive: AppColors.peligro,
     destructiveForeground: Colors.white,
     border: AppColors.cardBorder,
     input: AppColors.cardBorder,
