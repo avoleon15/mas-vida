@@ -10,7 +10,8 @@
     "Ropa",
     "Cafecitos",
     "Conveniencia",
-    "Deportes/ejercicio"
+    "Deportes/ejercicio",
+    "Farmacias"
   ],
   "premios": [
     {
@@ -50,6 +51,18 @@
       "vence": "2026-12-31"
     },
     {
+      "id": "cruz-verde",
+      "nombre": "Cruz Verde",
+      "zona": "Guatemala",
+      "categoria": "Farmacias",
+      "foto": "assets/img/premios/farmacias/cruz-verde.svg",
+      "descripcion": "Beneficio por definir",
+      "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
+      "condiciones": "Pendiente de acordar con el comercio.",
+      "costo_monedas": 30,
+      "vence": "2026-12-31"
+    },
+    {
       "id": "sportcity",
       "nombre": "Sportcity",
       "zona": "Guatemala",
@@ -59,6 +72,18 @@
       "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
       "condiciones": "Pendiente de acordar con el comercio.",
       "costo_monedas": 55,
+      "vence": "2026-12-31"
+    },
+    {
+      "id": "yum-greens",
+      "nombre": "Yum Greens",
+      "zona": "Guatemala",
+      "categoria": "Restaurantes",
+      "foto": "assets/img/premios/restaurantes/yum-greens.jpg",
+      "descripcion": "Beneficio por definir",
+      "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
+      "condiciones": "Pendiente de acordar con el comercio.",
+      "costo_monedas": 35,
       "vence": "2026-12-31"
     },
     {
@@ -96,6 +121,18 @@
       "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
       "condiciones": "Pendiente de acordar con el comercio.",
       "costo_monedas": 60,
+      "vence": "2026-12-31"
+    },
+    {
+      "id": "c3ntro",
+      "nombre": "C3ntro",
+      "zona": "Guatemala",
+      "categoria": "Deportes/ejercicio",
+      "foto": "assets/img/premios/deportes-ejercicio/c3ntro.jpg",
+      "descripcion": "Beneficio por definir",
+      "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
+      "condiciones": "Pendiente de acordar con el comercio.",
+      "costo_monedas": 65,
       "vence": "2026-12-31"
     },
     {
@@ -160,6 +197,18 @@
       "vence": "2026-12-31"
     },
     {
+      "id": "12-onzas",
+      "nombre": "12 Onzas",
+      "zona": "Guatemala",
+      "categoria": "Cafecitos",
+      "foto": "assets/img/premios/cafecitos/12-onzas.png",
+      "descripcion": "Beneficio por definir",
+      "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
+      "condiciones": "Pendiente de acordar con el comercio.",
+      "costo_monedas": 22,
+      "vence": "2026-12-31"
+    },
+    {
       "id": "alma-active",
       "nombre": "Alma Active",
       "zona": "Guatemala",
@@ -208,6 +257,18 @@
       "vence": "2026-12-31"
     },
     {
+      "id": "aera",
+      "nombre": "Aera",
+      "zona": "Guatemala",
+      "categoria": "Deportes/ejercicio",
+      "foto": "assets/img/premios/deportes-ejercicio/aera.webp",
+      "descripcion": "Beneficio por definir",
+      "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
+      "condiciones": "Pendiente de acordar con el comercio.",
+      "costo_monedas": 70,
+      "vence": "2026-12-31"
+    },
+    {
       "id": "skechers",
       "nombre": "Skechers",
       "zona": "Guatemala",
@@ -241,6 +302,18 @@
       "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
       "condiciones": "Pendiente de acordar con el comercio.",
       "costo_monedas": 55,
+      "vence": "2026-12-31"
+    },
+    {
+      "id": "farmacias-batres",
+      "nombre": "Farmacias Batres",
+      "zona": "Guatemala",
+      "categoria": "Farmacias",
+      "foto": "assets/img/premios/farmacias/farmacias-batres.webp",
+      "descripcion": "Beneficio por definir",
+      "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
+      "condiciones": "Pendiente de acordar con el comercio.",
+      "costo_monedas": 25,
       "vence": "2026-12-31"
     },
     {

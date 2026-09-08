@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../theme.dart';
 
 /// Placeholder visual reutilizable para donde iría una foto/logo real de
@@ -38,6 +39,11 @@ class PlaceholderImagen extends StatelessWidget {
 /// trae imagen, o el archivo no está en assets todavía, se ve el
 /// placeholder rayado en vez de un hueco gris o un error rojo. Así se
 /// pueden ir agregando los comercios de a uno sin tocar código.
+///
+/// Aguanta las dos formas en que llegan los logos: mapa de bits (JPG,
+/// PNG, WebP) y SVG. Se elige por la extensión del archivo, no por un
+/// campo del catálogo — el JSON ya dice la ruta y agregar otro campo
+/// sería pedir dos veces el mismo dato.
 class FotoComercio extends StatelessWidget {
   const FotoComercio({
     super.key,
@@ -83,19 +89,29 @@ class FotoComercio extends StatelessWidget {
       color: _color,
       child: Padding(
         padding: EdgeInsets.all(margen),
-        child: Image.asset(
-          ruta,
-          // contain, NUNCA cover: son logos, no fotos de local. Con cover
-          // se recorta la marca y quedan medias palabras.
-          fit: BoxFit.contain,
-          // Los logos son chicos (algunos de 100 px de ancho) y se
-          // estiran a la tarjeta. Sin esto Flutter los suaviza tanto que
-          // se ven borrosos.
-          filterQuality: FilterQuality.medium,
-          // El archivo puede no estar todavía: el catálogo tiene que
-          // seguir funcionando mientras se consiguen los logos.
-          errorBuilder: (_, _, _) => PlaceholderImagen(texto: texto),
-        ),
+        child: ruta.toLowerCase().endsWith('.svg')
+            ? SvgPicture.asset(
+                ruta,
+                // contain igual que el mapa de bits: un logo vectorial
+                // tampoco se recorta.
+                fit: BoxFit.contain,
+                // Mientras el SVG se parsea la tarjeta no puede quedar
+                // en blanco: se ve el mismo placeholder que si faltara.
+                placeholderBuilder: (_) => PlaceholderImagen(texto: texto),
+              )
+            : Image.asset(
+                ruta,
+                // contain, NUNCA cover: son logos, no fotos de local. Con
+                // cover se recorta la marca y quedan medias palabras.
+                fit: BoxFit.contain,
+                // Los logos son chicos (algunos de 100 px de ancho) y se
+                // estiran a la tarjeta. Sin esto Flutter los suaviza tanto
+                // que se ven borrosos.
+                filterQuality: FilterQuality.medium,
+                // El archivo puede no estar todavía: el catálogo tiene que
+                // seguir funcionando mientras se consiguen los logos.
+                errorBuilder: (_, _, _) => PlaceholderImagen(texto: texto),
+              ),
       ),
     );
   }

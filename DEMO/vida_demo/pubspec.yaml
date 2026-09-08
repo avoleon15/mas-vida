@@ -51,6 +51,11 @@ dependencies:
   # el JSON adentro) además de los .json sueltos. Licencia MIT.
   lottie: ^3.3.2
 
+  # Varios comercios entregan su logo en SVG y no en mapa de bits.
+  # Image.asset no sabe leerlos, así que sin esto esas tarjetas caían al
+  # placeholder rayado. Lo usa lib/widgets/placeholder_imagen.dart.
+  flutter_svg: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -88,6 +93,7 @@ flutter:
     - assets/img/premios/cafecitos/
     - assets/img/premios/conveniencia/
     - assets/img/premios/deportes-ejercicio/
+    - assets/img/premios/farmacias/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
