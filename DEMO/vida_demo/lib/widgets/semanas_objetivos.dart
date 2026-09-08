@@ -1,386 +1,134 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:getwidget/getwidget.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:flutter/services.dart';
+
 import '../datos/modelos.dart';
+import '../screens/camino_semanas_screen.dart';
 import '../theme.dart';
-import 'moneda_animada.dart';
+import 'tarjeta_semana.dart';
 
-/// Las semanas del mes, cada una plegable, con sus 3 objetivos adentro.
-///
-/// Una semana cerrada muestra lo que pasó; la que está en curso arranca
-/// abierta, porque es la única sobre la que el usuario todavía puede
-/// hacer algo; las futuras van cerradas y apagadas.
-///
-/// Un mes puede tener 5 semanas: acá se renderizan las que vengan, no se
-/// asume que sean cuatro.
+// ============================================================
+// "OBJETIVOS DE LA SEMANA" EN HOY.
+//
+// Es la tarjeta de la semana en curso y un enlace al camino completo. Y
+// nada más.
+//
+// Lo que había antes era un tallo dibujado: tres nodos, tres brotes que
+// crecían con el avance, y una curva pintada a mano. Se veía bien pero
+// no decía lo que hay que hacer — los objetivos no tenían el nombre a la
+// vista, y para leerlos había que tocar un brote y abrir un action
+// sheet. Un dato que cabe en la tarjeta no puede costar dos taps.
+//
+// El recorrido de las diez semanas tampoco vive acá: es material de
+// consulta y tiene su propia pantalla.
+// ============================================================
+
 class SemanasObjetivos extends StatelessWidget {
-  const SemanasObjetivos({super.key, required this.semanas});
+  const SemanasObjetivos({super.key, required this.objetivos});
 
-  final List<SemanaObjetivos> semanas;
+  final ObjetivosSemana objetivos;
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var i = 0; i < semanas.length; i++) ...[
-          _TarjetaSemana(semana: semanas[i]),
-          if (i != semanas.length - 1) ...[
-            const SizedBox(height: AppSpacing.dentro),
-          ],
-        ],
-      ],
-    );
-  }
-}
+  /// La semana sobre la que el usuario todavía puede hacer algo. Si ya
+  /// cerraron todas, la última.
+  PasoDelPrograma? get _paso {
+    final recorrido = objetivos.recorrido;
+    if (recorrido.isEmpty) return null;
 
-class _TarjetaSemana extends StatefulWidget {
-  const _TarjetaSemana({required this.semana});
-
-  final SemanaObjetivos semana;
-
-  @override
-  State<_TarjetaSemana> createState() => _TarjetaSemanaState();
-}
-
-class _TarjetaSemanaState extends State<_TarjetaSemana> {
-  late bool _abierta = widget.semana.estado == EstadoSemana.enCurso;
-
-  void _alternar() {
-    // Háptica en el momento causal: cuando se abre, no al terminar la
-    // animación.
-    HapticFeedback.selectionClick();
-    setState(() => _abierta = !_abierta);
+    for (final p in recorrido) {
+      if (p.semana.estado == EstadoSemana.enCurso) return p;
+    }
+    for (final p in recorrido.reversed) {
+      if (p.semana.estado == EstadoSemana.cerrada) return p;
+    }
+    return recorrido.first;
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.semana;
-    final enCurso = s.estado == EstadoSemana.enCurso;
-    final futura = s.estado == EstadoSemana.futura;
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: futura
-            ? AppColors.cardBorder.withValues(alpha: 0.25)
-            : AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          // El borde grueso marca la semana sobre la que todavía se puede
-          // hacer algo.
-          color: enCurso ? AppColors.accent : AppColors.cardBorder,
-          width: enCurso ? 2 : 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          _Cabecera(semana: s, abierta: _abierta, onTap: _alternar),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 240),
-            sizeCurve: Curves.easeOutCubic,
-            crossFadeState: _abierta
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: _Detalle(semana: s),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Cabecera extends StatelessWidget {
-  const _Cabecera({
-    required this.semana,
-    required this.abierta,
-    required this.onTap,
-  });
-
-  final SemanaObjetivos semana;
-  final bool abierta;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final futura = semana.estado == EstadoSemana.futura;
-    final cerrada = semana.estado == EstadoSemana.cerrada;
-
-    return GestureDetector(
-      // Toda la cabecera es tocable, no solo el chevron: es un blanco
-      // mucho más grande.
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.entre),
-        child: Row(
-          children: [
-            _Insignia(semana: semana),
-            const SizedBox(width: AppSpacing.dentro),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Semana ${semana.numero}',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: futura
-                          ? AppColors.textSecondary
-                          : AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    _resumen(semana),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Las monedas ya acuñadas de esa semana. Nunca puntos.
-            if (!futura && semana.monedasGanadas > 0) ...[
-              _ChipMonedas(cantidad: semana.monedasGanadas, apagado: cerrada),
-              const SizedBox(width: AppSpacing.dentro),
-            ],
-            AnimatedRotation(
-              turns: abierta ? 0.5 : 0,
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOutCubic,
-              child: const Icon(
-                Icons.keyboard_arrow_down,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// El renglón chico de abajo del título: qué pasó (o qué está pasando)
-  /// esa semana.
-  static String _resumen(SemanaObjetivos s) {
-    final total = s.objetivos.length;
-    return switch (s.estado) {
-      EstadoSemana.futura => 'Todavía no empieza',
-      // Cumplir los tres es lo único que sube de rango: se dice explícito
-      // para que la regla se aprenda mirando el historial.
-      EstadoSemana.cerrada =>
-        s.subioDeRango
-            ? '$total de $total · subiste de rango'
-            : '${s.cumplidos} de $total · no subiste de rango',
-      EstadoSemana.enCurso => '${s.cumplidos} de $total cumplidos',
-    };
-  }
-}
-
-/// El círculo de la izquierda. Carga el estado en el ícono, no solo en el
-/// color: así se distingue también en blanco y negro.
-class _Insignia extends StatelessWidget {
-  const _Insignia({required this.semana});
-
-  final SemanaObjetivos semana;
-
-  @override
-  Widget build(BuildContext context) {
-    final (fondo, icono, colorIcono) = switch (semana.estado) {
-      EstadoSemana.cerrada when semana.subioDeRango => (
-        AppColors.accent,
-        Icons.check_rounded,
-        Colors.white,
-      ),
-      EstadoSemana.cerrada => (
-        AppColors.cardBorder,
-        Icons.remove_rounded,
-        AppColors.textSecondary,
-      ),
-      EstadoSemana.enCurso => (
-        AppColors.accent,
-        Icons.play_arrow_rounded,
-        Colors.white,
-      ),
-      EstadoSemana.futura => (
-        AppColors.cardBorder.withValues(alpha: 0.7),
-        Icons.lock_outline_rounded,
-        AppColors.textSecondary,
-      ),
-    };
-
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(color: fondo, shape: BoxShape.circle),
-      child: Icon(icono, size: 19, color: colorIcono),
-    );
-  }
-}
-
-class _ChipMonedas extends StatelessWidget {
-  const _ChipMonedas({required this.cantidad, required this.apagado});
-
-  final int cantidad;
-  final bool apagado;
-
-  @override
-  Widget build(BuildContext context) {
-    // ShadBadge: la pastilla del sistema de shadcn, con el naranja de
-    // marca en vez de su color por defecto.
-    return ShadBadge.raw(
-      variant: ShadBadgeVariant.secondary,
-      backgroundColor: AppColors.accentSecondary.withValues(
-        alpha: apagado ? 0.12 : 0.2,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MonedaAnimada(size: 18, apagado: apagado),
-          const SizedBox(width: 3),
-          Text(
-            '$cantidad',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Detalle extends StatelessWidget {
-  const _Detalle({required this.semana});
-
-  final SemanaObjetivos semana;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.entre,
-        0,
-        AppSpacing.entre,
-        AppSpacing.entre,
-      ),
-      child: Column(
-        children: [
-          const Divider(height: 1, color: AppColors.cardBorder),
-          const SizedBox(height: AppSpacing.entre),
-          for (var i = 0; i < semana.objetivos.length; i++) ...[
-            _FilaObjetivo(
-              objetivo: semana.objetivos[i],
-              apagado: semana.estado == EstadoSemana.futura,
-            ),
-            if (i != semana.objetivos.length - 1)
-              const SizedBox(height: AppSpacing.entre),
-          ],
-          const SizedBox(height: AppSpacing.entre),
-          Text(
-            // La regla, dicha donde se aplica.
-            'Los tres cumplidos suben un rango. Menos de tres, baja uno.',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FilaObjetivo extends StatelessWidget {
-  const _FilaObjetivo({required this.objetivo, required this.apagado});
-
-  final ObjetivoSemanal objetivo;
-  final bool apagado;
-
-  @override
-  Widget build(BuildContext context) {
-    final avance = objetivo.avance;
-    final hecho = objetivo.completo;
+    final paso = _paso;
+    if (paso == null) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(
-              hecho
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              size: 17,
-              color: hecho ? AppColors.accent : AppColors.textSecondary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                objetivo.nombre,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: apagado
-                      ? AppColors.textSecondary
-                      : AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            _ChipMonedas(cantidad: objetivo.monedas, apagado: apagado || hecho),
-          ],
+        // ARRIBA de la tarjeta, no abajo. Debajo quedaba después de la
+        // franja azul del pie y se leía como un pie de página más: nadie
+        // llegaba hasta ahí. Acá es lo primero que se ve de la sección y
+        // funciona como entrada al recorrido.
+        _BotonRecorrido(
+          totalSemanas: objetivos.semanas.length,
+          onPressed: () {
+            HapticFeedback.selectionClick();
+            abrirCaminoDeSemanas(context, objetivos);
+          },
         ),
-        const SizedBox(height: 6),
-        // GFProgressBar en vez de LinearProgressIndicator: anima el
-        // llenado sola cuando el avance cambia, en vez de saltar.
-        GFProgressBar(
-          // Sin meta definida no hay avance que mostrar: la barra queda
-          // vacía en vez de inventar una posición.
-          percentage: avance ?? 0,
-          lineHeight: 6,
-          margin: EdgeInsets.zero,
-          animation: true,
-          animationDuration: 500,
-          backgroundColor: AppColors.azulBruma,
-          // Cumplido va en azul entero; en curso, en azul medio. La
-          // diferencia la hace la luminosidad, no un color distinto.
-          progressBarColor: hecho ? AppColors.accent : AppColors.azulMedio,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          // La meta en número todavía no está definida en ninguna fuente,
-          // así que se muestra el avance crudo y nunca un número
-          // inventado. Cuando el servidor sí reporta qué tan lleno va, se
-          // usa ese porcentaje en vez de repetir que falta la meta.
-          _pie(objetivo),
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+        const SizedBox(height: AppSpacing.dentro),
+        TarjetaSemana(
+          paso: paso,
+          rangoActual: objetivos.rangoActual,
+          totalSemanas: objetivos.semanas.length,
+          numeroSiguiente: objetivos.numeroDespuesDe(paso.semana.numero),
         ),
       ],
     );
   }
+}
 
-  /// El renglón chico debajo de la barra.
-  static String _pie(ObjetivoSemanal o) {
-    final base = '${_miles(o.progreso)} ${o.unidad}';
-    if (o.completo) return '$base · completado';
-    // Con meta definida se dice contra qué se mide.
-    final meta = o.meta;
-    if (meta != null) {
-      return '${_miles(o.progreso)} de ${_miles(meta)} ${o.unidad}';
-    }
-    // Sin meta pero con avance reportado por el servidor: el porcentaje
-    // es cierto aunque el número de la meta no esté documentado acá.
-    final avance = o.avance;
-    if (avance != null && avance > 0) {
-      return '$base · ${(avance * 100).round()}% del objetivo';
-    }
-    return '$base · meta pendiente de definir';
+/// La entrada al camino de las semanas.
+///
+/// Es una barra con fondo y no un texto azul suelto: un enlace de texto
+/// al lado de una tarjeta blanca con borde se pierde, y este es el único
+/// camino hacia el recorrido completo. Con relleno propio se lee como
+/// algo en lo que se puede tocar antes de leer qué dice.
+class _BotonRecorrido extends StatelessWidget {
+  const _BotonRecorrido({required this.totalSemanas, required this.onPressed});
+
+  final int totalSemanas;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    // CupertinoButton y no un GestureDetector: trae gratis el atenuado al
+    // presionar que un usuario de iPhone ya conoce.
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(
+          // azulBruma: es el relleno de "seleccionable" de la app. No va
+          // en `accent` entero porque no es la acción principal de la
+          // pantalla — la principal es cumplir los objetivos de abajo.
+          color: AppColors.azulBruma,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.route_rounded, size: 19, color: AppColors.accent),
+            const SizedBox(width: 10),
+            // Expanded: con el tamaño de letra de iOS al máximo este
+            // renglón ya no entra de una línea. Así envuelve en vez de
+            // empujar la fila fuera del borde — hay un test a 1.6x.
+            Expanded(
+              child: Text(
+                'Ver las $totalSemanas semanas',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              size: 15,
+              color: AppColors.accent,
+            ),
+          ],
+        ),
+      ),
+    );
   }
-
-  static String _miles(int v) => v.toString().replaceAllMapped(
-    RegExp(r'(\d)(?=(\d{3})+$)'),
-    (m) => '${m[1]},',
-  );
 }

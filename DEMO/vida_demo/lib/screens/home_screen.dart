@@ -13,7 +13,6 @@ import '../widgets/escalera_cashback.dart';
 import '../widgets/chip_monedas.dart';
 import '../widgets/hoja_monedas.dart';
 import '../widgets/moneda_animada.dart';
-import '../widgets/panel_objetivo_semana.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/semanas_objetivos.dart';
 import '../widgets/stepper_etapas.dart';
@@ -40,7 +39,10 @@ int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 ObjetivosSemana get _semana => Datos.i.resumen.objetivosSemana;
 
 int get monedasEsteMes => Datos.i.resumen.monedas.ganadasEsteMes;
-int get techoMonedasMensual => Datos.i.resumen.monedas.techoMensual;
+
+/// Null mientras el techo mensual de monedas no esté definido. Ninguna
+/// pantalla lo muestra todavía.
+int? get techoMonedasMensual => Datos.i.resumen.monedas.techoMensual;
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -182,9 +184,11 @@ class HomeScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // El anillo y el objetivo de la semana comparten el mismo lugar:
-        // se pasa de uno al otro deslizando.
-        const _CarruselAnillo(),
+        // Solo el anillo. Antes esto era un carrusel de dos páginas y la
+        // segunda mostraba el rango otra vez, desde el modelo viejo
+        // (`EstadoRetos`, con techo 4). Home terminaba diciendo el rango
+        // dos veces, con dos techos distintos, en la misma pantalla.
+        Center(child: _StepsRing(steps: pasos)),
         // Pegado al anillo: el tiempo restante es un pie del anillo, no
         // un elemento aparte.
         const SizedBox(height: AppSpacing.dentro),
@@ -484,7 +488,7 @@ class HomeScreen extends StatelessWidget {
           accion: _SaldoMonedasChip(monedas: saldoMonedas),
         ),
         const SizedBox(height: AppSpacing.grupo),
-        SemanasObjetivos(semanas: semana.semanas),
+        SemanasObjetivos(objetivos: semana),
       ],
     );
   }
@@ -887,59 +891,6 @@ class _MontoRevelado extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// El anillo de pasos y el objetivo de la semana comparten el mismo lugar
-/// de la pantalla: se pasa de uno al otro deslizando.
-///
-/// Es un [PageView] a propósito y no un gesto propio: trae gratis el
-/// arrastre 1:1, el traspaso de velocidad al soltar, la proyección del
-/// impulso y poder agarrarlo a mitad de camino para devolverlo.
-class _CarruselAnillo extends StatefulWidget {
-  const _CarruselAnillo();
-
-  @override
-  State<_CarruselAnillo> createState() => _CarruselAnilloState();
-}
-
-class _CarruselAnilloState extends State<_CarruselAnillo> {
-  final _controlador = PageController();
-  int _pagina = 0;
-
-  static const double _lado = 260;
-
-  @override
-  void dispose() {
-    _controlador.dispose();
-    super.dispose();
-  }
-
-  void _alCambiar(int pagina) {
-    if (pagina == _pagina) return;
-    // Háptica en el momento causal: cuando la página cambia.
-    HapticFeedback.selectionClick();
-    setState(() => _pagina = pagina);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: _lado,
-      child: PageView(
-        controller: _controlador,
-        onPageChanged: _alCambiar,
-        children: [
-          Center(child: _StepsRing(steps: HomeScreen.pasos)),
-          Center(
-            child: PanelObjetivoSemana(
-              retos: Datos.i.resumen.retos,
-              size: _lado,
-            ),
           ),
         ],
       ),
