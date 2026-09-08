@@ -4,24 +4,65 @@ import 'package:vida_demo/reglas_rango.dart';
 /// Tres objetivos con dificultad definida, para poder evaluar semanas.
 /// Los objetivos reales todavia no tienen tabla de dificultad: estos son
 /// de test, no del producto.
+///
+/// La tabla cubre los ONCE rangos (0 a 10). Antes llegaba solo al 4, y al
+/// ampliarse la escalera las semanas que caian fuera dejaban de poder
+/// evaluarse: el motor congelaba el rango en vez de moverlo.
 const _objetivos = [
   DefinicionObjetivo(
     id: 'pasos_semana',
     nombre: 'Pasos de la semana',
     unidad: 'pasos',
-    metaPorRango: {1: 30000, 2: 40000, 3: 50000, 4: 60000},
+    metaPorRango: {
+      0: 20000,
+      1: 30000,
+      2: 40000,
+      3: 50000,
+      4: 60000,
+      5: 70000,
+      6: 80000,
+      7: 90000,
+      8: 100000,
+      9: 110000,
+      10: 120000,
+    },
   ),
   DefinicionObjetivo(
     id: 'intensidad_semana',
     nombre: 'Minutos de intensidad',
     unidad: 'minutos',
-    metaPorRango: {1: 60, 2: 90, 3: 120, 4: 150},
+    metaPorRango: {
+      0: 30,
+      1: 60,
+      2: 90,
+      3: 120,
+      4: 150,
+      5: 180,
+      6: 210,
+      7: 240,
+      8: 270,
+      9: 300,
+      10: 330,
+    },
   ),
   DefinicionObjetivo(
     id: 'dias_ritmo_alto',
     nombre: 'Dias con ritmo cardiaco alto',
     unidad: 'dias',
-    metaPorRango: {1: 2, 2: 3, 3: 4, 4: 5},
+    // Topa en 7: una semana no tiene mas dias.
+    metaPorRango: {
+      0: 1,
+      1: 2,
+      2: 3,
+      3: 4,
+      4: 5,
+      5: 5,
+      6: 6,
+      7: 6,
+      8: 7,
+      9: 7,
+      10: 7,
+    },
   ),
 ];
 
@@ -35,18 +76,32 @@ List<AvanceObjetivo> _avances({int pasos = 0, int minutos = 0, int dias = 0}) =>
 ResultadoSemana _cerrar({
   required int rango,
   required List<AvanceObjetivo> avances,
-  DateTime? cierre,
-  DateTime? cierrePrevio,
-}) => evaluarSemana(
-  rangoPrevio: rango,
-  objetivos: _objetivos,
-  avances: avances,
-  // Domingo 18 de enero de 2026, dentro del mismo mes que el previo.
-  cierre: cierre ?? DateTime(2026, 1, 18),
-  cierrePrevio: cierrePrevio ?? DateTime(2026, 1, 11),
-);
+}) =>
+    evaluarSemana(rangoPrevio: rango, objetivos: _objetivos, avances: avances);
+
+/// Avances que superan la meta de CUALQUIER rango de la tabla de arriba.
+List<AvanceObjetivo> _semanaPerfecta() =>
+    _avances(pasos: 200000, minutos: 400, dias: 7);
 
 void main() {
+  group('El programa y la escalera son del mismo largo', () {
+    test('hay una semana por rango', () {
+      // Es la regla que hace legible todo lo demas: una semana perfecta
+      // vale un escalon, asi que cumplir todas las semanas llega justo al
+      // techo. Si estos dos numeros se separan, el tallo de Hoy dibuja un
+      // recorrido que la escalera no puede pagar.
+      expect(semanasDelPrograma, rangoMaximo);
+    });
+
+    test('cumplir todas las semanas llega exactamente al techo', () {
+      var rango = rangoMinimo;
+      for (var semana = 0; semana < semanasDelPrograma; semana++) {
+        rango = _cerrar(rango: rango, avances: _semanaPerfecta()).rangoNuevo;
+      }
+      expect(rango, rangoMaximo);
+    });
+  });
+
   group('Movimiento del rango', () {
     test('cumplir los TRES objetivos sube un rango', () {
       final r = _cerrar(
@@ -58,21 +113,52 @@ void main() {
       expect(r.rangoNuevo, 3);
     });
 
-    test('cumplir DOS gana monedas pero no sube el rango', () {
+    test('cumplir DOS no sube el rango ni paga monedas', () {
       final r = _cerrar(
         rango: 2,
         avances: _avances(pasos: 40000, minutos: 90, dias: 0),
       );
       expect(r.objetivosCumplidos, 2);
-      expect(r.movimiento, isNot(MovimientoRango.sube));
-      expect(r.ganaMonedas, isTrue);
+      // Dos de tres BAJA, no se queda: la regla no tiene punto medio.
+      expect(r.movimiento, MovimientoRango.baja);
+      expect(r.rangoNuevo, 1);
+      expect(r.monedasGanadas, 0);
+      expect(r.ganaMonedas, isFalse);
     });
 
-    test('cumplir UNO gana monedas pero no sube el rango', () {
+    test('cumplir UNO no sube el rango ni paga monedas', () {
       final r = _cerrar(rango: 2, avances: _avances(pasos: 40000));
       expect(r.objetivosCumplidos, 1);
-      expect(r.movimiento, isNot(MovimientoRango.sube));
-      expect(r.ganaMonedas, isTrue);
+      expect(r.movimiento, MovimientoRango.baja);
+      expect(r.monedasGanadas, 0);
+    });
+
+    test('cumplir dos vale lo MISMO que cumplir cero', () {
+      // Es la regla que se dejo de contar cuando existia el XP: con XP,
+      // dos objetivos dejaban un sobrante que se arrastraba. Ahora no
+      // queda nada. Si alguien vuelve a meter credito parcial, esto se
+      // pone rojo.
+      final dos = _cerrar(
+        rango: 5,
+        avances: _avances(pasos: 100000, minutos: 300, dias: 0),
+      );
+      final cero = _cerrar(rango: 5, avances: _avances());
+
+      expect(dos.rangoNuevo, cero.rangoNuevo);
+      expect(dos.monedasGanadas, cero.monedasGanadas);
+      expect(dos.movimiento, cero.movimiento);
+    });
+
+    test('subir de rango paga 5 monedas por escalon alcanzado', () {
+      final r = _cerrar(
+        rango: 2,
+        avances: _avances(pasos: 50000, minutos: 120, dias: 5),
+      );
+      expect(r.movimiento, MovimientoRango.sube);
+      expect(r.rangoNuevo, 3);
+      // Llegar al rango 3 paga 15: el monto sale del rango ALCANZADO,
+      // no del que se traia.
+      expect(r.monedasGanadas, 15);
     });
 
     test('no cumplir los tres BAJA un rango', () {
@@ -92,10 +178,7 @@ void main() {
     });
 
     test('el movimiento es de UN escalon como maximo, para arriba', () {
-      final r = _cerrar(
-        rango: 1,
-        avances: _avances(pasos: 999999, minutos: 9999, dias: 7),
-      );
+      final r = _cerrar(rango: 1, avances: _semanaPerfecta());
       // Arrasar con los objetivos no salta dos rangos.
       expect(r.rangoNuevo, 2);
     });
@@ -107,25 +190,60 @@ void main() {
   });
 
   group('Piso y techo', () {
-    test('desde el rango 1 no se baja mas', () {
+    test('el piso es 0 y el techo es 10', () {
+      expect(rangoMinimo, 0);
+      expect(rangoMaximo, 10);
+    });
+
+    test('desde el piso no se baja mas', () {
       final r = _cerrar(rango: rangoMinimo, avances: _avances());
       expect(r.rangoNuevo, rangoMinimo);
       expect(r.movimiento, MovimientoRango.seQueda);
     });
 
-    test('desde el rango 4 no se sube mas', () {
-      final r = _cerrar(
-        rango: rangoMaximo,
-        avances: _avances(pasos: 60000, minutos: 150, dias: 5),
-      );
+    test('desde el techo no se sube mas', () {
+      final r = _cerrar(rango: rangoMaximo, avances: _semanaPerfecta());
       expect(r.rangoNuevo, rangoMaximo);
       expect(r.movimiento, MovimientoRango.seQueda);
     });
   });
 
-  group('A que mes pertenece una semana', () {
+  group('El rango NO se reinicia', () {
+    // El reinicio mensual existio y se fue: era incompatible con un
+    // programa de diez semanas corridas. Diez semanas cruzan dos veces de
+    // mes, asi que con el reinicio nadie pasaba del rango 4 y la escalera
+    // de 10 era inalcanzable por construccion.
+    //
+    // Estos tests fijan que no vuelva por la puerta de atras.
+
+    test('evaluar una semana no depende de ninguna fecha', () {
+      // Si el motor volviera a mirar el calendario, esta firma no
+      // compilaria. El test es la firma misma: `evaluarSemana` no recibe
+      // fechas, y por eso el mismo avance da siempre el mismo resultado.
+      final unaVez = _cerrar(rango: 3, avances: _semanaPerfecta());
+      final otraVez = _cerrar(rango: 3, avances: _semanaPerfecta());
+      expect(unaVez.rangoNuevo, otraVez.rangoNuevo);
+      expect(unaVez.monedasGanadas, otraVez.monedasGanadas);
+    });
+
+    test('una racha larga no se corta sola a mitad del programa', () {
+      // Con el reinicio mensual, el rango caia al piso alrededor de la
+      // quinta semana. Acá sube sin interrupciones.
+      var rango = rangoMinimo;
+      final recorrido = <int>[];
+      for (var semana = 0; semana < semanasDelPrograma; semana++) {
+        rango = _cerrar(rango: rango, avances: _semanaPerfecta()).rangoNuevo;
+        recorrido.add(rango);
+      }
+      expect(recorrido, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    });
+  });
+
+  group('El ciclo de la semana sigue siendo lunes a domingo', () {
     // Semana del lunes 26 de enero al domingo 1 de febrero de 2026:
-    // arranca en enero y cierra en febrero.
+    // arranca en enero y cierra en febrero. Que una semana se parta entre
+    // dos meses ya no cambia nada del rango, pero el ciclo sigue yendo de
+    // lunes 00:00 a domingo 23:59 (hora de Guatemala).
     final lunesEnero = DateTime(2026, 1, 26);
     final domingoFebrero = DateTime(2026, 2, 1);
 
@@ -135,30 +253,20 @@ void main() {
       expect(domingoDeLaSemana(lunesEnero).month, DateTime.february);
     });
 
-    test('una semana partida cae en UN solo mes, no en los dos', () {
-      // Cualquier dia de la semana da el mismo mes: es la propiedad que
-      // impide que una semana cuente doble.
-      final meses = <DateTime>{
+    test('el domingo se evalua a las 23:59:59', () {
+      final cierre = domingoDeLaSemana(lunesEnero);
+      expect(cierre.hour, 23);
+      expect(cierre.minute, 59);
+      expect(cierre.second, 59);
+    });
+
+    test('cualquier dia de la semana cae en el mismo lunes', () {
+      final lunes = <DateTime>{
         for (var d = 0; d < 7; d++)
-          mesDeLaSemana(lunesEnero.add(Duration(days: d))),
+          lunesDeLaSemana(lunesEnero.add(Duration(days: d))),
       };
-      expect(meses.length, 1);
-    });
-
-    test('con la regla del DOMINGO, la semana partida es de febrero', () {
-      expect(
-        mesDeLaSemana(lunesEnero, regla: ReglaMesDeLaSemana.porDomingo),
-        DateTime(2026, 2),
-      );
-    });
-
-    test('con la regla del LUNES, la misma semana seria de enero', () {
-      // El motor soporta las dos reglas: cambiar de una a otra es cambiar
-      // `reglaMesVigente`, no reescribir nada.
-      expect(
-        mesDeLaSemana(lunesEnero, regla: ReglaMesDeLaSemana.porLunes),
-        DateTime(2026, 1),
-      );
+      expect(lunes.length, 1);
+      expect(lunes.single, lunesEnero);
     });
 
     test('un mes con cinco lunes no rompe nada', () {
@@ -174,44 +282,6 @@ void main() {
     });
   });
 
-  group('Reinicio al empezar mes nuevo', () {
-    test('el rango vuelve al piso en la primera semana del mes', () {
-      // Cierre del domingo 1 de febrero contra el domingo 25 de enero.
-      final r = _cerrar(
-        rango: 4,
-        avances: _avances(),
-        cierre: DateTime(2026, 2, 1),
-        cierrePrevio: DateTime(2026, 1, 25),
-      );
-      expect(r.reinicioPorMesNuevo, isTrue);
-      // Vuelve al piso, y desde el piso ya no puede bajar mas.
-      expect(r.rangoNuevo, rangoMinimo);
-    });
-
-    test('dos semanas del mismo mes no reinician', () {
-      final r = _cerrar(
-        rango: 3,
-        avances: _avances(pasos: 50000, minutos: 120, dias: 4),
-        cierre: DateTime(2026, 1, 18),
-        cierrePrevio: DateTime(2026, 1, 11),
-      );
-      expect(r.reinicioPorMesNuevo, isFalse);
-      expect(r.rangoNuevo, 4);
-    });
-
-    test('tras reiniciar, cumplir los tres sube desde el piso', () {
-      final r = _cerrar(
-        rango: 4,
-        avances: _avances(pasos: 30000, minutos: 60, dias: 2),
-        cierre: DateTime(2026, 2, 1),
-        cierrePrevio: DateTime(2026, 1, 25),
-      );
-      // Se evalua contra las metas del rango 1, no contra las del 4.
-      expect(r.reinicioPorMesNuevo, isTrue);
-      expect(r.rangoNuevo, rangoMinimo + 1);
-    });
-  });
-
   group('Objetivos sin dificultad definida', () {
     test('no se evalua, el rango se congela y no paga monedas', () {
       // Los tres objetivos reales del producto todavia no tienen tabla de
@@ -219,9 +289,7 @@ void main() {
       final r = evaluarSemana(
         rangoPrevio: 3,
         objetivos: objetivosProvisionales,
-        avances: _avances(pasos: 999999, minutos: 9999, dias: 7),
-        cierre: DateTime(2026, 1, 18),
-        cierrePrevio: DateTime(2026, 1, 11),
+        avances: _semanaPerfecta(),
       );
       expect(r.evaluable, isFalse);
       expect(r.rangoNuevo, 3);
@@ -261,8 +329,6 @@ void main() {
           AvanceObjetivo(id: 'dias_activos', logrado: 5),
           AvanceObjetivo(id: 'sesiones_largas', logrado: 2),
         ],
-        cierre: DateTime(2026, 1, 18),
-        cierrePrevio: DateTime(2026, 1, 11),
       );
       expect(r.evaluable, isTrue);
       expect(r.objetivosCumplidos, 3);

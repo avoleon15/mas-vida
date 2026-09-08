@@ -2,34 +2,80 @@
 ///
 /// Reglas cerradas que implementa este archivo:
 ///
+///   - El programa dura [semanasDelPrograma] semanas y la escalera tiene
+///     [rangoMaximo] rangos: una semana, un rango.
 ///   - Los objetivos son SEMANALES. No existen objetivos mensuales.
-///   - Hay 3 objetivos por semana, y los tres son de la MISMA semana.
+///   - Hay [objetivosPorSemana] objetivos por semana, y los tres son de la
+///     MISMA semana.
 ///   - La semana va de lunes 00:00 a domingo 23:59 (hora de Guatemala) y
 ///     se evalúa UNA sola vez, el domingo 23:59.
-///   - Cumplir 1 o 2 objetivos: gana MONEDAS, el rango NO sube.
-///   - Cumplir los 3: sube un rango.
-///   - No cumplir los 3: baja un rango.
+///   - Cumplir los TRES sube un rango. No cumplir los tres baja uno.
+///   - SUBIR de rango es lo único que acuña MONEDAS, según
+///     [monedasPorSubirA].
 ///   - Piso [rangoMinimo], techo [rangoMaximo].
 ///   - Máximo UN movimiento por semana, para arriba o para abajo.
-///   - Al empezar un mes nuevo, todos vuelven al piso.
 ///
 /// REGLA DURA — el rango paga MONEDAS, nunca PUNTOS. Los puntos son los
 /// que mueven el nivel de cashback anual: si el rango diera puntos,
-/// estaría moviendo el cashback. Las dos monedas del producto no se
-/// mezclan nunca. Por eso en este archivo no aparece la palabra "puntos"
-/// ni se importa `reglas_puntos.dart`.
+/// estaría moviendo el cashback. Las monedas del producto no se mezclan
+/// nunca con los puntos. Por eso en este archivo no aparece la palabra
+/// "puntos" ni se importa `reglas_puntos.dart`.
+///
+/// ------------------------------------------------------------
+/// DOS REGLAS QUE VIVÍAN ACÁ Y SE FUERON
+/// ------------------------------------------------------------
+///
+/// **El XP.** Había un medidor de XP (100 por rango, repartido 40/35/25
+/// entre los tres objetivos) que en teoría llenaba el rango. No decidía
+/// nada: el movimiento siempre salió de `cumplidos == 3`, y el XP era
+/// interfaz encima de tres checks. Peor: la barra de Home arrastraba el
+/// sobrante de una semana a la siguiente ("dos semanas a medias valen un
+/// rango"), y el motor nunca hizo eso — dos semanas a medias bajan el
+/// rango dos veces. Eran dos reglas contradictorias y la pantalla mostraba
+/// la que el motor no aplicaba. No volver a introducirlo.
+///
+/// **El reinicio mensual.** El rango volvía al piso al empezar mes nuevo.
+/// Es incompatible con un programa de diez semanas corridas: diez semanas
+/// cruzan dos veces de mes, así que nadie habría pasado del rango 4 y la
+/// escalera de 10 era inalcanzable por construcción. El programa se
+/// recorre entero de punta a punta; no se reinicia a mitad de camino.
 library;
 
 // ============================================================
 // La escalera de rango.
 // ============================================================
 
-/// Piso de la escalera. De acá no se baja, por más semanas seguidas que
-/// se fallen.
-const int rangoMinimo = 1;
+/// Cuántas semanas dura el programa.
+///
+/// Es el mismo número que [rangoMaximo] a propósito: una semana perfecta
+/// vale exactamente un escalón, así que quien cumple todas las semanas
+/// llega justo al techo. Hay un test que fija esa igualdad.
+const int semanasDelPrograma = 10;
+
+/// Piso de la escalera. Todos arrancan acá y de acá no se baja, por más
+/// semanas seguidas que se fallen.
+///
+/// Es 0 y no 1: el rango 0 es "todavía no subiste ninguna vez", y así
+/// subir al 1 ya es un logro que paga.
+const int rangoMinimo = 0;
 
 /// Techo de la escalera.
-const int rangoMaximo = 4;
+const int rangoMaximo = 10;
+
+/// Cuántas MONEDAS acuña subir a [rango].
+///
+/// Cinco por escalón: subir al 1 paga 5, al 2 paga 10, al 3 paga 15, y
+/// así hasta el 10, que paga 50. Recorrer la escalera entera de una
+/// punta a la otra da 275 monedas.
+///
+/// Bajar de rango NO cobra nada: el castigo es tener que volver a
+/// subirlo, no perder monedas ya acuñadas.
+///
+/// Devuelve 0 para el rango 0, que es el piso y no se "sube".
+int monedasPorSubirA(int rango) {
+  if (rango <= rangoMinimo || rango > rangoMaximo) return 0;
+  return rango * 5;
+}
 
 /// Cuántos objetivos hay por semana.
 const int objetivosPorSemana = 3;
@@ -125,28 +171,24 @@ class AvanceObjetivo {
 }
 
 // ============================================================
-// A qué mes pertenece una semana.
+// El calendario de la semana.
 // ============================================================
 
-/// Cómo se decide a qué mes pertenece una semana partida entre dos meses.
-///
-/// Existe porque los meses NO tienen 4 semanas exactas: varios tienen 5
-/// lunes, y una semana puede arrancar en enero y cerrar en febrero.
-enum ReglaMesDeLaSemana {
-  /// La semana pertenece al mes de su DOMINGO (el día en que se evalúa).
-  porDomingo,
+/// Guatemala está en UTC−6 y no cambia de hora en todo el año.
+const Duration desfaseDeGuatemala = Duration(hours: 6);
 
-  /// La semana pertenece al mes de su LUNES (el día en que arranca).
-  porLunes,
-}
-
-/// Regla vigente.
+/// La misma fecha, leída como reloj de pared en Guatemala.
 ///
-/// [PENDIENTE DE CONFIRMAR] Daniel propuso [ReglaMesDeLaSemana.porDomingo]
-/// con el argumento de que el domingo es cuando se evalúa. El motor
-/// soporta las dos y hay tests para ambas, así que cambiar de una a la
-/// otra es cambiar esta única línea.
-const ReglaMesDeLaSemana reglaMesVigente = ReglaMesDeLaSemana.porDomingo;
+/// Hace falta porque `DateTime.parse` de una fecha con offset —como las
+/// que manda el backend, `2026-09-20T23:59:59-06:00`— devuelve un
+/// DateTime en UTC. Preguntarle el día directamente daba 21, no 20: el
+/// domingo 23:59 de Guatemala ya es lunes en Londres.
+///
+/// No se usa `toLocal()` a propósito: eso daría la hora del teléfono, y
+/// el ciclo de la semana está fijado en hora de Guatemala para todos los
+/// usuarios. Alguien de viaje no tiene que ver otra fecha de cierre.
+DateTime enHoraDeGuatemala(DateTime fecha) =>
+    fecha.toUtc().subtract(desfaseDeGuatemala);
 
 /// Lunes 00:00 de la semana que contiene a [dia].
 DateTime lunesDeLaSemana(DateTime dia) {
@@ -164,29 +206,6 @@ DateTime domingoDeLaSemana(DateTime dia) {
   return DateTime(domingo.year, domingo.month, domingo.day, 23, 59, 59);
 }
 
-/// A qué mes pertenece la semana que contiene a [dia].
-///
-/// Devuelve el primer día de ese mes, para poder comparar dos semanas sin
-/// preocuparse por el año.
-///
-/// Una semana pertenece a UN solo mes, nunca a los dos: eso es justamente
-/// lo que resuelve [reglaMesVigente].
-DateTime mesDeLaSemana(DateTime dia, {ReglaMesDeLaSemana? regla}) {
-  final cual = regla ?? reglaMesVigente;
-  final ancla = switch (cual) {
-    ReglaMesDeLaSemana.porDomingo => domingoDeLaSemana(dia),
-    ReglaMesDeLaSemana.porLunes => lunesDeLaSemana(dia),
-  };
-  return DateTime(ancla.year, ancla.month);
-}
-
-/// True si la semana de [dia] cae en un mes distinto al de [semanaPrevia].
-///
-/// Es lo que dispara el reinicio del rango: al empezar un mes nuevo,
-/// todos vuelven al piso.
-bool empiezaMesNuevo(DateTime dia, DateTime semanaPrevia) =>
-    mesDeLaSemana(dia) != mesDeLaSemana(semanaPrevia);
-
 // ============================================================
 // Evaluación de la semana.
 // ============================================================
@@ -201,9 +220,8 @@ class ResultadoSemana {
     required this.rangoNuevo,
     required this.movimiento,
     required this.objetivosCumplidos,
-    required this.ganaMonedas,
+    required this.monedasGanadas,
     required this.evaluable,
-    required this.reinicioPorMesNuevo,
   });
 
   final int rangoPrevio;
@@ -213,40 +231,37 @@ class ResultadoSemana {
   /// Cuántos de los tres objetivos cumplió.
   final int objetivosCumplidos;
 
-  /// Cumplir 1 o 2 objetivos acuña MONEDAS (nunca puntos). Cumplir los 3
-  /// también, además de subir el rango.
-  final bool ganaMonedas;
+  /// MONEDAS acuñadas esta semana (nunca puntos).
+  ///
+  /// Salen ÚNICAMENTE de subir de rango. Cumplir uno o dos objetivos no
+  /// paga nada: el avance de la semana no se guarda ni se arrastra.
+  final int monedasGanadas;
+
+  /// Si esta semana acuñó monedas. Atajo para no repetir la comparación.
+  bool get ganaMonedas => monedasGanadas > 0;
 
   /// False cuando algún objetivo no tiene meta definida para el rango en
   /// curso. En ese caso el rango NO se mueve: es preferible congelarlo a
   /// castigar o premiar a alguien contra un número que no existe.
   final bool evaluable;
-
-  /// True cuando la semana arranca un mes nuevo y el rango volvió al piso.
-  final bool reinicioPorMesNuevo;
 }
 
 /// Cierra una semana y devuelve el rango resultante.
 ///
-/// [cierre] es el domingo que se está evaluando; [cierrePrevio], el de la
-/// semana anterior (null si es la primera semana del usuario).
-///
 /// El movimiento es de UN escalón como máximo, para arriba o para abajo:
 /// no importa por cuánto se pasó ni por cuánto falló.
+///
+/// No recibe fechas: desde que murió el reinicio mensual, el resultado no
+/// depende de en qué semana del calendario estemos. Cuándo se evalúa lo
+/// dice [domingoDeLaSemana]; qué pasa al evaluar lo dice esta función.
 ResultadoSemana evaluarSemana({
   required int rangoPrevio,
   required List<DefinicionObjetivo> objetivos,
   required List<AvanceObjetivo> avances,
-  required DateTime cierre,
-  DateTime? cierrePrevio,
 }) {
-  // 1. El mes nuevo manda sobre todo lo demás: primero se vuelve al piso
-  //    y recién desde ahí se evalúa la semana.
-  final reinicia =
-      cierrePrevio != null && empiezaMesNuevo(cierre, cierrePrevio);
-  final base = reinicia ? rangoMinimo : rangoPrevio;
+  final base = rangoPrevio.clamp(rangoMinimo, rangoMaximo);
 
-  // 2. ¿Se puede evaluar? Un objetivo sin meta para este rango no se
+  // 1. ¿Se puede evaluar? Un objetivo sin meta para este rango no se
   //    puede dar por cumplido ni por fallado.
   final porId = {for (final a in avances) a.id: a.logrado};
   var cumplidos = 0;
@@ -267,15 +282,15 @@ ResultadoSemana evaluarSemana({
       rangoNuevo: base,
       movimiento: MovimientoRango.seQueda,
       objetivosCumplidos: cumplidos,
-      // Sin poder evaluar tampoco se acuñan monedas: se pagaría por algo
-      // que no se sabe si ocurrió.
-      ganaMonedas: false,
+      // Sin poder evaluar no se acredita nada: se estaría pagando por
+      // algo que no se sabe si ocurrió.
+      monedasGanadas: 0,
       evaluable: false,
-      reinicioPorMesNuevo: reinicia,
     );
   }
 
-  // 3. Los tres: sube. Menos de tres: baja. Uno o dos igual pagan monedas.
+  // 2. Los tres: sube. Menos de tres: baja. No hay estado intermedio, y
+  //    por eso no hay nada que arrastrar a la semana siguiente.
   final todos = cumplidos == objetivosPorSemana;
   final rangoNuevo = todos
       ? (base + 1).clamp(rangoMinimo, rangoMaximo)
@@ -292,8 +307,11 @@ ResultadoSemana evaluarSemana({
     rangoNuevo: rangoNuevo,
     movimiento: movimiento,
     objetivosCumplidos: cumplidos,
-    ganaMonedas: cumplidos > 0,
+    // Las monedas las paga SOLO subir de rango, y se calculan sobre el
+    // rango al que se llegó. Quedarse o bajar no acuña nada.
+    monedasGanadas: movimiento == MovimientoRango.sube
+        ? monedasPorSubirA(rangoNuevo)
+        : 0,
     evaluable: true,
-    reinicioPorMesNuevo: reinicia,
   );
 }

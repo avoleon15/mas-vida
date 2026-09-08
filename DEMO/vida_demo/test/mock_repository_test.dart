@@ -153,11 +153,21 @@ void main() {
       }
     });
 
-    test('hay un lote de monedas cerca de caducar', () {
-      expect(
-        Datos.i.resumen.monedas.proximoLoteACaducar!.cercaDeCaducar,
-        isTrue,
-      );
+    test('el proximo lote a caducar es el de menos dias', () {
+      // Antes este test exigia que el mock TUVIERA un lote por vencer.
+      // Dejo de ser cierto al rehacer los lotes: ahora cada lote es un
+      // ascenso de rango, los dos son recientes y ninguno esta cerca de
+      // caducar. Lo que importa no es el contenido del mock sino que la
+      // regla elija bien, y eso es lo que se fija aca.
+      final monedas = Datos.i.resumen.monedas;
+      final proximo = monedas.proximoLoteACaducar!;
+      final minimo = monedas.lotes
+          .map((l) => l.diasParaCaducar)
+          .reduce((a, b) => a < b ? a : b);
+
+      expect(proximo.diasParaCaducar, minimo);
+      // Y que el aviso se prenda solo cuando de verdad falta poco.
+      expect(proximo.cercaDeCaducar, proximo.diasParaCaducar <= 15);
     });
 
     test('los lotes de monedas suman el saldo', () {
@@ -165,12 +175,6 @@ void main() {
           .map((l) => l.cantidad)
           .reduce((a, b) => a + b);
       expect(suma, Datos.i.resumen.monedas.saldo);
-    });
-
-    test('el historial de retos tiene una semana ganada y una perdida', () {
-      final h = Datos.i.resumen.retos.historial;
-      expect(h.any((s) => s.completado), isTrue);
-      expect(h.any((s) => !s.completado), isTrue);
     });
 
     test('el cashback proyectado es el % del nivel sobre la prima', () {
@@ -205,9 +209,13 @@ void main() {
       await montar(t, const ProgressScreen());
       // "Nivel Actual" se borro de esta pantalla: vive en Hoy, en la
       // seccion de cashback. Aca se verifica lo que si quedo.
-      // Dos: el titulo de la pantalla y la pestana de la barra de abajo,
-      // que tambien se llama Progreso ahora que dejo de estar en ingles.
-      expect(find.text('Progreso'), findsNWidgets(2));
+      //
+      // El titulo va en MAYUSCULAS en el codigo y la pestana de la barra
+      // no. Antes los dos decian "Progreso" y este expect contaba dos,
+      // porque la display font era Bebas Neue, que solo tiene mayusculas
+      // y las ponia sola. Al cambiar a Archivo hubo que escribirlas.
+      expect(find.text('PROGRESO'), findsOneWidget);
+      expect(find.text('Progreso'), findsOneWidget);
       expect(find.text('Puntos'), findsOneWidget);
       // "Recompensas por constancia" se mudo a la hoja de monedas que se
       // abre desde el chip de Hoy: ya no vive en esta pantalla.

@@ -12,6 +12,10 @@
 // GET /api/v1/retos/estado. Los mocks de acá son la propuesta.
 // ============================================================
 
+// Los topes de la escalera y cuánto paga cada escalón viven en el motor
+// de reglas, no acá: este archivo solo lee datos y los expone.
+import '../reglas_rango.dart';
+
 /// Cómo llegó el dato de un día. Distinguir `sinPermiso` de un día con
 /// cero pasos es una regla dura: HealthKit nunca informa si el usuario
 /// negó el permiso de lectura, solo se infiere porque no vuelve nada.
@@ -308,7 +312,15 @@ class SaldoMonedas {
 
   final int saldo;
   final int ganadasEsteMes;
-  final int techoMensual;
+
+  /// Tope de monedas al mes, o null mientras no esté definido.
+  ///
+  /// [PENDIENTE] Era 8, pero la escalera de rango puede pagar
+  /// 5 + 10 + 15 + 20 = 50 en un mes de cuatro semanas: el techo viejo
+  /// hacía imposible la propia mecánica. Queda null hasta que se acuerde
+  /// uno coherente — un número inventado acá terminaría en la
+  /// presentación como si fuera real.
+  final int? techoMensual;
   final List<LoteMonedas> lotes;
 
   /// TODO: falta cuánto vale una moneda en quetzales. Depende de las
@@ -325,69 +337,21 @@ class SaldoMonedas {
   factory SaldoMonedas.desdeJson(Map<String, dynamic> j) => SaldoMonedas(
     saldo: j['saldo'] as int,
     ganadasEsteMes: j['ganadas_este_mes'] as int,
-    techoMensual: j['techo_mensual'] as int,
+    techoMensual: j['techo_mensual'] as int?,
     lotes: (j['lotes'] as List)
         .map((l) => LoteMonedas.desdeJson(l as Map<String, dynamic>))
         .toList(),
   );
 }
 
-/// Una semana del historial de retos.
-class SemanaReto {
-  const SemanaReto({
-    required this.semanaInicio,
-    required this.rango,
-    required this.completado,
-  });
-
-  final String semanaInicio;
-
-  /// RANGO en el que se jugó esa semana, de 1 a [rangoMaximo].
-  ///
-  /// En el JSON el campo se llama `nivel`, que es como lo nombra el
-  /// contrato. Acá se expone como rango porque Nivel ya es la escalera
-  /// ANUAL de cashback: esa viene de los puntos y mueve el cashback,
-  /// mientras que el rango viene de los objetivos semanales y paga
-  /// monedas. La traducción ocurre en [desdeJson] y en ningún otro lado.
-  final int rango;
-
-  final bool completado;
-
-  factory SemanaReto.desdeJson(Map<String, dynamic> j) => SemanaReto(
-    semanaInicio: j['semana_inicio'] as String,
-    rango: j['nivel'] as int,
-    completado: j['completado'] as bool,
-  );
-}
-
-/// Estado de los objetivos semanales: en qué RANGO va el usuario y cómo
-/// le fue en las semanas anteriores.
-///
-/// Cumplir los tres objetivos de la semana sube un rango; no cumplirlos
-/// baja uno. Las reglas completas viven en `reglas_rango.dart`.
-class EstadoRetos {
-  const EstadoRetos({required this.rangoActual, required this.historial});
-
-  /// De 1 a [rangoMaximo]. NO es el nivel de cashback: ese es anual, sale
-  /// de los puntos y se llama Nivel.
-  ///
-  /// Llega como `nivel_actual` en el JSON: ese es el nombre del contrato
-  /// y no se le cambia al backend desde acá — hacerlo sería un v3.
-  final int rangoActual;
-
-  final List<SemanaReto> historial;
-
-  factory EstadoRetos.desdeJson(Map<String, dynamic> j) => EstadoRetos(
-    rangoActual: j['nivel_actual'] as int,
-    historial: (j['historial'] as List)
-        .map((h) => SemanaReto.desdeJson(h as Map<String, dynamic>))
-        .toList(),
-  );
-}
-
-/// UN objetivo de la semana. Paga MONEDAS, nunca puntos.
+/// UN objetivo de la semana.
 ///
 /// Los objetivos son SEMANALES: las metas mensuales ya no existen.
+///
+/// Un objetivo NO paga nada por sí solo. Lo que paga MONEDAS es cumplir
+/// los tres de la semana, porque eso sube un rango (ver
+/// `monedasPorSubirA` en reglas_rango.dart). Cumplir uno o dos no
+/// acredita nada ni se arrastra a la semana siguiente.
 class ObjetivoSemanal {
   const ObjetivoSemanal({
     required this.id,
@@ -395,8 +359,6 @@ class ObjetivoSemanal {
     required this.progreso,
     required this.meta,
     required this.unidad,
-    required this.monedas,
-    required this.avanceReportado,
     required this.completo,
   });
 
@@ -415,32 +377,7 @@ class ObjetivoSemanal {
 
   final String unidad;
 
-  /// MONEDAS que acuña cumplirlo. Nunca puntos.
-  final int monedas;
-
   final bool completo;
-
-  /// Avance de 0 a 1 tal como lo reporta el servidor.
-  ///
-  /// Existe porque el servidor SÍ conoce la meta de cada rango aunque la
-  /// app todavía no tenga la tabla de dificultad: puede decir qué tan
-  /// lleno va el objetivo sin que el cliente sepa contra qué número.
-  final double? avanceReportado;
-
-  /// Qué tan lleno va el objetivo, de 0 a 1. Null solo cuando no hay
-  /// forma de saberlo.
-  ///
-  /// Un objetivo CUMPLIDO va lleno siempre. Antes esto devolvía null
-  /// cuando `meta` era null, y como null se pinta como cero, un objetivo
-  /// completado se veía con la barra vacía.
-  double? get avance {
-    if (completo) return 1;
-    final reportado = avanceReportado;
-    if (reportado != null) return reportado.clamp(0.0, 1.0);
-    final m = meta;
-    if (m == null || m <= 0) return null;
-    return (progreso / m).clamp(0.0, 1.0);
-  }
 
   factory ObjetivoSemanal.desdeJson(Map<String, dynamic> j) => ObjetivoSemanal(
     id: j['id'] as String,
@@ -448,8 +385,6 @@ class ObjetivoSemanal {
     progreso: j['progreso'] as int,
     meta: j['meta'] as int?,
     unidad: j['unidad'] as String,
-    monedas: j['monedas'] as int,
-    avanceReportado: (j['avance'] as num?)?.toDouble(),
     completo: j['completo'] as bool,
   );
 }
@@ -490,15 +425,13 @@ class SemanaObjetivos {
   /// Cuántos de los tres van cumplidos.
   int get cumplidos => objetivos.where((o) => o.completo).length;
 
-  /// MONEDAS ya acuñadas en la semana.
-  int get monedasGanadas =>
-      objetivos.where((o) => o.completo).fold(0, (suma, o) => suma + o.monedas);
-
-  /// MONEDAS que quedan en juego si se cumple todo lo que falta.
-  int get monedasEnJuego =>
-      objetivos.fold(0, (suma, o) => suma + o.monedas) - monedasGanadas;
+  /// Cuántos faltan para completar la semana.
+  int get faltan => objetivos.length - cumplidos;
 
   /// Cumplir los TRES es lo único que sube de rango.
+  ///
+  /// Es la regla entera: no hay medidor intermedio, ni crédito parcial,
+  /// ni sobrante que se arrastre. Tres checks.
   bool get subioDeRango => cumplidos == objetivos.length;
 
   factory SemanaObjetivos.desdeJson(Map<String, dynamic> j) => SemanaObjetivos(
@@ -513,6 +446,36 @@ class SemanaObjetivos {
         .map((o) => ObjetivoSemanal.desdeJson(o as Map<String, dynamic>))
         .toList(),
   );
+}
+
+/// Una semana del programa, con el rango en que deja y lo que paga.
+///
+/// Existe porque el monto de una semana NO se puede leer de su número:
+/// depende del rango con el que se llega a ella, y ese rango sale de
+/// haber recorrido todas las anteriores. Ver [ObjetivosSemana.recorrido].
+class PasoDelPrograma {
+  const PasoDelPrograma({
+    required this.semana,
+    required this.rangoAlCerrar,
+    required this.monedas,
+    required this.proyectado,
+  });
+
+  final SemanaObjetivos semana;
+
+  /// En qué rango queda el usuario al cerrar esta semana.
+  final int rangoAlCerrar;
+
+  /// MONEDAS que paga esta semana. Cero si no hizo subir de rango.
+  final int monedas;
+
+  /// True cuando la semana todavía no cerró, así que [rangoAlCerrar] y
+  /// [monedas] son el MEJOR CASO —asume que la cumple— y no un hecho.
+  ///
+  /// Toda pantalla que muestre un valor proyectado tiene que decir que lo
+  /// es. Mostrar una proyección como si fuera plata acreditada es
+  /// prometer algo que el usuario todavía no ganó.
+  final bool proyectado;
 }
 
 /// Bloque de "Objetivos de la semana" de Home: las semanas del mes en
@@ -530,18 +493,109 @@ class ObjetivosSemana {
   /// motivo: es la misma escalera y el JSON usa el nombre del contrato.
   final int rangoActual;
 
-  /// Las semanas del mes. Pueden ser 4 o 5: no todos los meses tienen
-  /// cuatro lunes.
+  /// Las semanas del programa.
+  ///
+  /// Hoy son [semanasDelPrograma], una por escalón de la escalera, pero
+  /// la app NO asume esa cantidad: renderiza las que vengan. Antes acá
+  /// decía "las semanas del mes, 4 o 5" — eso quedó del modelo viejo,
+  /// cuando el rango se reiniciaba cada mes.
   final List<SemanaObjetivos> semanas;
 
-  /// MONEDAS acuñadas por estos objetivos, sumando todas las semanas.
+  /// El programa semana por semana: en qué rango deja cada una y cuánto
+  /// paga.
+  ///
+  /// **Semana y rango NO coinciden.** Fallar baja un rango, así que
+  /// alguien puede estar en la semana 5 subiendo apenas al rango 4. Por
+  /// eso el monto de una semana NO se puede sacar de su número: hay que
+  /// recorrerlas en orden y arrastrar el rango.
+  ///
+  /// Las semanas ya CERRADAS traen lo que pasó de verdad. Las que todavía
+  /// no cerraron traen una PROYECCIÓN de mejor caso: asume que el usuario
+  /// las cumple todas de acá en adelante. Esa proyección se recalcula
+  /// sola en cuanto alguien falla una semana, porque el rango del que
+  /// parte cambia — no hay ningún monto fijo por número de semana.
+  List<PasoDelPrograma> get recorrido {
+    final pasos = <PasoDelPrograma>[];
+    var rango = rangoMinimo;
+
+    for (final s in semanas) {
+      final cerrada = s.estado == EstadoSemana.cerrada;
+      // La proyección asume que la cumple. Es la única suposición honesta
+      // para algo que todavía no pasó: mostrar el mejor caso y decir que
+      // es el mejor caso.
+      final sube = cerrada ? s.subioDeRango : true;
+
+      final nuevo = sube
+          ? (rango + 1).clamp(rangoMinimo, rangoMaximo)
+          : (rango - 1).clamp(rangoMinimo, rangoMaximo);
+
+      pasos.add(
+        PasoDelPrograma(
+          semana: s,
+          rangoAlCerrar: nuevo,
+          monedas: nuevo > rango ? monedasPorSubirA(nuevo) : 0,
+          proyectado: !cerrada,
+        ),
+      );
+      rango = nuevo;
+    }
+
+    return pasos;
+  }
+
+  /// Cómo se llama la semana que va DESPUÉS de [numeroDeSemana], o null
+  /// si esa es la última del programa.
+  ///
+  /// Sale de la lista y no de `numero + 1`: el backend numera las semanas
+  /// y no hay nada que garantice que sean consecutivas.
+  int? numeroDespuesDe(int numeroDeSemana) {
+    for (var i = 0; i < semanas.length - 1; i++) {
+      if (semanas[i].numero == numeroDeSemana) return semanas[i + 1].numero;
+    }
+    return null;
+  }
+
+  /// El paso del recorrido que le toca a [numeroDeSemana].
+  PasoDelPrograma? pasoDe(int numeroDeSemana) {
+    for (final p in recorrido) {
+      if (p.semana.numero == numeroDeSemana) return p;
+    }
+    return null;
+  }
+
+  /// Cuántas MONEDAS pagó CADA semana, indexadas por
+  /// [SemanaObjetivos.numero].
+  ///
+  /// Solo cuentan las semanas CERRADAS: lo proyectado va en cero. Una
+  /// semana en curso con los tres cumplidos todavía no pagó — se evalúa
+  /// el domingo 23:59, y hasta ese momento la plata no está acreditada.
+  Map<int, int> get monedasPorSemana => {
+    for (final p in recorrido) p.semana.numero: p.proyectado ? 0 : p.monedas,
+  };
+
+  /// En qué rango dejan al usuario las semanas ya cerradas.
+  ///
+  /// Es el mismo recorrido que [monedasPorSemana], y tiene que dar igual
+  /// que [rangoActual] — que es el número que manda el servidor. Si los
+  /// dos no coinciden, el mock (o la API) se está contradiciendo. Hay un
+  /// test que lo fija.
+  int get rangoSegunSemanas {
+    var rango = rangoMinimo;
+    for (final s in semanas) {
+      if (s.estado != EstadoSemana.cerrada) continue;
+      rango = s.subioDeRango
+          ? (rango + 1).clamp(rangoMinimo, rangoMaximo)
+          : (rango - 1).clamp(rangoMinimo, rangoMaximo);
+    }
+    return rango;
+  }
+
+  /// MONEDAS acuñadas en el período por subir de rango.
   ///
   /// NO es el saldo de la billetera: el saldo incluye monedas de meses
-  /// anteriores y descuenta lo gastado en Premios. Esto es solo lo que
-  /// dieron los objetivos que se están mostrando, así que suma
-  /// exactamente lo que el usuario ve en las tarjetas de cada semana.
+  /// anteriores y descuenta lo gastado en Premios.
   int get monedasGanadas =>
-      semanas.fold(0, (suma, s) => suma + s.monedasGanadas);
+      monedasPorSemana.values.fold(0, (suma, m) => suma + m);
 
   /// La semana en curso, o null si el mes ya cerró.
   SemanaObjetivos? get enCurso {
@@ -621,7 +675,6 @@ class ResumenAnual {
     required this.puntosMes,
     required this.rachaSemanas,
     required this.rachaHistorial,
-    required this.retos,
     required this.monedas,
     required this.objetivosSemana,
     required this.actividadPorMes,
@@ -647,7 +700,6 @@ class ResumenAnual {
   final int puntosMes;
   final int rachaSemanas;
   final List<bool> rachaHistorial;
-  final EstadoRetos retos;
   final SaldoMonedas monedas;
   final ObjetivosSemana objetivosSemana;
 
@@ -686,9 +738,6 @@ class ResumenAnual {
       puntosMes: (j['mes_actual'] as Map<String, dynamic>)['puntos'] as int,
       rachaSemanas: j['racha_semanas'] as int,
       rachaHistorial: (j['racha_historial'] as List).cast<bool>(),
-      retos: EstadoRetos.desdeJson(
-        j['retos_semanales'] as Map<String, dynamic>,
-      ),
       monedas: SaldoMonedas.desdeJson(j['monedas'] as Map<String, dynamic>),
       objetivosSemana: ObjetivosSemana.desdeJson(
         j['objetivos_semana'] as Map<String, dynamic>,

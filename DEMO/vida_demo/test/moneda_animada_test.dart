@@ -18,9 +18,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('el .lottie se abre y trae la animación de la moneda', () async {
-    final composicion = await AssetLottie(
-      'assets/lottie/moneda.lottie',
-    ).load();
+    final composicion = await AssetLottie('assets/lottie/moneda.lottie').load();
 
     // Es un dotLottie: un zip con manifest.json y el JSON adentro. Si
     // alguien lo reemplaza por un archivo suelto, esto lo agarra.
@@ -50,10 +48,12 @@ void main() {
     // podría no estar. La caja ya tiene que medir lo suyo para que la
     // fila de al lado no se corra después.
     final caja = tester.getSize(
-      find.descendant(
-        of: find.byType(MonedaAnimada),
-        matching: find.byType(SizedBox),
-      ).first,
+      find
+          .descendant(
+            of: find.byType(MonedaAnimada),
+            matching: find.byType(SizedBox),
+          )
+          .first,
     );
     expect(caja, const Size(26, 26));
   });

@@ -103,7 +103,7 @@ class _HojaMonedas extends StatelessWidget {
 
                     const _Etiqueta('DE TUS OBJETIVOS'),
                     const SizedBox(height: AppSpacing.dentro),
-                    _HistorialSemanas(semanas: semana.semanas),
+                    _HistorialSemanas(objetivos: semana),
                     const SizedBox(height: AppSpacing.seccion),
 
                     const _Etiqueta('RECOMPENSAS POR CONSTANCIA'),
@@ -195,12 +195,21 @@ class _Total extends StatelessWidget {
 
 /// Qué pagó cada semana, y por qué.
 class _HistorialSemanas extends StatelessWidget {
-  const _HistorialSemanas({required this.semanas});
+  const _HistorialSemanas({required this.objetivos});
 
-  final List<SemanaObjetivos> semanas;
+  final ObjetivosSemana objetivos;
 
   @override
   Widget build(BuildContext context) {
+    // Cuántas monedas pagó CADA semana. El cálculo vive en el modelo y no
+    // acá: el monto depende del rango al que llevó esa semana, que solo
+    // se sabe recorriendo todas las anteriores en orden, y esa misma
+    // cuenta la necesitan el total de la hoja y la pantalla de Hoy. Tres
+    // copias de un recorrido cronológico se desincronizan solas — ya
+    // pasó: esta hoja saltaba la semana en curso y el modelo no.
+    final pagoPorSemana = objetivos.monedasPorSemana;
+    final semanas = objetivos.semanas;
+
     // De la más reciente a la más vieja: el historial se lee para atrás.
     final conMonedas = semanas.reversed
         .where((s) => s.estado != EstadoSemana.futura)
@@ -222,7 +231,10 @@ class _HistorialSemanas extends StatelessWidget {
     return _Tarjeta(
       children: [
         for (var i = 0; i < conMonedas.length; i++) ...[
-          _FilaSemana(semana: conMonedas[i]),
+          _FilaSemana(
+            semana: conMonedas[i],
+            monedas: pagoPorSemana[conMonedas[i].numero] ?? 0,
+          ),
           if (i != conMonedas.length - 1) const _Separador(),
         ],
       ],
@@ -231,9 +243,13 @@ class _HistorialSemanas extends StatelessWidget {
 }
 
 class _FilaSemana extends StatelessWidget {
-  const _FilaSemana({required this.semana});
+  const _FilaSemana({required this.semana, required this.monedas});
 
   final SemanaObjetivos semana;
+
+  /// MONEDAS que pagó ESA semana. Solo pagan las que hicieron subir de
+  /// rango, y el monto sale del escalón al que llevaron.
+  final int monedas;
 
   @override
   Widget build(BuildContext context) {
@@ -260,31 +276,50 @@ class _FilaSemana extends StatelessWidget {
               if (cumplidos.isEmpty)
                 Text('No cumpliste ningún objetivo', style: estiloNota)
               else
-                // Qué objetivo pagó qué. Sin esto el número de monedas de
-                // la semana es un total sin explicación.
+                // Qué objetivos cumpliste. Sin monto al lado: un objetivo
+                // suelto no paga nada, ni monedas ni ninguna otra cosa.
+                // Lo que paga es cumplir los tres, y eso se dice abajo.
                 for (final o in cumplidos)
-                  Text('${o.nombre} · +${o.monedas}', style: estiloNota),
+                  Text('${o.nombre} · cumplido', style: estiloNota),
               if (semana.subioDeRango)
                 Text(
-                  'Cumpliste los tres: subiste de rango',
+                  'Cumpliste los tres: subiste de rango y por eso pagó '
+                  '$monedas monedas',
                   style: estiloNota?.copyWith(
                     color: AppColors.accentSecondary,
                     fontWeight: FontWeight.w700,
                   ),
+                )
+              else if (semana.estado == EstadoSemana.cerrada)
+                Text(
+                  'No cumpliste los tres: bajaste de rango y no hubo '
+                  'monedas',
+                  style: estiloNota,
                 ),
             ],
           ),
         ),
         const SizedBox(width: AppSpacing.dentro),
-        Text(
-          '+${semana.monedasGanadas}',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: semana.monedasGanadas > 0
-                ? AppColors.accentSecondary
-                : AppColors.textSecondary,
-            fontWeight: FontWeight.w800,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
+        // A la derecha van las MONEDAS de esa semana, no el XP: el XP ya
+        // está desglosado objetivo por objetivo a la izquierda, y esta
+        // hoja es la de las monedas. Repetir el XP acá dejaba la pantalla
+        // sin decir en ningún lado de dónde salió el saldo.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MonedaAnimada(size: 20, apagado: monedas == 0),
+            const SizedBox(width: 4),
+            Text(
+              '+$monedas',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: monedas > 0
+                    ? AppColors.accentSecondary
+                    : AppColors.textSecondary,
+                fontWeight: FontWeight.w800,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
       ],
     );
