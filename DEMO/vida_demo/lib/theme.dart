@@ -64,6 +64,22 @@ class AppColors {
   /// Íconos y texto de apoyo que tienen que leerse sin gritar.
   static const Color azulMedio = Color(0xFF5468BC);
 
+  /// Un paso INTERMEDIO entre [azulBruma] y [azulSuave].
+  ///
+  /// Existe para las sombras sólidas de las piezas apagadas: sobre
+  /// azulBruma, una sombra en azulSuave se ve como un borde y no como
+  /// volumen. No es un sexto color: es el mismo azul, derivado de dos
+  /// tonos que ya existen, así que si el azul de marca cambia este lo
+  /// sigue solo.
+  static final Color azulTenue = Color.lerp(azulBruma, azulSuave, 0.4)!;
+
+  /// El azul de marca oscurecido, para las sombras sólidas.
+  ///
+  /// Derivado y no escrito a mano por lo mismo que en `boton_relieve.dart`:
+  /// un hex suelto se despega del resto de la paleta en cuanto alguien
+  /// toca el azul.
+  static final Color azulSombra = Color.lerp(accent, Colors.black, 0.28)!;
+
   /// Naranja de marca. Detalles chicos: estados de éxito, checks,
   /// marcadores, chips. Antes acá vivía el verde de salud.
   static const Color accentSecondary = Color(0xFFF58700);
@@ -270,42 +286,66 @@ class AppTheme {
 
   /// Tracking correcto para un tamaño dado.
   ///
-  /// Un `letterSpacing` fijo está mal en algún tamaño sí o sí: el texto
-  /// grande se ve desarmado con las letras separadas, y el chico se
-  /// vuelve ilegible si se le pega demasiado. Achica a medida que crece.
+  /// Un `letterSpacing` fijo está mal en algún tamaño sí o sí. La regla
+  /// es la de Apple: cuanto MÁS grande el texto, MÁS pegadas van las
+  /// letras. Al crecer, el espacio entre ellas crece solo y el título se
+  /// desarma; al achicar, hace falta abrirlo para que se lea.
+  ///
+  /// Por eso los tamaños grandes dan negativo. Con Bebas Neue esta
+  /// función devolvía siempre positivo, porque una condensada necesita
+  /// que la separen; Archivo es de ancho normal y necesita lo contrario.
   static double trackingPara(double fontSize) {
-    if (fontSize >= 48) return 0;
-    if (fontSize >= 32) return 1;
-    if (fontSize >= 20) return 2;
-    return 2.5;
+    if (fontSize >= 48) return -1.5;
+    if (fontSize >= 32) return -0.8;
+    if (fontSize >= 20) return -0.2;
+    return 0.2;
   }
 
-  /// Display font (Bebas Neue) con el tracking ya ajustado al tamaño.
-  static TextStyle display(double fontSize) => GoogleFonts.bebasNeue(
+  /// Display font (Archivo) con el tracking ya ajustado al tamaño.
+  ///
+  /// Es la que llevan los números grandes: los pasos del día, los puntos,
+  /// la racha. Va en w700 porque Archivo en peso normal no aguanta el
+  /// tamaño — al lado de Manrope se vería como texto agrandado y no como
+  /// un número protagonista.
+  static TextStyle display(double fontSize) => GoogleFonts.archivo(
     color: AppColors.textPrimary,
     fontSize: fontSize,
+    fontWeight: FontWeight.w700,
     letterSpacing: trackingPara(fontSize),
     height: 1,
   );
 
   // SF Pro es propietaria de Apple: solo se puede usar en apps para
-  // plataformas Apple. Como esta app también corre en Web, usamos Inter
-  // (Google Fonts) como reemplazo visualmente muy cercano en todas las
-  // plataformas.
+  // plataformas Apple, y esta también corre en Web.
+  //
+  // El reemplazo es Manrope, no Inter. Inter es el clon más parecido a SF
+  // Pro, pero es también la fuente por defecto de medio internet: una app
+  // en Inter no se lee como diseñada, se lee como sin terminar. Manrope
+  // tiene las mismas virtudes que hacían falta —contadores abiertos y
+  // buena lectura en 11-13 pt, que es donde vive casi todo el texto de
+  // +Vida— con terminaciones más suaves. Le queda mejor a una app que
+  // tiene que transmitir calma.
   static final TextTheme _textTheme =
-      GoogleFonts.interTextTheme(ThemeData.light().textTheme).apply(
+      GoogleFonts.manropeTextTheme(ThemeData.light().textTheme).apply(
         bodyColor: AppColors.textPrimary,
         displayColor: AppColors.textPrimary,
       );
 
-  /// Estilo para encabezados de sección tipo "HOY": una display font con
-  /// más carácter que el resto de la tipografía (Inter), pensada para
-  /// una app de actividad física. Se reutiliza en todas las pantallas.
-  static TextStyle get sectionTitle => GoogleFonts.bebasNeue(
+  /// Título de pantalla: "SOCIAL", "PROGRESO", "MI PLAN".
+  ///
+  /// Va en Archivo, la misma display font de los números, para que la
+  /// app hable con dos voces y no con tres.
+  ///
+  /// El tamaño bajó de 34 a 26 al cambiar de fuente, y no es un capricho:
+  /// Bebas Neue es condensada y a 34 ocupaba lo que Archivo ocupa a 26.
+  /// Manteniendo el 34 los títulos largos ("TUS RÉCORDS") se salían de
+  /// pantalla en un iPhone angosto.
+  static TextStyle get sectionTitle => GoogleFonts.archivo(
     color: AppColors.textPrimary,
-    fontSize: 34,
-    letterSpacing: 3,
-    height: 1,
+    fontSize: 26,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0.6,
+    height: 1.05,
   );
 
   static ThemeData get temaClaro {

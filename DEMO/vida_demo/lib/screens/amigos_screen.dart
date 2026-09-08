@@ -130,7 +130,7 @@ class _AmigosScreenState extends State<AmigosScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Amigos', style: AppTheme.sectionTitle),
+                          Text('AMIGOS', style: AppTheme.sectionTitle),
                           const SizedBox(height: 18),
                           ContadoresAmigos(
                             seleccionado: _tab.index,

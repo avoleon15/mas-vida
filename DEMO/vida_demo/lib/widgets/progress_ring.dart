@@ -236,12 +236,17 @@ class TextoCentroAnillo extends StatelessWidget {
       children: [
         Text('LLEVÁS', style: estiloEtiqueta?.copyWith(letterSpacing: 2.5)),
         const SizedBox(height: 2),
-        Text(
-          formatearMiles(pasos),
-          // Bebas Neue, la misma display font de los encabezados de
-          // sección. Al ser condensada, un número de cinco dígitos entra
-          // cómodo adentro del aro.
-          style: AppTheme.sectionTitle.copyWith(fontSize: 62, letterSpacing: 1),
+        // Archivo no es condensada como la Bebas Neue que había antes,
+        // así que un número de cinco dígitos ya no entra solo: el
+        // FittedBox lo achica si hace falta. Es el seguro real — el día
+        // que alguien camine 100,000 pasos el número tiene que caber
+        // igual, no desbordar el aro.
+        SizedBox(
+          width: 190,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(formatearMiles(pasos), style: AppTheme.display(58)),
+          ),
         ),
         const SizedBox(height: 6),
         // "PASOS" va ARRIBA del filete, cerrando el número.

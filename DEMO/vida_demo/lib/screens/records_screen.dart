@@ -80,7 +80,7 @@ class RecordsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Tus récords', style: AppTheme.sectionTitle),
+                    Text('TUS RÉCORDS', style: AppTheme.sectionTitle),
                     const SizedBox(height: 20),
                     _buildDestacado(context),
                     const SizedBox(height: AppSpacing.seccion),

@@ -87,7 +87,7 @@ class _SocialScreenState extends State<SocialScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 24),
-                    Text('Social', style: AppTheme.sectionTitle),
+                    Text('SOCIAL', style: AppTheme.sectionTitle),
                     const SizedBox(height: 20),
                     _SelectorTab(
                       seleccionado: _tab,

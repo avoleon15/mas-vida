@@ -70,7 +70,7 @@ class MiPlanScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 24),
-                    Text('Mi Plan', style: AppTheme.sectionTitle),
+                    Text('MI PLAN', style: AppTheme.sectionTitle),
                     const SizedBox(height: 20),
                     _buildCashbackCard(context),
                     const SizedBox(height: 12),

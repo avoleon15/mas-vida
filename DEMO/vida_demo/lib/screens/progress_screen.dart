@@ -116,7 +116,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
   Widget _buildEncabezado(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text('Progreso', style: AppTheme.sectionTitle)),
+        Expanded(child: Text('PROGRESO', style: AppTheme.sectionTitle)),
         // Mismo botón azul que "Ver mi cashback" en Hoy, en su versión
         // compacta para poder ir al lado del título.
         BotonPrincipal(

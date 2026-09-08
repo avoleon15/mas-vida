@@ -62,7 +62,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Perfil', style: AppTheme.sectionTitle),
+                    Text('PERFIL', style: AppTheme.sectionTitle),
                     const SizedBox(height: 20),
                     _Cabecera(
                       nombre: perfil.nombre,
