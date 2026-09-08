@@ -55,12 +55,14 @@ class BottomNavBar extends StatelessWidget {
     if (indice == currentIndex) return;
     HapticFeedback.selectionClick();
 
-    final ruta = _items[indice].route;
-    if (ruta == '/home') {
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
-      Navigator.of(context).pushNamed(ruta);
-    }
+    // SIEMPRE reemplaza, nunca apila. Antes solo "Hoy" reemplazaba y las
+    // demás pestañas se apilaban una encima de otra sin cerrarse nunca:
+    // navegar Hoy → Progreso → Social → Premios dejaba 4 pantallas vivas
+    // a la vez, cada una con sus animaciones (monedas, anillo, tarjeta
+    // con borde animado) corriendo de fondo para siempre. Eso es lo que
+    // hacía que la app se sintiera cada vez más pesada cuanto más se
+    // navegaba, sin volver nunca atrás.
+    Navigator.of(context).pushReplacementNamed(_items[indice].route);
   }
 
   @override
