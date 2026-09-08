@@ -1,22 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:getwidget/getwidget.dart';
 import '../theme.dart';
-
-/// Ruta del logo de la marca. En una constante y no suelto en el build
-/// porque es el único lugar de la app donde se dibuja el logo: si algún
-/// día se cambia el archivo, se cambia acá.
-const String _rutaLogo = 'assets/img/logo_vida.png';
+import 'logo_vida.dart';
 
 /// Alto del logo en el header.
 ///
-/// Se fija el ALTO y nunca el ancho: el archivo es casi 3:1 y dándole
-/// los dos el logo se deforma. Con solo el alto, el ancho lo saca
-/// Flutter de la proporción del archivo.
-///
 /// 26 es el alto al que la palabra "vida" pesa ópticamente lo mismo que
-/// pesaba el texto "+VIDA" que había antes acá. Más chico y la palabra
-/// se vuelve ilegible, porque dentro del logo ocupa bastante menos alto
-/// que la cruz.
+/// pesaba el texto "+VIDA" que había antes acá.
 const double _altoLogo = 26;
 
 /// Encabezado reutilizable: se repite igual en todas las pantallas de
@@ -53,27 +43,7 @@ class AppHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
             ],
-            Image.asset(
-              _rutaLogo,
-              height: _altoLogo,
-              // El logo trae el azul de marca adentro: no se le aplica
-              // ningún color encima, se pinta como lo entregó diseño.
-              filterQuality: FilterQuality.medium,
-              // Para el lector de pantalla el logo es el nombre de la
-              // app. Sin esto, donde antes se leía "+VIDA" no se leería
-              // nada.
-              semanticLabel: '+Vida',
-              // Si el archivo faltara, el header no puede quedar vacío:
-              // vuelve al texto que había antes.
-              errorBuilder: (context, error, stack) => Text(
-                '+VIDA',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
+            const LogoVida(alto: _altoLogo),
             const Spacer(),
             // El avatar es el acceso a Perfil desde cualquier pantalla.
             //

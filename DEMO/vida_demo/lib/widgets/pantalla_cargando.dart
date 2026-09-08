@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
 import '../theme.dart';
+import 'logo_vida.dart';
 
 // ============================================================
 // LA PANTALLA DE ARRANQUE.
@@ -79,11 +80,24 @@ class PantallaCargando extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.grupo),
-            Text(
-              'Cargando +Vida',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            // "Cargando" escrito y el nombre puesto con el logo, en vez
+            // de escribir "+Vida" con letras. El logo es el nombre de la
+            // marca dibujado como corresponde; tipearlo al lado de un
+            // logo que existe es escribirlo dos veces distinto.
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Cargando',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Más chico que en el header: acá el logo acompaña a una
+                // palabra, no encabeza una pantalla.
+                const LogoVida(alto: 20),
+              ],
             ),
           ],
         ),
