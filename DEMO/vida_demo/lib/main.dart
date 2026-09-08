@@ -14,20 +14,30 @@ import 'theme.dart';
 import 'widgets/fondo_estudio.dart';
 import 'widgets/iphone_frame.dart';
 import 'widgets/moneda_animada.dart';
+import 'widgets/pantalla_cargando.dart';
 
-Future<void> main() async {
+/// Cuánto se queda la animación de carga en pantalla como MÍNIMO.
+///
+/// Hoy los datos salen de los JSON de `assets/mock/` y cargan en
+/// milisegundos: sin este piso la animación aparecería y desaparecería
+/// en un frame, que se lee como un parpadeo y no como una pantalla.
+///
+/// Es un ciclo completo de la animación (2,5 s), para que la cruz
+/// alcance a recorrer el electro entero una vez.
+///
+/// OJO cuando entre el backend real: ahí la carga va a tardar de verdad
+/// y este mínimo pasa a ser tiempo regalado. Se va a querer bajar o
+/// sacar del todo.
+const Duration _minimoEnPantalla = Duration(milliseconds: 2500);
+
+void main() {
   // Necesario para poder leer assets antes de que arranque la app.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Se carga todo una sola vez desde el repositorio (hoy, los JSON de
-  // prueba de assets/mock/). Cuál repositorio se usa lo decide
-  // `lib/datos/fuente_datos.dart`, no esta línea.
-  await Datos.cargar();
-
-  // La moneda de Lottie se deja lista antes del primer frame: si no, la
-  // primera que se pinta aparece un instante después que su número.
-  await MonedaAnimada.precargar();
-
+  // `runApp` PRIMERO y la carga después, al revés que antes. Antes se
+  // esperaba a `Datos.cargar()` acá arriba, así que durante toda la
+  // carga no había app todavía y el usuario miraba el splash nativo en
+  // blanco. Ahora la app arranca de una y los datos entran detrás.
   runApp(const MyApp());
 }
 
@@ -40,12 +50,15 @@ class MyApp extends StatelessWidget {
       title: '+Vida',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.temaClaro,
-      initialRoute: '/home',
+      initialRoute: '/',
       // Rutas nombradas: BottomNavBar navega por nombre de ruta.
       // '/premio-detalle' y '/canje-exitoso' reciben los datos del
       // premio como argumento (Navigator.pushNamed(..., arguments:)), no
       // como parte de la ruta.
       routes: {
+        // La app entra por acá, no por '/home': hasta que los datos no
+        // estén cargados no se puede construir ninguna pantalla.
+        '/': (context) => const _Arranque(),
         '/home': (context) => const HomeScreen(),
         '/progress': (context) => const ProgressScreen(),
         '/records': (context) => const RecordsScreen(),
@@ -86,5 +99,61 @@ class MyApp extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// La primera pantalla de la app: muestra la animación de carga y,
+/// cuando los datos ya están, se convierte en Hoy.
+///
+/// Cambia de una a otra con un `setState` y no navegando: si empujara
+/// una ruta nueva, la pantalla de carga quedaría en la pila y el gesto
+/// de volver atrás de iOS traería de vuelta un loader ya cumplido.
+class _Arranque extends StatefulWidget {
+  const _Arranque();
+
+  @override
+  State<_Arranque> createState() => _ArranqueState();
+}
+
+class _ArranqueState extends State<_Arranque> {
+  bool _listo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    // Las dos cosas en paralelo: la carga real y la espera mínima. Con
+    // `Future.wait` la pantalla dura lo que tarde la MÁS LENTA de las
+    // dos, así que hoy manda el mínimo y el día que el backend tarde
+    // más de 2,5 s manda la carga, sin sumar los dos tiempos.
+    await Future.wait([
+      Future(() async {
+        // Se carga todo una sola vez desde el repositorio (hoy, los JSON
+        // de prueba de assets/mock/). Cuál repositorio se usa lo decide
+        // `lib/datos/fuente_datos.dart`, no esta línea.
+        await Datos.cargar();
+
+        // La moneda de Lottie se deja lista antes de que se pinte Hoy:
+        // si no, la primera que se ve aparece un instante después que su
+        // número.
+        await MonedaAnimada.precargar();
+      }),
+      Future.delayed(_minimoEnPantalla),
+    ]);
+
+    if (!mounted) return;
+    setState(() => _listo = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // `Datos.i` es `late` y las pantallas lo leen de forma síncrona: si
+    // Hoy se construyera antes de que la carga termine, reventaría al
+    // leerlo. Por eso el cambio es seco, sin transición cruzada que
+    // deje las dos pantallas vivas al mismo tiempo.
+    return _listo ? const HomeScreen() : const PantallaCargando();
   }
 }
