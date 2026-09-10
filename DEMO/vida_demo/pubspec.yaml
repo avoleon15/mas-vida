@@ -66,6 +66,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -127,3 +129,48 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# ============================================================
+# ÍCONO Y SPLASH DE LA MARCA
+#
+# Los PNG de assets/marca/ NO están declarados arriba en `assets:` a
+# propósito. Los leen únicamente los dos generadores de acá abajo, al
+# correrlos desde la terminal; ninguna pantalla de lib/ los abre.
+# Declararlos los metería dentro del bundle de la app pesando de gusto,
+# porque el ícono real que usa el teléfono es el que estos generadores
+# escriben en ios/ y android/, no el PNG original.
+#
+# Los dos se corren a mano y dejan archivos versionados:
+#   dart run flutter_launcher_icons
+#   dart run flutter_native_splash:create
+# ============================================================
+
+flutter_launcher_icons:
+  ios: true
+  android: true
+  image_path: "assets/marca/icono-masvida-1024.png"
+
+  # App Store Connect RECHAZA un ícono que traiga canal alfa, y el error
+  # no aparece hasta que se sube el build. Esto le aplana la
+  # transparencia antes de que eso pase.
+  remove_alpha_ios: true
+
+  # Android dibuja el ícono en dos capas y les aplica la máscara del
+  # launcher (círculo, redondeado, etc.), así que la cruz va suelta y
+  # transparente sobre un fondo blanco puesto por separado.
+  adaptive_icon_foreground: "assets/marca/icono-masvida-android-foreground.png"
+  adaptive_icon_background: "#FFFFFF"
+
+flutter_native_splash:
+  # El MISMO color que pinta PantallaCargando (AppColors.background).
+  # El splash nativo entrega la pantalla al primer frame de Flutter: si
+  # los dos fondos no son idénticos, en ese cambio se ve un parpadeo de
+  # color.
+  color: "#F5F6FA"
+  image: "assets/marca/splash-cruz.png"
+
+  # Android 12 en adelante ignora la configuración de arriba y usa su
+  # propio splash del sistema, así que hay que repetírselo acá.
+  android_12:
+    color: "#F5F6FA"
+    image: "assets/marca/splash-cruz.png"
