@@ -5,6 +5,7 @@ import '../reglas_puntos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/refresco_vida.dart';
 
 // ============================================================
 // Esta pantalla no lee JSON: todo sale de `Datos.i`.
@@ -64,30 +65,49 @@ class MiPlanScreen extends StatelessWidget {
               child: const AppHeader(),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
-                    Text('MI PLAN', style: AppTheme.sectionTitle),
-                    const SizedBox(height: 20),
-                    _buildCashbackCard(context),
-                    const SizedBox(height: 12),
-                    _buildNotaRegulatoria(context),
-                    const SizedBox(height: 20),
-                    _buildNivelActualCard(context),
-                    const SizedBox(height: 12),
-                    _buildProyeccionCard(context),
-                    const SizedBox(height: 28),
-                    _buildCalendarioCard(context),
-                    const SizedBox(height: 28),
-                    _buildPoliza(context),
-                    const SizedBox(height: 28),
-                    _buildAseguradoraCard(context),
-                    const SizedBox(height: 28),
-                    _buildUsoDelSeguroCard(context),
-                    const SizedBox(height: 16),
+              // Se vuelve a dibujar cuando alguien refresca en CUALQUIER
+              // pantalla, no solo acá: los datos son uno solo. Y como es
+              // un ValueListenableBuilder, esta pantalla sigue siendo
+              // Stateless.
+              child: ValueListenableBuilder<int>(
+                valueListenable: datosRecargados,
+                // Era un SingleChildScrollView. Pasa a CustomScrollView
+                // porque el control de refresco de Cupertino es un
+                // sliver y solo vive adentro de uno. El contenido y el
+                // padding son los mismos de antes.
+                builder: (context, _, _) => CustomScrollView(
+                  physics: fisicaConRefresco,
+                  slivers: [
+                    const RefrescoVida(),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 24),
+                            Text('MI PLAN', style: AppTheme.sectionTitle),
+                            const SizedBox(height: 20),
+                            _buildCashbackCard(context),
+                            const SizedBox(height: 12),
+                            _buildNotaRegulatoria(context),
+                            const SizedBox(height: 20),
+                            _buildNivelActualCard(context),
+                            const SizedBox(height: 12),
+                            _buildProyeccionCard(context),
+                            const SizedBox(height: 28),
+                            _buildCalendarioCard(context),
+                            const SizedBox(height: 28),
+                            _buildPoliza(context),
+                            const SizedBox(height: 28),
+                            _buildAseguradoraCard(context),
+                            const SizedBox(height: 28),
+                            _buildUsoDelSeguroCard(context),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

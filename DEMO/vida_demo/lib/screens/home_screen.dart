@@ -13,7 +13,9 @@ import '../widgets/escalera_cashback.dart';
 import '../widgets/chip_monedas.dart';
 import '../widgets/hoja_monedas.dart';
 import '../widgets/moneda_animada.dart';
+import '../widgets/numero_animado.dart';
 import '../widgets/progress_ring.dart';
+import '../widgets/refresco_vida.dart';
 import '../widgets/semanas_objetivos.dart';
 import '../widgets/stepper_etapas.dart';
 import '../widgets/tarjeta_borde_animado.dart';
@@ -82,53 +84,73 @@ class HomeScreen extends StatelessWidget {
               child: const AppHeader(),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Home se agrupa en TRES bloques por horizonte de
-                    // tiempo, y el orden es intencional: va de lo que el
-                    // usuario puede cambiar hoy a lo que se acumula a lo
-                    // largo del año.
-                    //
-                    //   DIARIO  -> anillo, etapas y puntos de hoy
-                    //   SEMANAL -> objetivos de la semana
-                    //   ANUAL   -> cashback
-                    //
-                    // El saludo y la racha quedan afuera de los tres.
-                    const SizedBox(height: AppSpacing.grupo),
-                    // El saludo va adentro de la tarjeta de borde animado:
-                    // le da algo de color a la parte de arriba de Home,
-                    // que estaba muy blanca. Adentro va SOLO el saludo.
-                    SizedBox(
-                      width: double.infinity,
-                      child: TarjetaBordeAnimado(child: _buildSaludo(context)),
-                    ),
-                    // La racha queda afuera de la tarjeta pero pegada a
-                    // ella: es parte del saludo, no una sección propia.
-                    const SizedBox(height: AppSpacing.dentro),
-                    _buildRachaLinea(context),
+              // Se vuelve a dibujar cuando alguien refresca en CUALQUIER
+              // pantalla, no solo acá: los datos son uno solo. Y como es
+              // un ValueListenableBuilder, Hoy sigue siendo Stateless.
+              child: ValueListenableBuilder<int>(
+                valueListenable: datosRecargados,
+                // Era un SingleChildScrollView. Pasa a CustomScrollView
+                // porque el control de refresco de Cupertino es un
+                // sliver y solo vive adentro de uno. El contenido y el
+                // padding son los mismos de antes.
+                builder: (context, _, _) => CustomScrollView(
+                  physics: fisicaConRefresco,
+                  slivers: [
+                    const RefrescoVida(),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Home se agrupa en TRES bloques por horizonte de
+                            // tiempo, y el orden es intencional: va de lo que el
+                            // usuario puede cambiar hoy a lo que se acumula a lo
+                            // largo del año.
+                            //
+                            //   DIARIO  -> anillo, etapas y puntos de hoy
+                            //   SEMANAL -> objetivos de la semana
+                            //   ANUAL   -> cashback
+                            //
+                            // El saludo y la racha quedan afuera de los tres.
+                            const SizedBox(height: AppSpacing.grupo),
+                            // El saludo va adentro de la tarjeta de borde animado:
+                            // le da algo de color a la parte de arriba de Home,
+                            // que estaba muy blanca. Adentro va SOLO el saludo.
+                            SizedBox(
+                              width: double.infinity,
+                              child: TarjetaBordeAnimado(
+                                child: _buildSaludo(context),
+                              ),
+                            ),
+                            // La racha queda afuera de la tarjeta pero pegada a
+                            // ella: es parte del saludo, no una sección propia.
+                            const SizedBox(height: AppSpacing.dentro),
+                            _buildRachaLinea(context),
 
-                    const SizedBox(height: AppSpacing.seccion),
-                    _BloqueHorizonte(
-                      titulo: 'DIARIO',
-                      child: _buildSeccionHoy(context),
-                    ),
+                            const SizedBox(height: AppSpacing.seccion),
+                            _BloqueHorizonte(
+                              titulo: 'DIARIO',
+                              child: _buildSeccionHoy(context),
+                            ),
 
-                    const SizedBox(height: AppSpacing.seccion),
-                    _BloqueHorizonte(
-                      titulo: 'SEMANAL',
-                      child: _buildObjetivosSemanaSection(context),
-                    ),
+                            const SizedBox(height: AppSpacing.seccion),
+                            _BloqueHorizonte(
+                              titulo: 'SEMANAL',
+                              child: _buildObjetivosSemanaSection(context),
+                            ),
 
-                    const SizedBox(height: AppSpacing.seccion),
-                    _BloqueHorizonte(
-                      titulo: 'ANUAL',
-                      child: _buildCashbackSection(context),
-                    ),
+                            const SizedBox(height: AppSpacing.seccion),
+                            _BloqueHorizonte(
+                              titulo: 'ANUAL',
+                              child: _buildCashbackSection(context),
+                            ),
 
-                    const SizedBox(height: AppSpacing.grupo),
+                            const SizedBox(height: AppSpacing.grupo),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -653,10 +675,9 @@ class _HomeFormato {
       ? '${v.round()}'
       : v.toString().replaceAll('.', ',');
 
-  static String miles(int v) => v.toString().replaceAllMapped(
-    RegExp(r'(\d)(?=(\d{3})+$)'),
-    (m) => '${m[1]},',
-  );
+  /// Delega en el formateador único de `numero_animado.dart`: antes esta
+  /// era una segunda copia del mismo separador de miles.
+  static String miles(int v) => milesConComa(v);
 }
 
 /// Pastilla con el nivel actual y su porcentaje de cashback.
@@ -854,9 +875,13 @@ class _MontoRevelado extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            'Q${_HomeFormato.miles(monto)}',
-            style: AppTheme.display(46).copyWith(color: AppColors.accent),
+          // El monto sube desde 0 al entrar. La "Q" va adentro del
+          // formato y no como texto aparte, para que no quede colgada al
+          // lado de un número que todavía está contando.
+          NumeroAnimado(
+            valor: monto,
+            formato: (v) => 'Q${_HomeFormato.miles(v)}',
+            estilo: AppTheme.display(46).copyWith(color: AppColors.accent),
           ),
           const SizedBox(height: 4),
           Text(

@@ -6,6 +6,7 @@ import '../widgets/app_header.dart';
 import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/calendario_actividad.dart';
+import '../widgets/refresco_vida.dart';
 import '../widgets/tarjeta_puntos.dart';
 import '../widgets/tarjeta_racha.dart';
 
@@ -55,44 +56,64 @@ class _ProgressScreenState extends State<ProgressScreen> {
               child: const AppHeader(),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
-                    _buildEncabezado(context),
-                    const SizedBox(height: 20),
+              // Se vuelve a dibujar cuando alguien refresca en CUALQUIER
+              // pantalla, no solo acá: los datos son uno solo.
+              child: ValueListenableBuilder<int>(
+                valueListenable: datosRecargados,
+                // Era un SingleChildScrollView. Pasa a CustomScrollView
+                // porque el control de refresco de Cupertino es un
+                // sliver y solo vive adentro de uno. El contenido y el
+                // padding son los mismos de antes.
+                builder: (context, _, _) => CustomScrollView(
+                  physics: fisicaConRefresco,
+                  slivers: [
+                    const RefrescoVida(),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 24),
+                            _buildEncabezado(context),
+                            const SizedBox(height: 20),
 
-                    // Una sola tarjeta de Puntos, con el selector de
-                    // período adentro.
-                    TarjetaPuntos(
-                      periodo: _periodo,
-                      onCambiarPeriodo: (p) => setState(() => _periodo = p),
+                            // Una sola tarjeta de Puntos, con el selector de
+                            // período adentro.
+                            TarjetaPuntos(
+                              periodo: _periodo,
+                              onCambiarPeriodo: (p) =>
+                                  setState(() => _periodo = p),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // El calendario de cuadritos solo en Año: es una
+                            // vista de todo el período largo. En Semana y Mes las
+                            // gráficas de arriba ya dicen lo mismo con más
+                            // detalle.
+                            if (_periodo == Periodo.anio) ...[
+                              CalendarioActividad(dias: Datos.i.historial.dias),
+                              const SizedBox(height: 20),
+                            ],
+
+                            // La racha: lo único de la pantalla que mide
+                            // constancia y no esfuerzo de un día. Va en todos los
+                            // períodos porque no pertenece a ninguno.
+                            const TarjetaRacha(),
+                            const SizedBox(height: 20),
+
+                            // Los entrenamientos, tal como los entrega HealthKit.
+                            // Solo en Semana, que es el horizonte al que
+                            // pertenecen.
+                            if (_periodo == Periodo.semana)
+                              EntrenamientosRecientes(
+                                dias: Datos.i.historial.dias,
+                              ),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 20),
-
-                    // El calendario de cuadritos solo en Año: es una
-                    // vista de todo el período largo. En Semana y Mes las
-                    // gráficas de arriba ya dicen lo mismo con más
-                    // detalle.
-                    if (_periodo == Periodo.anio) ...[
-                      CalendarioActividad(dias: Datos.i.historial.dias),
-                      const SizedBox(height: 20),
-                    ],
-
-                    // La racha: lo único de la pantalla que mide
-                    // constancia y no esfuerzo de un día. Va en todos los
-                    // períodos porque no pertenece a ninguno.
-                    const TarjetaRacha(),
-                    const SizedBox(height: 20),
-
-                    // Los entrenamientos, tal como los entrega HealthKit.
-                    // Solo en Semana, que es el horizonte al que
-                    // pertenecen.
-                    if (_periodo == Periodo.semana)
-                      EntrenamientosRecientes(dias: Datos.i.historial.dias),
-                    const SizedBox(height: 16),
                   ],
                 ),
               ),

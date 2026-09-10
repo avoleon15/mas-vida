@@ -9,6 +9,7 @@ import '../widgets/bottom_nav_bar.dart';
 import '../widgets/chip_monedas.dart';
 import '../widgets/moneda_animada.dart';
 import '../widgets/placeholder_imagen.dart';
+import '../widgets/refresco_vida.dart';
 
 // ============================================================
 // Datos de ejemplo. Todo hardcodeado por ahora (sin backend) y
@@ -47,10 +48,14 @@ class _PremiosScreenState extends State<PremiosScreen> {
   String _categoriaSeleccionada = 'Todos';
   String _busqueda = '';
 
-  @override
-  Widget build(BuildContext context) {
+  /// Los premios que pasan la categoría elegida y el buscador.
+  ///
+  /// Se calcula acá y no en `build` porque ahora se lee desde adentro del
+  /// ValueListenableBuilder: al refrescar cambia el catálogo, y la lista
+  /// tiene que volver a filtrarse sobre los premios nuevos.
+  List<Premio> get _premiosFiltrados {
     final texto = _busqueda.trim().toLowerCase();
-    final premiosFiltrados = _premios.where((p) {
+    return _premios.where((p) {
       final deLaCategoria =
           _categoriaSeleccionada == 'Todos' ||
           p.categoria == _categoriaSeleccionada;
@@ -63,7 +68,10 @@ class _PremiosScreenState extends State<PremiosScreen> {
           p.categoria.toLowerCase().contains(texto);
       return deLaCategoria && coincide;
     }).toList();
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -73,47 +81,59 @@ class _PremiosScreenState extends State<PremiosScreen> {
               child: const AppHeader(),
             ),
             Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildTituloYSaldo(context),
-                          const SizedBox(height: 18),
-                          _Buscador(
-                            texto: _busqueda,
-                            onChanged: (t) => setState(() => _busqueda = t),
+              // Se vuelve a dibujar cuando alguien refresca en CUALQUIER
+              // pantalla, no solo acá: los datos son uno solo.
+              child: ValueListenableBuilder<int>(
+                valueListenable: datosRecargados,
+                builder: (context, _, _) {
+                  final premiosFiltrados = _premiosFiltrados;
+                  return CustomScrollView(
+                    physics: fisicaConRefresco,
+                    slivers: [
+                      const RefrescoVida(),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                        sliver: SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildTituloYSaldo(context),
+                              const SizedBox(height: 18),
+                              _Buscador(
+                                texto: _busqueda,
+                                onChanged: (t) => setState(() => _busqueda = t),
+                              ),
+                              const SizedBox(height: 16),
+                              _buildChipsCategorias(context),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          _buildChipsCategorias(context),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (premiosFiltrados.isEmpty)
-                    SliverToBoxAdapter(child: _buildSinResultados(context))
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 14,
-                              childAspectRatio: 0.7,
-                            ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, i) =>
-                              _buildTarjetaPremio(context, premiosFiltrados[i]),
-                          childCount: premiosFiltrados.length,
                         ),
                       ),
-                    ),
-                ],
+                      if (premiosFiltrados.isEmpty)
+                        SliverToBoxAdapter(child: _buildSinResultados(context))
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          sliver: SliverGrid(
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 14,
+                                  childAspectRatio: 0.7,
+                                ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, i) => _buildTarjetaPremio(
+                                context,
+                                premiosFiltrados[i],
+                              ),
+                              childCount: premiosFiltrados.length,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
             const BottomNavBar(currentIndex: 3),

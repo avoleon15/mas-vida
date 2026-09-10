@@ -14,6 +14,7 @@ import 'amigos_screen.dart';
 import 'ranking_grupo_screen.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/refresco_vida.dart';
 
 // ============================================================
 // Datos de ejemplo. Todo hardcodeado por ahora (sin backend) y
@@ -81,24 +82,44 @@ class _SocialScreenState extends State<SocialScreen> {
               child: const AppHeader(),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
-                    Text('SOCIAL', style: AppTheme.sectionTitle),
-                    const SizedBox(height: 20),
-                    _SelectorTab(
-                      seleccionado: _tab,
-                      onChanged: (tab) => setState(() => _tab = tab),
+              // UN refresco para las dos pestañas, no uno por pestaña.
+              // Amigos y Ranking comparten este scroll y además leen del
+              // MISMO `Datos.i.social`, que `Datos.cargar()` recarga
+              // entero: dos refrescos separados pedirían dos veces
+              // exactamente lo mismo.
+              child: ValueListenableBuilder<int>(
+                valueListenable: datosRecargados,
+                // Era un SingleChildScrollView. Pasa a CustomScrollView
+                // porque el control de refresco de Cupertino es un
+                // sliver y solo vive adentro de uno. El contenido y el
+                // padding son los mismos de antes.
+                builder: (context, _, _) => CustomScrollView(
+                  physics: fisicaConRefresco,
+                  slivers: [
+                    const RefrescoVida(),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 24),
+                            Text('SOCIAL', style: AppTheme.sectionTitle),
+                            const SizedBox(height: 20),
+                            _SelectorTab(
+                              seleccionado: _tab,
+                              onChanged: (tab) => setState(() => _tab = tab),
+                            ),
+                            const SizedBox(height: 20),
+                            if (_tab == _TabSocial.amigos)
+                              ..._buildAmigos(context)
+                            else
+                              ..._buildRanking(context),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 20),
-                    if (_tab == _TabSocial.amigos)
-                      ..._buildAmigos(context)
-                    else
-                      ..._buildRanking(context),
-                    const SizedBox(height: 16),
                   ],
                 ),
               ),
