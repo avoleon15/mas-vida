@@ -26,6 +26,8 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<key>NSHealthShareUsageDescription</key>
+		<string>Usamos tus datos de pasos, ritmo cardíaco y entrenamientos de Salud para calcular tus puntos y tu cashback en +Vida.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
