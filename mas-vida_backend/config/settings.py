@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-2_4(5q7qn*e@6ie6aquxhe9)$ngb7i!(=t^cj_!d-!o6)zkg$#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "172.20.10.3"]
 
 
 # Application definition
@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     "rest_framework",
-    "users", "coins", "goals", "policies","rewards","activities","poincs"
+    "Apps.users", "Apps.coins", "Apps.goals", "Apps.policies","Apps.rewards","Apps.activities","Apps.poincs"
 ]
 
 MIDDLEWARE = [
@@ -112,6 +112,20 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG' if DEBUG else 'WARNING',
+    },
+}
 
 
 # Internationalization

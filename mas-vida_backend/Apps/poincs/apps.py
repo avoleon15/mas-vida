@@ -2,4 +2,4 @@ from django.apps import AppConfig
 
 
 class PointsConfig(AppConfig):
-    name = 'poincs'
+    name = 'Apps.poincs'
