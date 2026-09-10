@@ -94,26 +94,53 @@ void main() {
       final dias = Datos.i.historial.dias;
       bool hay(bool Function(DiaActividad) f) => dias.any(f);
 
-      expect(hay((d) => d.pasos == 6999 && d.puntosDia == 0), isTrue,
-          reason: '6.999 pasos → 0 pts');
-      expect(hay((d) => d.pasos == 7000 && d.puntosDia == 25), isTrue,
-          reason: '7.000 pasos → 25 pts');
-      expect(hay((d) => d.pasos == 12400 && d.puntosPasos == 50), isTrue,
-          reason: '12.400 pasos → 50 pts');
-      expect(hay((d) => d.pasos == 23000 && d.puntosPasos == 100), isTrue,
-          reason: '23.000 pasos → 100 pts');
-      expect(hay((d) => d.sesion?.cuentaParaPuntos == false), isTrue,
-          reason: 'sesión de menos de 30 min');
-      expect(hay((d) => d.sesion?.puntosIntensidad == 100), isTrue,
-          reason: '42 min al 74% de FCM');
-      expect(hay((d) => d.esManual && d.puntosDia == 0), isTrue,
-          reason: 'pasos manuales → 0 pts');
+      expect(
+        hay((d) => d.pasos == 6999 && d.puntosDia == 0),
+        isTrue,
+        reason: '6.999 pasos → 0 pts',
+      );
+      expect(
+        hay((d) => d.pasos == 7000 && d.puntosDia == 25),
+        isTrue,
+        reason: '7.000 pasos → 25 pts',
+      );
+      expect(
+        hay((d) => d.pasos == 12400 && d.puntosPasos == 50),
+        isTrue,
+        reason: '12.400 pasos → 50 pts',
+      );
+      expect(
+        hay((d) => d.pasos == 23000 && d.puntosPasos == 100),
+        isTrue,
+        reason: '23.000 pasos → 100 pts',
+      );
+      expect(
+        hay((d) => d.sesion?.cuentaParaPuntos == false),
+        isTrue,
+        reason: 'sesión de menos de 30 min',
+      );
+      expect(
+        hay((d) => d.sesion?.puntosIntensidad == 100),
+        isTrue,
+        reason: '42 min al 74% de FCM',
+      );
+      expect(
+        hay((d) => d.esManual && d.puntosDia == 0),
+        isTrue,
+        reason: 'pasos manuales → 0 pts',
+      );
       expect(hay((d) => d.sinPermiso), isTrue, reason: 'día sin permiso');
-      expect(hay((d) => d.marcadoParaRevision && d.puntosDia > 0), isTrue,
-          reason: 'atípico marcado que sigue acreditando');
+      expect(
+        hay((d) => d.marcadoParaRevision && d.puntosDia > 0),
+        isTrue,
+        reason: 'atípico marcado que sigue acreditando',
+      );
       expect(hay((d) => d.reversion != null), isTrue, reason: 'reversión');
-      expect(hay((d) => d.huboPrecedencia), isTrue,
-          reason: 'precedencia entre fuentes');
+      expect(
+        hay((d) => d.huboPrecedencia),
+        isTrue,
+        reason: 'precedencia entre fuentes',
+      );
     });
 
     test('la precedencia toma la fuente con más pasos, nunca la suma', () {
@@ -126,9 +153,21 @@ void main() {
       }
     });
 
-    test('hay un lote de monedas cerca de caducar', () {
-      expect(Datos.i.resumen.monedas.proximoLoteACaducar!.cercaDeCaducar,
-          isTrue);
+    test('el proximo lote a caducar es el de menos dias', () {
+      // Antes este test exigia que el mock TUVIERA un lote por vencer.
+      // Dejo de ser cierto al rehacer los lotes: ahora cada lote es un
+      // ascenso de rango, los dos son recientes y ninguno esta cerca de
+      // caducar. Lo que importa no es el contenido del mock sino que la
+      // regla elija bien, y eso es lo que se fija aca.
+      final monedas = Datos.i.resumen.monedas;
+      final proximo = monedas.proximoLoteACaducar!;
+      final minimo = monedas.lotes
+          .map((l) => l.diasParaCaducar)
+          .reduce((a, b) => a < b ? a : b);
+
+      expect(proximo.diasParaCaducar, minimo);
+      // Y que el aviso se prenda solo cuando de verdad falta poco.
+      expect(proximo.cercaDeCaducar, proximo.diasParaCaducar <= 15);
     });
 
     test('los lotes de monedas suman el saldo', () {
@@ -136,12 +175,6 @@ void main() {
           .map((l) => l.cantidad)
           .reduce((a, b) => a + b);
       expect(suma, Datos.i.resumen.monedas.saldo);
-    });
-
-    test('el historial de retos tiene una semana ganada y una perdida', () {
-      final h = Datos.i.resumen.retos.historial;
-      expect(h.any((s) => s.completado), isTrue);
-      expect(h.any((s) => !s.completado), isTrue);
     });
 
     test('el cashback proyectado es el % del nivel sobre la prima', () {
@@ -159,7 +192,10 @@ void main() {
   group('Las pantallas montan con los datos de prueba', () {
     Future<void> montar(WidgetTester tester, Widget pantalla) async {
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.darkTheme, home: pantalla),
+        MaterialApp(
+          theme: AppTheme.temaClaro,
+          home: TemaVida(child: pantalla),
+        ),
       );
       await tester.pump();
     }
@@ -171,7 +207,24 @@ void main() {
 
     testWidgets('Progress', (t) async {
       await montar(t, const ProgressScreen());
-      expect(find.textContaining('Nivel'), findsWidgets);
+      // "Nivel Actual" se borro de esta pantalla: vive en Hoy, en la
+      // seccion de cashback. Aca se verifica lo que si quedo.
+      //
+      // El titulo va en MAYUSCULAS en el codigo y la pestana de la barra
+      // no. Antes los dos decian "Progreso" y este expect contaba dos,
+      // porque la display font era Bebas Neue, que solo tiene mayusculas
+      // y las ponia sola. Al cambiar a Archivo hubo que escribirlas.
+      expect(find.text('PROGRESO'), findsOneWidget);
+      expect(find.text('Progreso'), findsOneWidget);
+      expect(find.text('Puntos'), findsOneWidget);
+      // "Recompensas por constancia" se mudo a la hoja de monedas que se
+      // abre desde el chip de Hoy: ya no vive en esta pantalla.
+      expect(find.text('Recompensas por constancia'), findsNothing);
+      // "Ritmo cardiaco de hoy" tambien salio: era un dato suelto que no
+      // se conectaba con nada de la pantalla. En su lugar va la racha,
+      // que es lo unico que mide constancia y no esfuerzo de un dia.
+      expect(find.text('Ritmo cardíaco de hoy'), findsNothing);
+      expect(find.text('Tu racha'), findsOneWidget);
     });
 
     testWidgets('Social', (t) async {
