@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../datos/fuente_datos.dart';
 import '../theme.dart';
 import 'moneda_animada.dart';
+import 'numero_animado.dart';
 
 // ============================================================
 // EL CHIP DE MONEDAS, UNO SOLO PARA TODA LA APP.
@@ -77,12 +78,18 @@ class ChipMonedas extends StatelessWidget {
         children: [
           const MonedaAnimada(size: 22),
           const SizedBox(width: 6),
-          Text(
-            '$cantidad',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w800,
-            ),
+          // El saldo sube desde 0 al entrar: es plata acumulada, no una
+          // etiqueta. El chip no cambia de ancho mientras cuenta porque
+          // NumeroAnimado ya reserva el del valor final.
+          NumeroAnimado(
+            valor: cantidad,
+            formato: milesConComa,
+            estilo:
+                Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ) ??
+                const TextStyle(fontWeight: FontWeight.w800),
           ),
           if (onTap != null) ...[
             const SizedBox(width: 4),

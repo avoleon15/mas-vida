@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../datos/fuente_datos.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
+import 'numero_animado.dart';
 
 // ------------------------------------------------------------
 // Cortes de los aros
@@ -111,8 +113,18 @@ class ProgressRing extends StatefulWidget {
 }
 
 class _ProgressRingState extends State<ProgressRing>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  /// La nebulosa que gira al llegar al techo del día.
   late final AnimationController _controlador;
+
+  /// El aro llenándose desde cero.
+  ///
+  /// Va con la MISMA duración, la MISMA curva y la MISMA compuerta que
+  /// los números (`numero_animado.dart`): el aro llegando al final
+  /// mientras el número todavía sube se lee como un error. Y se anima en
+  /// los mismos momentos —al abrir la app y al refrescar—, no cada vez
+  /// que se entra a Hoy desde otra pestaña.
+  late final AnimationController _llenado;
 
   /// El aro llegó al techo del día: se muestra galáctico.
   bool get _completo => widget.pasos >= techoAros;
@@ -129,6 +141,32 @@ class _ProgressRingState extends State<ProgressRing>
       duration: const Duration(seconds: 14),
     );
     _sincronizarAnimacion();
+
+    _llenado = AnimationController(
+      vsync: this,
+      duration: duracionNumeroAnimado,
+    );
+    // Por defecto el aro se muestra ya lleno; solo se rebobina si a esta
+    // tanda de datos todavía le debemos la animación.
+    _llenado.value = 1;
+    datosRecargados.addListener(_alRefrescar);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Acá y no en initState porque hace falta el MediaQuery.
+    if (!MediaQuery.disableAnimationsOf(context) &&
+        animacionPendiente(datosRecargados.value)) {
+      _llenado.forward(from: 0);
+    }
+  }
+
+  void _alRefrescar() {
+    if (!mounted) return;
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    if (!animacionPendiente(datosRecargados.value)) return;
+    _llenado.forward(from: 0);
   }
 
   @override
@@ -151,6 +189,8 @@ class _ProgressRingState extends State<ProgressRing>
 
   @override
   void dispose() {
+    datosRecargados.removeListener(_alRefrescar);
+    _llenado.dispose();
     _controlador.dispose();
     super.dispose();
   }
@@ -166,15 +206,27 @@ class _ProgressRingState extends State<ProgressRing>
         children: [
           // Capa base. Va en su propio RepaintBoundary para que el
           // destello no la obligue a repintarse en cada frame.
+          //
+          // El aro se LLENA en vez de aparecer lleno. Cuándo lo hace lo
+          // decide `_llenado`, que sigue la misma compuerta que los
+          // números: al abrir la app y en cada refresco, nunca por
+          // cambiar de pestaña. El resto del tiempo el controlador está
+          // clavado en 1 y esto pinta el aro completo.
           RepaintBoundary(
-            child: CustomPaint(
-              size: lienzo,
-              painter: _AnilloPasosPainter(
-                pasos: widget.pasos,
-                strokeWidth: widget.strokeWidth,
-                sigmaHalo: widget.sigmaHalo,
-                opacidadHalo: widget.opacidadHalo,
-              ),
+            child: AnimatedBuilder(
+              animation: _llenado,
+              builder: (context, _) {
+                final avance = curvaNumeroAnimado.transform(_llenado.value);
+                return CustomPaint(
+                  size: lienzo,
+                  painter: _AnilloPasosPainter(
+                    pasos: (widget.pasos * avance).round(),
+                    strokeWidth: widget.strokeWidth,
+                    sigmaHalo: widget.sigmaHalo,
+                    opacidadHalo: widget.opacidadHalo,
+                  ),
+                );
+              },
             ),
           ),
           // Al llegar al techo, la nebulosa se dibuja ENCIMA del aro de
@@ -213,16 +265,10 @@ class TextoCentroAnillo extends StatelessWidget {
   final int pasos;
 
   /// Miles con separador de coma: 12000 -> "12,000".
-  static String formatearMiles(int valor) {
-    final digitos = valor.toString();
-    final buffer = StringBuffer();
-    for (var i = 0; i < digitos.length; i++) {
-      buffer.write(digitos[i]);
-      final faltan = digitos.length - i - 1;
-      if (faltan > 0 && faltan % 3 == 0) buffer.write(',');
-    }
-    return buffer.toString();
-  }
+  ///
+  /// Delega en el formateador único de `numero_animado.dart`. Se mantiene
+  /// el nombre porque media app ya lo llama así.
+  static String formatearMiles(int valor) => milesConComa(valor);
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +291,14 @@ class TextoCentroAnillo extends StatelessWidget {
           width: 190,
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(formatearMiles(pasos), style: AppTheme.display(58)),
+            // El número sube desde 0 al entrar. Centrado, para que
+            // crezca hacia los dos lados adentro del aro.
+            child: NumeroAnimado(
+              valor: pasos,
+              formato: formatearMiles,
+              estilo: AppTheme.display(58),
+              alineacion: Alignment.center,
+            ),
           ),
         ),
         const SizedBox(height: 6),

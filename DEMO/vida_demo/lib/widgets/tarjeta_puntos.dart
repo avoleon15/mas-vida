@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../reglas_puntos.dart';
+import 'numero_animado.dart';
 import '../theme.dart';
 
 /// Los tres períodos del selector.
@@ -344,9 +345,13 @@ class _TarjetaNumero extends StatelessWidget {
               Flexible(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text(
-                    _milesGrafica(puntos),
-                    style: AppTheme.display(46),
+                  // Los puntos suben desde 0 al entrar. A la izquierda,
+                  // porque el "de X pts" va pegado a la derecha y el
+                  // ancho ya lo reserva NumeroAnimado.
+                  child: NumeroAnimado(
+                    valor: puntos,
+                    formato: _milesGrafica,
+                    estilo: AppTheme.display(46),
                   ),
                 ),
               ),
@@ -521,10 +526,9 @@ String _corto(num v) {
   return '${miles.toStringAsFixed(miles >= 10 ? 0 : 1)}k';
 }
 
-String _milesGrafica(int v) => v.toString().replaceAllMapped(
-  RegExp(r'(\d)(?=(\d{3})+$)'),
-  (m) => '${m[1]},',
-);
+/// Delega en el formateador único de `numero_animado.dart`: antes esta
+/// era una tercera copia del mismo separador de miles.
+String _milesGrafica(int v) => milesConComa(v);
 
 /// Cuadrícula tenue, compartida por las dos gráficas: orienta sin
 /// competir con los datos.
