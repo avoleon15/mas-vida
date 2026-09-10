@@ -41,8 +41,41 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    if (estado != AppLifecycleState.resumed) return;
+
+    // Al volver a la app, los datos se actualizan solos. Es el momento
+    // exacto en que más falta hace: el usuario terminó de caminar, el
+    // reloj sincronizó mientras la app estaba atrás, y abre a ver cuánto
+    // lleva. Si tuviera que jalar para enterarse, vería números viejos
+    // primero.
+    //
+    // Este refresco es SILENCIOSO: no muestra el indicador. La guarda de
+    // tiempo vive en `refrescarDatosSiHaceFalta`, porque `resumed` se
+    // dispara también cada vez que se cambia de app y se vuelve.
+    refrescarDatosSiHaceFalta();
+  }
 
   @override
   Widget build(BuildContext context) {
