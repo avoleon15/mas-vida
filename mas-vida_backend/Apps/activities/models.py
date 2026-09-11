@@ -3,7 +3,8 @@ from django.db import models
 class Muestra(models.Model):
     usuario = models.ForeignKey(
         "users.Usuario",
-        on_delete=models.CASCADE
+        on_delete=models.PROTECT
+        
     )
 
     external_id = models.CharField(
@@ -45,7 +46,8 @@ class Muestra(models.Model):
 class MuestraBPM(models.Model):
     usuario = models.ForeignKey(
             "users.Usuario",
-            on_delete=models.CASCADE
+            on_delete=models.PROTECT
+            
     )
 
     external_id = models.CharField(
@@ -55,7 +57,7 @@ class MuestraBPM(models.Model):
     inicio = models.DateTimeField()
     fin = models.DateTimeField()
 
-    bpm = models.IntegerField()
+    bpm = models.PositiveBigIntegerField()
 
     fuente_bundle = models.CharField(
           max_length=255
@@ -80,7 +82,7 @@ class MuestraBPM(models.Model):
 class Sesion(models.Model):
     usuario = models.ForeignKey(
             "users.Usuario",
-            on_delete=models.CASCADE
+            on_delete=models.PROTECT
               )
     
     external_id = models.CharField(
