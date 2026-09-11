@@ -12,6 +12,12 @@ import '../datos/fuente_datos.dart';
 //
 // CUÁNDO se anima: una vez por cada tanda de datos, no cada vez que un
 // widget se monta. Ver [animacionPendiente].
+//
+// Acá vive también la maquinaria que comparten los DEMÁS elementos que
+// crecen con la tanda de datos —hoy las gráficas de Progreso, ver
+// [CrecerAlRefrescar]—, porque la compuerta tiene que ser una sola: si
+// las gráficas llevaran la suya, el número y su gráfica se animarían en
+// momentos distintos y la pantalla se vería descoordinada.
 // ============================================================
 
 /// Cuánto tarda un número en llegar a su valor.
@@ -83,6 +89,98 @@ bool animacionPendiente(int generacion) {
 /// Solo para tests: borra la marca para que la próxima animación corra.
 @visibleForTesting
 void reiniciarCompuertaAnimacion() => _generacionYaAnimada = -1;
+
+// ============================================================
+// LO QUE NO ES UN NÚMERO Y TAMBIÉN CRECE.
+// ============================================================
+
+/// Entrega un avance de 0 a 1 cada vez que llega una tanda de datos.
+///
+/// Es [NumeroAnimado] sin el texto: la misma compuerta, la misma duración
+/// y la misma curva, pero el que dibuja decide qué hacer con el avance.
+/// Las gráficas de Progreso lo usan para levantar la línea y las barras
+/// desde la base, así que terminan de crecer en el mismo instante en que
+/// el número grande de arriba llega a su valor.
+///
+/// Por qué no alcanzaba la animación que ya trae fl_chart: esa es una
+/// animación de CAMBIO —interpola de los datos viejos a los nuevos—, y
+/// un refresco suele traer los mismos datos. Sin diferencia que
+/// interpolar no se movía nada, que es justo lo que se veía: el número
+/// subía y la gráfica se quedaba quieta.
+///
+/// Con "Reducir movimiento" el avance es 1 desde el primer cuadro y
+/// [animando] es false: nada se mueve y los tests leen el valor final.
+class CrecerAlRefrescar extends StatefulWidget {
+  const CrecerAlRefrescar({super.key, required this.builder});
+
+  /// [avance] va de 0 a 1 ya pasado por la curva. [animando] dice si en
+  /// este cuadro el crecimiento está en curso, para que quien dibuja
+  /// pueda apagar mientras tanto cualquier OTRA animación que le pise la
+  /// suya.
+  final Widget Function(BuildContext context, double avance, bool animando)
+  builder;
+
+  @override
+  State<CrecerAlRefrescar> createState() => _CrecerAlRefrescarState();
+}
+
+class _CrecerAlRefrescarState extends State<CrecerAlRefrescar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controlador;
+
+  @override
+  void initState() {
+    super.initState();
+    _controlador = AnimationController(
+      vsync: this,
+      duration: duracionNumeroAnimado,
+    );
+    // Terminado por defecto: solo se rebobina si a esta tanda de datos
+    // todavía se le debe la animación.
+    _controlador.value = 1;
+    datosRecargados.addListener(_alRefrescar);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Acá y no en initState porque hace falta el MediaQuery.
+    if (!MediaQuery.disableAnimationsOf(context) &&
+        animacionPendiente(datosRecargados.value)) {
+      _controlador.forward(from: 0);
+    }
+  }
+
+  void _alRefrescar() {
+    if (!mounted) return;
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    if (!animacionPendiente(datosRecargados.value)) return;
+    _controlador.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    datosRecargados.removeListener(_alRefrescar);
+    _controlador.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return widget.builder(context, 1, false);
+    }
+
+    return AnimatedBuilder(
+      animation: _controlador,
+      builder: (context, _) => widget.builder(
+        context,
+        curvaNumeroAnimado.transform(_controlador.value),
+        _controlador.isAnimating,
+      ),
+    );
+  }
+}
 
 /// Un número que sube desde 0 hasta [valor].
 ///

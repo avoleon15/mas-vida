@@ -559,6 +559,13 @@ Widget _etiquetaX(
 /// UNA sola serie y UN solo eje, así que no lleva leyenda: el subtítulo
 /// de arriba ya dice qué es. Los puntos no llevan su número encima; el
 /// valor aparece al tocar o arrastrar.
+///
+/// Al llegar una tanda de datos la línea SUBE desde la base, con la misma
+/// duración y la misma curva que el número grande de arriba (ver
+/// [CrecerAlRefrescar]). Lo que se mueve son los valores, no la escala:
+/// el eje y la grilla se quedan quietos en su lugar definitivo, así la
+/// línea crece contra una referencia fija en vez de que se estire la
+/// pantalla entera.
 class GraficaLineaPasos extends StatelessWidget {
   const GraficaLineaPasos({super.key, required this.serie});
 
@@ -580,109 +587,118 @@ class GraficaLineaPasos extends StatelessWidget {
 
     return SizedBox(
       height: alto,
-      child: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: tope,
-          minX: 0,
-          maxX: (serie.length - 1).toDouble(),
-          gridData: _grilla(tope / 2),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            topTitles: const AxisTitles(),
-            leftTitles: const AxisTitles(),
-            // La guía de cuántos pasos son, a la derecha.
-            rightTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 42,
-                interval: tope / 2,
-                getTitlesWidget: (v, meta) => Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Text(_corto(v), style: _estiloEje(context)),
-                ),
-              ),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 24,
-                interval: 1,
-                getTitlesWidget: (v, meta) => _etiquetaX(context, serie, v),
-              ),
-            ),
-          ),
-          lineTouchData: LineTouchData(
-            // Área de toque generosa: apuntarle a una marca de 8px con el
-            // dedo es imposible.
-            touchSpotThreshold: 26,
-            getTouchedSpotIndicator: (barra, indices) => [
-              for (final _ in indices)
-                TouchedSpotIndicatorData(
-                  const FlLine(color: AppColors.accent, strokeWidth: 1),
-                  FlDotData(
-                    getDotPainter: (s, p, b, i) => FlDotCirclePainter(
-                      radius: 6,
-                      color: AppColors.accent,
-                      strokeWidth: 2,
-                      strokeColor: AppColors.card,
-                    ),
+      child: CrecerAlRefrescar(
+        builder: (context, avance, animando) => LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: tope,
+            minX: 0,
+            maxX: (serie.length - 1).toDouble(),
+            gridData: _grilla(tope / 2),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(),
+              leftTitles: const AxisTitles(),
+              // La guía de cuántos pasos son, a la derecha.
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 42,
+                  interval: tope / 2,
+                  getTitlesWidget: (v, meta) => Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(_corto(v), style: _estiloEje(context)),
                   ),
                 ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 24,
+                  interval: 1,
+                  getTitlesWidget: (v, meta) => _etiquetaX(context, serie, v),
+                ),
+              ),
+            ),
+            lineTouchData: LineTouchData(
+              // Área de toque generosa: apuntarle a una marca de 8px con el
+              // dedo es imposible.
+              touchSpotThreshold: 26,
+              getTouchedSpotIndicator: (barra, indices) => [
+                for (final _ in indices)
+                  TouchedSpotIndicatorData(
+                    const FlLine(color: AppColors.accent, strokeWidth: 1),
+                    FlDotData(
+                      getDotPainter: (s, p, b, i) => FlDotCirclePainter(
+                        radius: 6,
+                        color: AppColors.accent,
+                        strokeWidth: 2,
+                        strokeColor: AppColors.card,
+                      ),
+                    ),
+                  ),
+              ],
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (_) => AppColors.textPrimary,
+                tooltipBorderRadius: BorderRadius.circular(8),
+                getTooltipItems: (spots) => [
+                  for (final s in spots)
+                    LineTooltipItem(
+                      '${_milesGrafica(s.y.round())} pasos\n'
+                      '${serie[s.x.round()].puntos} pts',
+                      const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: [
+                  for (var i = 0; i < serie.length; i++)
+                    if (serie[i].hayDatos)
+                      FlSpot(i.toDouble(), serie[i].pasos * avance),
+                ],
+                isCurved: true,
+                curveSmoothness: 0.22,
+                // 2px, como pide la guía.
+                barWidth: 2,
+                color: AppColors.accent,
+                dotData: FlDotData(
+                  getDotPainter: (s, p, b, i) => FlDotCirclePainter(
+                    radius: 4,
+                    color: AppColors.accent,
+                    strokeWidth: 0,
+                    strokeColor: Colors.transparent,
+                  ),
+                ),
+                belowBarData: BarAreaData(
+                  show: true,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.accent.withValues(alpha: 0.18),
+                      AppColors.accent.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
             ],
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (_) => AppColors.textPrimary,
-              tooltipBorderRadius: BorderRadius.circular(8),
-              getTooltipItems: (spots) => [
-                for (final s in spots)
-                  LineTooltipItem(
-                    '${_milesGrafica(s.y.round())} pasos\n'
-                    '${serie[s.x.round()].puntos} pts',
-                    const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ],
-            ),
           ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: [
-                for (var i = 0; i < serie.length; i++)
-                  if (serie[i].hayDatos)
-                    FlSpot(i.toDouble(), serie[i].pasos.toDouble()),
-              ],
-              isCurved: true,
-              curveSmoothness: 0.22,
-              // 2px, como pide la guía.
-              barWidth: 2,
-              color: AppColors.accent,
-              dotData: FlDotData(
-                getDotPainter: (s, p, b, i) => FlDotCirclePainter(
-                  radius: 4,
-                  color: AppColors.accent,
-                  strokeWidth: 0,
-                  strokeColor: Colors.transparent,
-                ),
-              ),
-              belowBarData: BarAreaData(
-                show: true,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.accent.withValues(alpha: 0.18),
-                    AppColors.accent.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          // Mientras crece manda el avance, no fl_chart: su animación de
+          // cambio interpolaría entre dos cuadros que YA son parte de la
+          // interpolación de arriba, y la línea llegaría tarde y con
+          // rebote. Fuera del crecimiento vuelve a estar prendida, que es
+          // la que le da la transición al cambiar de período.
+          duration: animando
+              ? Duration.zero
+              : const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
         ),
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
       ),
     );
   }
@@ -756,75 +772,82 @@ class GraficaBarrasPuntos extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Expanded(
-            child: BarChart(
-              BarChartData(
-                minY: 0,
-                maxY: tope,
-                gridData: _grilla(tope / 2),
-                borderData: FlBorderData(show: false),
-                alignment: BarChartAlignment.spaceAround,
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(),
-                  rightTitles: const AxisTitles(),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 34,
-                      interval: tope / 2,
-                      getTitlesWidget: (v, meta) =>
-                          Text(_corto(v), style: _estiloEje(context)),
+            child: CrecerAlRefrescar(
+              builder: (context, avance, animando) => BarChart(
+                BarChartData(
+                  minY: 0,
+                  maxY: tope,
+                  gridData: _grilla(tope / 2),
+                  borderData: FlBorderData(show: false),
+                  alignment: BarChartAlignment.spaceAround,
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(),
+                    rightTitles: const AxisTitles(),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 34,
+                        interval: tope / 2,
+                        getTitlesWidget: (v, meta) =>
+                            Text(_corto(v), style: _estiloEje(context)),
+                      ),
                     ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      getTitlesWidget: (v, meta) =>
-                          _etiquetaX(context, serie, v),
-                    ),
-                  ),
-                ),
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => AppColors.textPrimary,
-                    tooltipBorderRadius: BorderRadius.circular(8),
-                    getTooltipItem: (grupo, gi, barra, bi) => BarTooltipItem(
-                      '${serie[grupo.x].puntos} pts',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 24,
+                        getTitlesWidget: (v, meta) =>
+                            _etiquetaX(context, serie, v),
                       ),
                     ),
                   ),
-                ),
-                barGroups: [
-                  for (var i = 0; i < serie.length; i++)
-                    BarChartGroupData(
-                      x: i,
-                      barRods: [
-                        BarChartRodData(
-                          toY: serie[i].puntos.toDouble(),
-                          width: 22,
-                          // Puntas superiores redondeadas, pegadas a la base.
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4),
-                          ),
-                          // La barra del período en curso, en azul de
-                          // marca; las de contexto, en azul lavado.
-                          color: i == actual
-                              ? AppColors.accent
-                              : AppColors.azulBruma,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => AppColors.textPrimary,
+                      tooltipBorderRadius: BorderRadius.circular(8),
+                      getTooltipItem: (grupo, gi, barra, bi) => BarTooltipItem(
+                        '${serie[grupo.x].puntos} pts',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                      // El número de puntos arriba de cada barra, en color de
-                      // texto normal y nunca del color de la serie.
-                      showingTooltipIndicators: const [],
+                      ),
                     ),
-                ],
+                  ),
+                  barGroups: [
+                    for (var i = 0; i < serie.length; i++)
+                      BarChartGroupData(
+                        x: i,
+                        barRods: [
+                          BarChartRodData(
+                            toY: serie[i].puntos * avance,
+                            width: 22,
+                            // Puntas superiores redondeadas, pegadas a la base.
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(4),
+                            ),
+                            // La barra del período en curso, en azul de
+                            // marca; las de contexto, en azul lavado.
+                            color: i == actual
+                                ? AppColors.accent
+                                : AppColors.azulBruma,
+                          ),
+                        ],
+                        // El número de puntos arriba de cada barra, en color de
+                        // texto normal y nunca del color de la serie.
+                        showingTooltipIndicators: const [],
+                      ),
+                  ],
+                ),
+                // Igual que en la línea: mientras crecen las barras manda
+                // el avance, y la animación de cambio de fl_chart queda
+                // para el cambio de período.
+                duration: animando
+                    ? Duration.zero
+                    : const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
               ),
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeOutCubic,
             ),
           ),
         ],
