@@ -20,24 +20,34 @@ import '../theme.dart';
 // lista para cuando exista la API.
 // ============================================================
 
-/// Cuánto puede durar una competencia, en meses.
+/// Cuánto dura una competencia entre conocidos: UN MES, siempre.
 ///
-/// El tope de 3 meses no es arbitrario: una competencia sin final no es
-/// una competencia, es una tabla. Y más allá de un trimestre nadie se
-/// acuerda de que estaba compitiendo.
-const List<int> mesesDeCompetencia = [1, 2, 3];
+/// No es configurable a propósito (decisión de Daniel, revisión de UI del
+/// 9 de septiembre de 2026). Antes el usuario elegía 1, 2 o 3 meses: era
+/// una pregunta que nadie necesitaba contestar y dejaba competencias de
+/// duraciones distintas conviviendo en la misma pantalla. La que dura tres
+/// meses es la liga local, y esa la arma la app, no el usuario.
+const int mesesDeCompetencia = 1;
 
-/// La fecha en que cierra una competencia que arranca hoy y dura [meses].
+/// La fecha en que cierra una competencia que arranca hoy.
 ///
-/// Suma meses al calendario, no 30 días: "2 meses" tiene que caer el
-/// mismo día del mes. Si ese día no existe en el mes destino (31 de enero
-/// + 1 mes), se corta al último día de ese mes en vez de irse a marzo.
-DateTime cierreDeCompetencia(int meses, {DateTime? desde}) {
+/// Suma un mes al calendario, no 30 días: tiene que caer el mismo día del
+/// mes siguiente. Si ese día no existe en el mes destino (31 de enero + 1
+/// mes), se corta al último día de ese mes en vez de irse a marzo.
+///
+/// Cuenta desde el día en que se crea y NO del 1 al último del mes: una
+/// competencia que alguien arma un día 28 duraría dos días. El ciclo del
+/// mes calendario es el de la liga local, que la arma la app.
+DateTime cierreDeCompetencia({DateTime? desde}) {
   final hoy = desde ?? DateTime.now();
-  final ultimoDelMes = DateTime(hoy.year, hoy.month + meses + 1, 0).day;
+  final ultimoDelMes = DateTime(
+    hoy.year,
+    hoy.month + mesesDeCompetencia + 1,
+    0,
+  ).day;
   return DateTime(
     hoy.year,
-    hoy.month + meses,
+    hoy.month + mesesDeCompetencia,
     hoy.day < ultimoDelMes ? hoy.day : ultimoDelMes,
   );
 }
@@ -69,11 +79,6 @@ class _CrearGrupoState extends State<_CrearGrupo> {
   final _nombre = TextEditingController();
   bool _mostrarPuntos = false;
 
-  /// Arranca en 1 mes: es el compromiso más chico y el más fácil de
-  /// aceptar. Que el usuario suba a 2 o 3 es una decisión suya, no algo
-  /// que la app le deje puesto por default.
-  int _meses = 1;
-
   @override
   void dispose() {
     _nombre.dispose();
@@ -94,12 +99,18 @@ class _CrearGrupoState extends State<_CrearGrupo> {
         nombre: nombre,
         tipo: TipoGrupo.conocidos,
         mostrarPuntos: _mostrarPuntos,
-        cierra: cierreDeCompetencia(_meses),
+        // Todo lo que arma el usuario corre por mes: es el default del
+        // modelo y no hay pantalla que lo cambie.
+        ciclo: CicloRanking.mes,
+        arranca: DateTime.now(),
+        cierra: cierreDeCompetencia(),
         // Arranca solo con el usuario: los demás entran con el código.
         miembros: [
           RankingPersona(
             nombre: Datos.i.perfil.nombre,
-            puntosSemana: Datos.i.resumen.puntosSemana,
+            // Los puntos del mes del usuario. Antes se cargaban los de la
+            // semana, que era el ciclo equivocado.
+            puntosPeriodo: Datos.i.resumen.puntosMes,
             tendencia: Tendencia.igual,
             esUsuario: true,
           ),
@@ -126,13 +137,7 @@ class _CrearGrupoState extends State<_CrearGrupo> {
         ),
         const SizedBox(height: AppSpacing.entre),
 
-        _CuantoDura(
-          meses: _meses,
-          onChanged: (m) {
-            HapticFeedback.selectionClick();
-            setState(() => _meses = m);
-          },
-        ),
+        const _CuantoDura(),
         const SizedBox(height: AppSpacing.entre),
 
         // La pregunta de privacidad, explícita.
@@ -190,75 +195,51 @@ class _CrearGrupoState extends State<_CrearGrupo> {
   }
 }
 
-/// Cuánto dura la competencia: 1, 2 o 3 meses.
+/// Cuánto dura la competencia. Un mes, y no se elige.
 ///
-/// Es un [CupertinoSlidingSegmentedControl] y no un picker de fecha a
-/// propósito. Son tres opciones y ninguna otra es válida: un calendario
-/// abierto invita a elegir algo que la app después tiene que rechazar.
+/// Antes era un selector de 1, 2 o 3 meses. Se borró: la duración no es
+/// una decisión que el usuario necesite tomar para armar un grupo con su
+/// oficina, y tener competencias de duraciones distintas en la misma
+/// lista hacía imposible decir "termina el 4" sin explicar cuál termina
+/// cuándo. La de tres meses es la liga local, que la arma la app.
+///
+/// Queda como texto y no como control: informa, no pregunta. La fecha
+/// exacta va igual, porque "un mes" sin día es una abstracción — el
+/// usuario tiene que ver cuándo se define quién ganó.
 class _CuantoDura extends StatelessWidget {
-  const _CuantoDura({required this.meses, required this.onChanged});
-
-  final int meses;
-  final ValueChanged<int> onChanged;
+  const _CuantoDura();
 
   @override
   Widget build(BuildContext context) {
-    final cierre = cierreDeCompetencia(meses);
+    final cierre = cierreDeCompetencia();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '¿CUÁNTO DURA?',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.6,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.entre),
+      decoration: BoxDecoration(
+        color: AppColors.azulNiebla,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.calendar,
+            size: 18,
+            color: AppColors.azulMedio,
           ),
-        ),
-        const SizedBox(height: 6),
-        SizedBox(
-          width: double.infinity,
-          child: CupertinoSlidingSegmentedControl<int>(
-            groupValue: meses,
-            backgroundColor: AppColors.azulNiebla,
-            thumbColor: AppColors.card,
-            onValueChanged: (m) {
-              if (m != null) onChanged(m);
-            },
-            children: {
-              for (final m in mesesDeCompetencia)
-                m: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    m == 1 ? '1 mes' : '$m meses',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: m == meses
-                          ? AppColors.accent
-                          : AppColors.textSecondary,
-                      fontWeight: m == meses
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ),
-            },
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Dura un mes: termina el ${_fechaLarga(cierre)}.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textPrimary,
+                height: 1.35,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        // La fecha exacta, para que "3 meses" no sea una abstracción:
-        // el usuario ve el día en que se cierra y se define quién ganó.
-        //
-        // No dice que 3 es el máximo: el selector solo ofrece 1, 2 y 3,
-        // así que decirlo es explicar algo que ya está a la vista.
-        Text(
-          'Termina el ${_fechaLarga(cierre)}.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppColors.textSecondary,
-            height: 1.35,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

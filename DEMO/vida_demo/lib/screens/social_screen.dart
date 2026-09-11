@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/boton_relieve.dart';
 import '../widgets/contadores_amigos.dart';
 import '../widgets/flujos_social.dart';
+import '../widgets/patrocinio.dart';
 import '../widgets/ranking_widgets.dart';
 import 'amigos_screen.dart';
 import 'ranking_grupo_screen.dart';
@@ -884,6 +885,7 @@ class _SocialScreenState extends State<SocialScreen> {
   Widget _buildTarjetaLiga(BuildContext context, GrupoRanking liga) {
     final indice = liga.miembros.indexWhere((p) => p.esUsuario);
     final persona = indice < 0 ? null : liga.miembros[indice];
+    final periodo = periodoDelCiclo(liga);
 
     return Container(
       width: double.infinity,
@@ -964,10 +966,22 @@ class _SocialScreenState extends State<SocialScreen> {
           if (persona != null) ...[
             const SizedBox(height: 4),
             Text(
-              '${persona.puntosSemana} pts esta semana',
+              '${persona.puntosPeriodo} pts ${liga.ciclo.cuando}',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+          // El rango de fechas, completo. Sin esto "este trimestre" es una
+          // palabra: el usuario no sabe si arrancó ayer o hace dos meses,
+          // y la liga se venía leyendo como si cerrara cada semana.
+          if (periodo != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              periodo,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
           if (liga.premiosMonedas.isNotEmpty) ...[
@@ -980,6 +994,19 @@ class _SocialScreenState extends State<SocialScreen> {
                     const SizedBox(width: 8),
                 ],
               ],
+            ),
+          ],
+          // El patrocinio va DESPUÉS de las monedas y aparte: el cupón de
+          // la marca se suma al premio de siempre, no lo reemplaza. Si
+          // este ciclo no tiene marca vendida, no hay cinta y la tarjeta
+          // se ve igual de terminada.
+          if (liga.patrocinio != null) ...[
+            const SizedBox(height: AppSpacing.entre),
+            CintaPatrocinio(
+              patrocinio: liga.patrocinio!,
+              texto:
+                  'Los 3 primeros se llevan además '
+                  '${liga.patrocinio!.cupon}.',
             ),
           ],
         ],
@@ -1458,17 +1485,17 @@ class _FilaGrupo extends StatelessWidget {
   final GrupoRanking grupo;
   final VoidCallback onTap;
 
-  /// Cuánta gente hay y cuánto le queda a la competencia.
+  /// Cuánta gente hay y cuánto le queda al ciclo.
   ///
-  /// El plazo solo aplica a las competencias que alguien creó con una
-  /// fecha de cierre. La liga local no cierra: se reinicia sola cada
-  /// semana, y decirle "quedan 3 días" sería mentir.
+  /// Ahora aplica también a la liga local: desde que corre por trimestre
+  /// tiene una fecha de cierre real. Antes se la excluía porque se
+  /// reiniciaba sola cada semana y decirle "quedan 3 días" era mentir.
   static String _subtituloGrupo(GrupoRanking g) {
     final n = g.miembros.length;
     final base = '$n ${n == 1 ? "integrante" : "integrantes"}';
 
     final cierra = g.cierra;
-    if (cierra == null || g.tipo != TipoGrupo.conocidos) return base;
+    if (cierra == null) return base;
 
     final dias = cierra.difference(DateTime.now()).inDays;
     if (dias < 0) return '$base · terminó';
@@ -1738,6 +1765,22 @@ class _HojaReglasLiga extends StatelessWidget {
 
   final GrupoRanking liga;
 
+  /// Cada cuánto cierra la liga, con las fechas del ciclo en curso.
+  ///
+  /// Sale de los datos y no de una frase fija: el texto viejo decía
+  /// "cierra el domingo y arranca una nueva el lunes", que era el ciclo
+  /// semanal que la revisión de UI marcó como bug.
+  static String _reglaDelCiclo(GrupoRanking liga) {
+    final base = 'La liga es ${liga.ciclo.adjetivo}';
+    final periodo = periodoDelCiclo(liga);
+    if (periodo == null) return '$base.';
+
+    // "Del 1 de julio…" en minúscula, que va a mitad de la oración.
+    final rango = periodo[0].toLowerCase() + periodo.substring(1);
+    return '$base: el ciclo en curso va $rango, y al cerrar arranca uno '
+        'nuevo.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1799,11 +1842,20 @@ class _HojaReglasLiga extends StatelessWidget {
                     'no se ganan compitiendo.',
                 estilo: estilo,
               ),
+              // La marca del ciclo, si hay: es un premio más, y quien
+              // pregunta las reglas está preguntando justamente qué gana.
+              if (liga.patrocinio != null)
+                _Regla(
+                  icono: CupertinoIcons.ticket,
+                  texto:
+                      'Este trimestre lo patrocina ${liga.patrocinio!.marca}: '
+                      'los tres primeros se llevan además '
+                      '${liga.patrocinio!.cupon}.',
+                  estilo: estilo,
+                ),
               _Regla(
                 icono: CupertinoIcons.clock,
-                texto: liga.cierra == null
-                    ? 'La liga se reinicia cada semana.'
-                    : 'Cierra el domingo y arranca una nueva el lunes.',
+                texto: _reglaDelCiclo(liga),
                 estilo: estilo,
               ),
               const SizedBox(height: AppSpacing.entre),

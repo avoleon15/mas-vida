@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../datos/modelos.dart';
+import '../reglas_rango.dart' show enHoraDeGuatemala;
 import '../theme.dart';
 import 'moneda_animada.dart';
 
@@ -9,6 +10,44 @@ import 'moneda_animada.dart';
 // grupo. Están acá y no duplicadas en cada una para que la regla de
 // privacidad de los puntos viva en UN solo lugar (ver [FilaRanking]).
 // ============================================================
+
+const _mesesDelAnio = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/// El período que corre en [grupo], dicho con fechas: "Del 1 de julio al
+/// 30 de septiembre". Null si el grupo no trae las dos fechas.
+///
+/// Existe porque el nombre del ciclo no alcanza: "este trimestre" no dice
+/// cuánto queda ni desde cuándo se está compitiendo, y la liga se venía
+/// leyendo como si cerrara cada semana.
+///
+/// Las fechas se leen en hora de GUATEMALA y no con `toLocal()`: el ciclo
+/// es el mismo para todos los usuarios y alguien de viaje no tiene que
+/// ver otro cierre.
+String? periodoDelCiclo(GrupoRanking grupo) {
+  final arranca = grupo.arranca;
+  final cierra = grupo.cierra;
+  if (arranca == null || cierra == null) return null;
+
+  String dicho(DateTime d) {
+    final gt = enHoraDeGuatemala(d);
+    return '${gt.day} de ${_mesesDelAnio[gt.month - 1]}';
+  }
+
+  return 'Del ${dicho(arranca)} al ${dicho(cierra)}';
+}
 
 /// Etiqueta de sección, en versalitas.
 class EtiquetaSeccion extends StatelessWidget {
@@ -267,7 +306,7 @@ class _ColumnaPodio extends StatelessWidget {
             child: _Barra(
               puesto: puesto,
               color: color,
-              puntos: verPuntos ? persona.puntosSemana : null,
+              puntos: verPuntos ? persona.puntosPeriodo : null,
             ),
           ),
         ],
@@ -435,7 +474,7 @@ class FilaRanking extends StatelessWidget {
           ),
           if (verPuntos) ...[
             Text(
-              '${persona.puntosSemana}',
+              '${persona.puntosPeriodo}',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -553,7 +592,10 @@ class ResumenGrupo extends StatelessWidget {
           Text(
             // Los propios puntos SIEMPRE se ven: son del usuario. Lo que
             // el grupo decide es si se ven los de los DEMÁS.
-            '${persona.puntosSemana} pts esta semana',
+            //
+            // El período sale del ciclo del grupo y no de un texto fijo:
+            // decía "esta semana" en una competencia que dura un mes.
+            '${persona.puntosPeriodo} pts ${grupo.ciclo.cuando}',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),

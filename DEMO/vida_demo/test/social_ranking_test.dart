@@ -150,12 +150,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final yo = liga.miembros.firstWhere((m) => m.esUsuario);
-      expect(find.text('${yo.puntosSemana}'), findsOneWidget);
+      expect(find.text('${yo.puntosPeriodo}'), findsOneWidget);
 
       // Los de los demás no están en ningún lado.
       for (final otro in liga.miembros.where((m) => !m.esUsuario)) {
         expect(
-          find.text('${otro.puntosSemana}'),
+          find.text('${otro.puntosPeriodo}'),
           findsNothing,
           reason: 'se filtraron los puntos de ${otro.nombre}',
         );

@@ -4,11 +4,12 @@
     "De una conexion solo se exponen racha, nivel y monedas — NUNCA pasos ni historial crudo.",
     "Los duelos no dan monedas ni premios: son puramente competitivos.",
     "En un grupo de tipo 'desconocidos' los puntos NUNCA se muestran, solo la posicion.",
+    "puntos_periodo son los puntos del CICLO de ese grupo: del mes en una competencia con conocidos, del trimestre en la liga local. La clave vieja se llamaba puntos_semana y ningun ranking corre por semana: lo semanal son los retos, que es otra mecanica.",
     "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
   ],
   "yo": {
     "nombre": "Diego",
-    "puntos_semana": 200,
+    "puntos_periodo": 850,
     "tendencia": "subida"
   },
   "duelos": {
@@ -88,12 +89,12 @@
       "miembros": [
         {
           "nombre": "Ana Martinez",
-          "puntos_semana": 340,
+          "puntos_periodo": 1350,
           "tendencia": "subida"
         },
         {
           "nombre": "David S.",
-          "puntos_semana": 275,
+          "puntos_periodo": 1100,
           "tendencia": "igual"
         },
         {
@@ -101,12 +102,12 @@
         },
         {
           "nombre": "Juan Perez",
-          "puntos_semana": 150,
+          "puntos_periodo": 600,
           "tendencia": "bajada"
         },
         {
           "nombre": "Sofia L.",
-          "puntos_semana": 125,
+          "puntos_periodo": 500,
           "tendencia": "igual"
         }
       ]
@@ -122,12 +123,12 @@
         },
         {
           "nombre": "Maria Rodriguez",
-          "puntos_semana": 175,
+          "puntos_periodo": 700,
           "tendencia": "subida"
         },
         {
           "nombre": "Carlos Piña",
-          "puntos_semana": 100,
+          "puntos_periodo": 400,
           "tendencia": "bajada"
         }
       ]
@@ -140,7 +141,7 @@
       "miembros": [
         {
           "nombre": "Pablo A.",
-          "puntos_semana": 260,
+          "puntos_periodo": 1050,
           "tendencia": "subida"
         },
         {
@@ -148,12 +149,12 @@
         },
         {
           "nombre": "Rodrigo M.",
-          "puntos_semana": 190,
+          "puntos_periodo": 760,
           "tendencia": "igual"
         },
         {
           "nombre": "Joaquin Monrroy",
-          "puntos_semana": 90,
+          "puntos_periodo": 360,
           "tendencia": "bajada"
         }
       ]
@@ -166,45 +167,56 @@
       "liga": {
         "nivel_actividad": "Intermedio",
         "zona": "Zona 10, Guatemala",
-        "cierra": "2026-09-06T23:59:59-06:00",
+        "ciclo": "trimestre",
+        "arranca": "2026-07-01T00:00:00-06:00",
+        "cierra": "2026-09-30T23:59:59-06:00",
         "premios_monedas": [
           10,
           6,
           3
-        ]
+        ],
+        "patrocinio": {
+          "marca": "Ookii",
+          "logo": "assets/img/premios/restaurantes/ookii.webp",
+          "cupon": "2x1 en sushi de Ookii"
+        },
+        "_nota_ciclo": "La liga corre por TRIMESTRE: del dia 1 del primer mes al ultimo dia del tercero, en hora de Guatemala (UTC-6, sin horario de verano). Antes decia 2026-09-06, un domingo, o sea que corria semanal: eso era el bug que reporto la revision de UI del 9 de septiembre de 2026. El ciclo SEMANAL de los retos es otra cosa y no se toca. Las competencias que arma el usuario con su gente corren por MES.",
+        "_nota_patrocinio": "PLACEHOLDER: Ookii es un ejemplo, la alianza real todavia no esta cerrada (Diego la sustituye cuando cierre). El logo sale del catalogo de Premios para no meter un asset nuevo por algo provisional. Cuando exista el endpoint de Luis esto llega de la API y este bloque se borra."
       },
       "miembros": [
         {
           "nombre": "Daniel pinol",
-          "puntos_semana": 410,
+          "puntos_periodo": 3200,
           "tendencia": "subida"
         },
         {
           "nombre": "Luis Montenegro",
-          "puntos_semana": 365,
+          "puntos_periodo": 2900,
           "tendencia": "igual"
         },
         {
           "nombre": "Dhidel Osorio",
-          "puntos_semana": 290,
+          "puntos_periodo": 2400,
           "tendencia": "subida"
         },
         {
-          "es_usuario": true
+          "_nota": "El usuario trae SU PROPIO puntos_periodo solo aca: el bloque 'yo' de arriba lleva los del MES, que es el ciclo de las competencias con conocidos, y esta liga corre por trimestre. Un mismo numero no puede servir para los dos ciclos. Tiene que quedar entre el 3.o (2400) y el 5.o (1500) o la tabla deja de estar ordenada.",
+          "es_usuario": true,
+          "puntos_periodo": 2100
         },
         {
           "nombre": "Alexander Lopez",
-          "puntos_semana": 180,
+          "puntos_periodo": 1500,
           "tendencia": "bajada"
         },
         {
           "nombre": "Sofia Bilbao",
-          "puntos_semana": 140,
+          "puntos_periodo": 1150,
           "tendencia": "igual"
         },
         {
           "nombre": "Daniela De Leon",
-          "puntos_semana": 95,
+          "puntos_periodo": 780,
           "tendencia": "bajada"
         }
       ]
