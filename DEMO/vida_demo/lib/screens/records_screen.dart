@@ -456,7 +456,7 @@ class _TarjetaTotales extends StatelessWidget {
           _Fila(
             titulo: 'Monedas ganadas este año',
             valor: '${resumen.monedasGanadasAnio}',
-            nota: 'Las monedas se gastan en Premios y caducan a los 6 meses',
+            nota: 'Las monedas se gastan en Premios y caducan a los 90 días',
           ),
         ],
       ),

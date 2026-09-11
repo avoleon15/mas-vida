@@ -31,7 +31,7 @@ int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 
 // ============================================================
 // OBJETIVOS DE LA SEMANA. Acá se pagan MONEDAS — la moneda que se gasta
-// en Premios y caduca a los 6 meses. Nunca puntos: los puntos mueven el
+// en Premios y caduca a los 90 días. Nunca puntos: los puntos mueven el
 // cashback anual y las dos monedas del producto no se mezclan.
 //
 // Reemplazan por completo a las viejas "Metas Mensuales", que ya no
@@ -487,7 +487,7 @@ class HomeScreen extends StatelessWidget {
 
   /// Sección "Objetivos de la semana": el sistema de MONEDAS, aparte del
   /// de puntos/cashback de arriba. Las monedas se gastan en Premios y
-  /// caducan a los 6 meses; los puntos nunca se gastan.
+  /// caducan a los 90 días; los puntos nunca se gastan.
   ///
   /// Son 3 objetivos, los tres de la MISMA semana. Se evalúan una sola
   /// vez, el domingo 23:59 (hora de Guatemala).
@@ -970,7 +970,7 @@ class _PresionableState extends State<_Presionable> {
 /// incluye meses anteriores y descuenta lo gastado en Premios—, porque
 /// acá tiene que cuadrar con lo que el usuario puede sumar a ojo.
 ///
-/// Son MONEDAS: se gastan en Premios y caducan a los 6 meses. Nunca
+/// Son MONEDAS: se gastan en Premios y caducan a los 90 días. Nunca
 /// puntos.
 class _SaldoMonedasChip extends StatefulWidget {
   const _SaldoMonedasChip({required this.monedas});

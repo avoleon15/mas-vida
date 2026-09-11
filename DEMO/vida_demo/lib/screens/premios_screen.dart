@@ -189,10 +189,10 @@ class _PremiosScreenState extends State<PremiosScreen> {
               const SizedBox(height: 10),
               Text(
                 lote == null
-                    ? 'Las monedas duran 6 meses desde que las ganás.'
+                    ? 'Las monedas duran 90 días desde que las ganás.'
                     : '${lote.cantidad} de ellas vencen en '
-                          '${lote.diasParaCaducar} días. Cada moneda dura 6 '
-                          'meses desde que la ganás.',
+                          '${lote.diasParaCaducar} días. Cada moneda dura 90 '
+                          'días desde que la ganás.',
                 style: const TextStyle(height: 1.35),
               ),
             ],

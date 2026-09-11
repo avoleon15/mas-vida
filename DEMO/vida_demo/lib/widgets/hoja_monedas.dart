@@ -114,8 +114,8 @@ class _HojaMonedas extends StatelessWidget {
                       // Las monedas se gastan y caducan: decirlo acá evita
                       // que alguien las junte creyendo que duran para
                       // siempre.
-                      'Las monedas se gastan en Premios y caducan a los 6 '
-                      'meses de ganadas.',
+                      'Las monedas se gastan en Premios y caducan a los 90 '
+                      'días de ganadas.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
                         height: 1.35,
