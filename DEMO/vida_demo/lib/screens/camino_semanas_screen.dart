@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/moneda_animada.dart';
 import '../widgets/curva_camino.dart';
+import '../widgets/patrocinio.dart';
 import '../widgets/tarjeta_semana.dart';
 
 // ============================================================
@@ -36,10 +37,11 @@ import '../widgets/tarjeta_semana.dart';
 
 /// Alto de cada renglón del camino.
 ///
-/// Tiene que aguantar el nodo más alto —el de la semana en curso— entero:
-/// píldora (20) + aire (5) + halo (88) + aire (6) + pie (14) da 133, y a
-/// 132 la columna se desbordaba. Los 152 dejan margen para cuando el
-/// usuario sube el tamaño de letra en iOS.
+/// El círculo va clavado en el centro del renglón —por ahí pasa la
+/// curva—, así que el renglón tiene que aguantar la mitad del nodo más
+/// alto hacia arriba: halo (44) + aire (5) + píldora (20) da 69, y la
+/// mitad de 152 son 76. El margen es para cuando el usuario sube el
+/// tamaño de letra en iOS.
 const double _altoFila = 152;
 
 /// Diámetro de cada tipo de nodo.
@@ -54,14 +56,42 @@ const double _dHalo = 88;
 ///
 /// Es una onda y no un zigzag de dos carriles: con dos posiciones fijas
 /// el camino se lee como una escalera de caracol y se vuelve repetitivo.
+/// Es un máximo: si el nodo con su pie no entra, `_amplitudReal` lo baja.
 const double _amplitud = 0.20;
 
 /// Cuánto avanza la onda por semana, en radianes. Cerca de 1 da algo
 /// más de media vuelta por nodo: serpentea sin llegar a hacer rulos.
 const double _pasoDeOnda = 0.95;
 
-/// Ancho del pie que va debajo de cada nodo (la moneda y el monto).
-const double _anchoPie = 150;
+/// Aire entre el círculo y el pie que lleva al lado.
+const double _sepPie = 10;
+
+/// El carril donde va el logo de la marca que patrocina la semana, a la
+/// izquierda del círculo.
+///
+/// Se reserva SIEMPRE, tenga logo o no. Es la única forma de cumplir lo
+/// que pidió la revisión de UI: que la burbuja no se mueva ni cambie de
+/// tamaño según si la semana está vendida. Si el carril apareciera solo
+/// cuando hay logo, cada semana patrocinada correría su círculo —y con
+/// él la curva— unos píxeles a la derecha, y el camino se vería
+/// tembloroso al bajar.
+const double _anchoLogo = 30;
+const double _sepLogo = 6;
+const double _carrilLogo = _anchoLogo + _sepLogo;
+
+/// Cuánto puede sobresalir la píldora "ESTA SEMANA" a cada lado del
+/// halo. La píldora es más ancha que el círculo y tiene que quedar
+/// centrada sobre él sin correrlo: la curva pasa por el centro del
+/// círculo, no por el de la píldora.
+const double _desbordePildora = 20;
+
+/// Ancho del pie de cada nodo (la moneda y el monto), según el ancho de
+/// la pantalla.
+///
+/// No es constante porque el pie ya no va debajo del círculo sino al
+/// lado: en un iPhone angosto un ancho fijo dejaba al nodo de más a la
+/// derecha con el texto cortado.
+double _anchoPie(double ancho) => (ancho * 0.33).clamp(96.0, 130.0);
 
 /// Abre el camino completo de [objetivos].
 void abrirCaminoDeSemanas(BuildContext context, ObjetivosSemana objetivos) {
@@ -81,7 +111,7 @@ class CaminoSemanasScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final recorrido = objetivos.recorrido;
     final enCurso = objetivos.enCurso;
-    final cobradas = objetivos.monedasGanadas;
+    final ganadas = objetivos.monedasGanadas;
 
     return Scaffold(
       body: SafeArea(
@@ -120,7 +150,7 @@ class CaminoSemanasScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (cobradas > 0) _MonedasCobradas(monedas: cobradas),
+                  if (ganadas > 0) _MonedasGanadas(monedas: ganadas),
                 ],
               ),
             ),
@@ -139,15 +169,15 @@ class CaminoSemanasScreen extends StatelessWidget {
   }
 }
 
-/// Lo ya cobrado, en el encabezado.
-class _MonedasCobradas extends StatelessWidget {
-  const _MonedasCobradas({required this.monedas});
+/// Lo ya ganado, en el encabezado.
+class _MonedasGanadas extends StatelessWidget {
+  const _MonedasGanadas({required this.monedas});
 
   final int monedas;
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'Llevás $monedas monedas cobradas',
+    label: 'Llevás $monedas monedas ganadas',
     excludeSemantics: true,
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -195,16 +225,27 @@ class _Camino extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, medidas) {
           final ancho = medidas.maxWidth;
+          final anchoPie = _anchoPie(ancho);
 
-          // Los centros los calcula UNA sola vez y los leen tanto el
-          // pintor como los nodos. Si cada uno tuviera su cuenta, la
-          // curva podría no pasar por los círculos — el mismo problema
-          // que ya resolvió la barra inferior sacando el ancho del
-          // indicador del ancho de los ítems.
+          // El nodo ya no es solo el círculo: es el círculo MÁS el pie
+          // que lleva al lado. La onda entonces no puede oscilar sobre
+          // el centro de la pantalla, porque el bloque se saldría por la
+          // derecha. Se centra el bloque entero y se recorta la amplitud
+          // a lo que sobra.
+          final bloque = _carrilLogo + _dHalo + _sepPie + anchoPie;
+          final sobra = math.max(0.0, ancho - bloque);
+          final amplitud = math.min(ancho * _amplitud, sobra / 2);
+          final ejeX = _carrilLogo + _dHalo / 2 + sobra / 2;
+
+          // Los centros —los del CÍRCULO— los calcula UNA sola vez y los
+          // leen tanto el pintor como los nodos. Si cada uno tuviera su
+          // cuenta, la curva podría no pasar por los círculos — el mismo
+          // problema que ya resolvió la barra inferior sacando el ancho
+          // del indicador del ancho de los ítems.
           final centros = [
             for (var i = 0; i < recorrido.length; i++)
               Offset(
-                ancho / 2 + math.sin(i * _pasoDeOnda) * ancho * _amplitud,
+                ejeX + math.sin(i * _pasoDeOnda) * amplitud,
                 (i + 0.5) * _altoFila,
               ),
           ];
@@ -232,9 +273,9 @@ class _Camino extends StatelessWidget {
                   ),
                   for (var i = 0; i < recorrido.length; i++)
                     Positioned(
-                      left: centros[i].dx - _anchoPie / 2,
+                      left: centros[i].dx - _carrilLogo - _dHalo / 2,
                       top: centros[i].dy - _altoFila / 2,
-                      width: _anchoPie,
+                      width: bloque,
                       height: _altoFila,
                       child: _Nodo(
                         key: llaveNodoSemana(recorrido[i].semana.numero),
@@ -307,6 +348,12 @@ class _PintorCamino extends CustomPainter {
 /// Llave del nodo de una semana, para agarrarlo desde un test.
 Key llaveNodoSemana(int numero) => ValueKey('nodo-semana-$numero');
 
+/// Llave del CÍRCULO de una semana, que es por donde pasa la curva.
+///
+/// Existe para que un test pueda comprobar que el círculo queda en el
+/// mismo lugar tenga logo o no: es lo que se rompería sin el carril fijo.
+Key llaveCirculoSemana(int numero) => ValueKey('circulo-semana-$numero');
+
 class _Nodo extends StatefulWidget {
   const _Nodo({
     super.key,
@@ -343,6 +390,7 @@ class _NodoState extends State<_Nodo> {
     final estado = _semana.estado;
     final cumplida = estado == EstadoSemana.cerrada && _semana.subioDeRango;
     final enCurso = estado == EstadoSemana.enCurso;
+    final patrocinio = _semana.patrocinio;
 
     return Semantics(
       button: true,
@@ -360,16 +408,58 @@ class _NodoState extends State<_Nodo> {
           scale: _presionado ? 0.93 : 1,
           duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // El pie va AL LADO del círculo y no debajo: debajo le caía
+          // encima la curva del tramo siguiente y el naranja de la
+          // moneda se perdía contra el azul.
+          child: Row(
             children: [
-              if (enCurso) ...[
-                const _PildoraEstaSemana(),
-                const SizedBox(height: 5),
-              ],
-              _Circulo(semana: _semana, cumplida: cumplida, enCurso: enCurso),
-              const SizedBox(height: 6),
-              _PieDelNodo(paso: widget.paso, cumplida: cumplida),
+              // El carril del logo ocupa su lugar aunque la semana no
+              // tenga marca: así el círculo queda clavado donde pasa la
+              // curva, la tenga o no.
+              SizedBox(
+                width: _anchoLogo,
+                child: patrocinio == null
+                    ? null
+                    : LogoPatrocinio(
+                        patrocinio: patrocinio,
+                        tamano: _anchoLogo,
+                      ),
+              ),
+              const SizedBox(width: _sepLogo),
+              SizedBox(
+                key: llaveCirculoSemana(_semana.numero),
+                width: _dHalo,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    _Circulo(
+                      semana: _semana,
+                      cumplida: cumplida,
+                      enCurso: enCurso,
+                    ),
+                    if (enCurso)
+                      Positioned(
+                        // Márgenes negativos: la píldora es más ancha
+                        // que el halo y tiene que quedar centrada sobre
+                        // él sin correr el círculo, que es por donde
+                        // pasa la curva. `heightFactor` la deja pegada
+                        // al borde de abajo de su caja.
+                        left: -_desbordePildora,
+                        right: -_desbordePildora,
+                        bottom: _dHalo + 5,
+                        child: const Center(
+                          heightFactor: 1,
+                          child: _PildoraEstaSemana(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: _sepPie),
+              Expanded(
+                child: _PieDelNodo(paso: widget.paso, cumplida: cumplida),
+              ),
             ],
           ),
         ),
@@ -539,7 +629,7 @@ class _PildoraEstaSemana extends StatelessWidget {
   );
 }
 
-/// Lo que paga la semana, debajo del nodo.
+/// Lo que paga la semana, al lado del nodo.
 class _PieDelNodo extends StatelessWidget {
   const _PieDelNodo({required this.paso, required this.cumplida});
 
@@ -548,21 +638,32 @@ class _PieDelNodo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final patrocinio = paso.semana.patrocinio;
+
     if (paso.monedas <= 0) {
-      return Text(
-        // Una semana que no pagó no se deja en blanco: el hueco se lee
-        // como un error de carga.
-        'Sin monedas',
-        style: Theme.of(
-          context,
-        ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            // Una semana que no pagó no se deja en blanco: el hueco se lee
+            // como un error de carga.
+            'Sin monedas',
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+          ),
+          // Aunque no pague monedas puede estar patrocinada: son dos
+          // premios distintos y uno no depende del otro.
+          if (patrocinio != null) _Cupon(patrocinio: patrocinio),
+        ],
       );
     }
 
     final futura = paso.semana.estado == EstadoSemana.futura;
 
     final texto = cumplida
-        ? '+${paso.monedas} cobradas'
+        ? '+${paso.monedas} ganadas'
         : '+${paso.monedas} al Rango ${paso.rangoAlCerrar}';
 
     final fila = Row(
@@ -573,7 +674,9 @@ class _PieDelNodo extends StatelessWidget {
         Flexible(
           child: Text(
             texto,
-            maxLines: 1,
+            // Dos renglones y no uno: al lado del círculo hay menos ancho
+            // que debajo, y en un iPhone angosto "al Rango 4" se cortaba.
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontSize: 11,
@@ -587,9 +690,61 @@ class _PieDelNodo extends StatelessWidget {
       ],
     );
 
+    final columna = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        fila,
+        // El cupón de la marca va en su propio renglón y NO reemplaza al
+        // de las monedas: cumplir la semana sigue pagando lo mismo, el
+        // patrocinio agrega un premio de la marca.
+        if (patrocinio != null) _Cupon(patrocinio: patrocinio),
+      ],
+    );
+
     // Las futuras van más apagadas: su monto es una proyección, no plata
     // que ya esté. Mostrarla igual de firme que la cobrada sería prometer
     // algo que todavía no pasó.
-    return futura ? Opacity(opacity: 0.75, child: fila) : fila;
+    return futura ? Opacity(opacity: 0.75, child: columna) : columna;
   }
+}
+
+/// El cupón de la marca aliada, debajo de las monedas del nodo.
+///
+/// En AZUL y con un boleto, no con la moneda naranja: son dos premios
+/// distintos y tienen que distinguirse de un vistazo. El naranja además
+/// está reservado a las monedas (ver CLAUDE.md), y usarlo acá haría
+/// pensar que el cupón se descuenta del saldo.
+class _Cupon extends StatelessWidget {
+  const _Cupon({required this.patrocinio});
+
+  final Patrocinio patrocinio;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 3),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          CupertinoIcons.ticket,
+          size: 13,
+          color: AppColors.azulMedio,
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            'Cupón de ${patrocinio.marca}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.azulMedio,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
