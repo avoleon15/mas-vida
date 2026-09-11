@@ -39,8 +39,13 @@ expresamente por ser de Vitality.
 1. **PUNTOS** — nunca se gastan. Determinan categoría anual y % de cashback.
    Nunca aparecen en Premios.
 2. **MONEDAS** (antes "medallas" — si ves ese término en código viejo,
-   migralo) — se gastan en Premios, caducan a los 6 meses. Nunca aparecen
-   en Mi Plan.
+   migralo) — se gastan en Premios, caducan a los **90 días**. Nunca
+   aparecen en Mi Plan.
+
+   Los 90 días los confirmó Daniel en la revisión de UI del 9 de
+   septiembre de 2026 y reemplazan a los 6 meses que decía la versión
+   anterior de este documento. Si encontrás "6 meses" en código,
+   comentarios o mocks, es del plazo viejo y hay que migrarlo.
 
 Los **duelos** (Social) NO dan ninguna moneda ni premio por ahora — son
 puramente competitivos/sociales.
@@ -153,6 +158,16 @@ Notas sobre la edad:
 (confirmado en el contrato v1). Todos arrancan en nivel de reto 1. Completar la
 meta de la semana SUBE un nivel; no completarla BAJA uno. El ciclo va de lunes
 00:00 a domingo 23:59 en hora de Guatemala. Cumplir el reto acuña MONEDAS.
+
+Los **tres objetivos de una semana cierran JUNTOS**, el domingo 23:59, y el
+lunes 00:00 ya corre la semana siguiente con sus propios objetivos. Quién
+releva la semana es el **servidor**: el teléfono nunca lo calcula, solo vuelve
+a pedir los datos al pasar el cierre (`programarRelevoDeSemana`). Si lo
+decidiera el teléfono, cambiar la zona horaria en Ajustes abriría una semana
+nueva antes de tiempo. Por lo mismo, **ningún texto de un objetivo puede
+sonar a plazo propio** ("Faltan 42 min" se leía como cuenta regresiva): la
+columna derecha dice avance sobre la meta ("48 de 90 min") y el plazo se dice
+una sola vez, abajo.
 
 [PENDIENTE: la tabla de dificultad por nivel de reto. El contrato dice explícito
 que no hay número documentado todavía; lo define Luis en el motor de reglas.
@@ -332,6 +347,13 @@ resuelven, no por cómo se ven de fábrica.
 - "Objetivos de la semana": las semanas del mes, cada una plegable, con
   sus 3 objetivos (progreso/monedas/check) y el rango. Las metas mensuales
   ya NO existen
+- **Semanas patrocinadas:** una alianza puede comprar una semana. Esa
+  semana muestra el logo de la marca junto a su burbuja en el camino y
+  paga un cupón de esa marca además de las monedas del rango. **No todas
+  las semanas tienen marca** y el camino tiene que verse igual de
+  terminado sin logo: el carril del logo se reserva siempre, así la
+  burbuja nunca se mueve ni cambia de tamaño según si la semana está
+  vendida
 
 **Progress** (`lib/screens/progress_screen.dart`) — construida
 - Selector Semana/Mes/Año con contenido real por pestaña
@@ -361,6 +383,26 @@ resuelven, no por cómo se ven de fábrica.
   usuario y amigos en común. Ni siquiera la racha.
 - Ranking: selector de grupos, posición propia, cuánto falta para subir,
   lista completa
+
+**Los ciclos de competencia son tres y no se mezclan** (confirmado por
+Daniel, 9 de septiembre de 2026):
+
+| Qué | Ciclo | Quién lo arma |
+|---|---|---|
+| Liga local (`tipo: desconocidos`) | trimestre calendario | la app |
+| Competencia con conocidos (oficina, familia, amigos) | 1 mes, no configurable | el usuario |
+| Retos | semana (lunes 00:00 a domingo 23:59) | la app |
+
+La liga local corre del día 1 del primer mes al último día del tercero, en
+hora de Guatemala. Antes cerraba un domingo — corría semanal — y eso era un
+bug del build, no una regla. La duración de las competencias personales
+**no se elige**: el selector de 1/2/3 meses se borró.
+
+Cada ciclo de la liga puede tener una **marca patrocinadora**: los 3
+primeros ganan un cupón de esa marca ADEMÁS de sus monedas, nunca en lugar
+de ellas. Los datos de patrocinio salen del repositorio, nunca fijos en el
+widget. [PENDIENTE: el endpoint de patrocinios lo debe Luis; hasta entonces
+sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 
 **Premios** — construida
 - Catálogo (filtros, saldo de monedas, costo en monedas)
@@ -418,3 +460,10 @@ producto o queda solo como material de pitch comercial]
 - Reconciliar retos semanales vs. meta semanal adaptativa vs. recompensas por
   constancia
 - Si el dashboard para la aseguradora se construye o queda como pitch
+- El endpoint de patrocinios (qué semana y qué ciclo de liga están
+  vendidos, con qué marca y qué cupón) — lo debe Luis. Hasta entonces sale
+  del mock; la marca de ejemplo (Ookii) es un placeholder de Diego
+- Si el cupón de una semana patrocinada se SUMA al premio del catálogo o
+  lo reemplaza. Hoy se construyó como premio adicional (las monedas del
+  rango se pagan igual), que es lo único que no contradice la mecánica de
+  rangos

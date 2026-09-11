@@ -173,6 +173,12 @@ class _ArranqueState extends State<_Arranque> {
         // si no, la primera que se ve aparece un instante después que su
         // número.
         await MonedaAnimada.precargar();
+
+        // Queda apuntado el relevo de semana: si la app se queda abierta
+        // cruzando el domingo 23:59, el lunes 00:00 (hora de Guatemala)
+        // vuelve a pedir los datos sola y aparece la semana nueva con sus
+        // objetivos, sin que el usuario tenga que jalar para refrescar.
+        programarRelevoDeSemana();
       }),
       Future.delayed(_minimoEnPantalla),
     ]);
