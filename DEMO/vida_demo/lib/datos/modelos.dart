@@ -277,7 +277,11 @@ class Historial {
 }
 
 /// Un lote de monedas con su fecha de caducidad. Las monedas caducan a
-/// los 6 meses de acuñadas.
+/// los 90 días de acuñadas.
+///
+/// Quién calcula la fecha: el backend. Acá solo se lee `caducan`, nunca
+/// se suman los 90 días en el teléfono — si el plazo cambia otra vez, la
+/// app no tiene que enterarse.
 class LoteMonedas {
   const LoteMonedas({
     required this.cantidad,
@@ -411,6 +415,7 @@ class SemanaObjetivos {
     required this.cierra,
     required this.estado,
     required this.objetivos,
+    this.patrocinio,
   });
 
   /// Número de semana dentro del mes: 1, 2, 3… Un mes puede tener 5.
@@ -421,6 +426,21 @@ class SemanaObjetivos {
 
   final EstadoSemana estado;
   final List<ObjetivoSemanal> objetivos;
+
+  /// La marca aliada que compró ESTA semana, si alguna la compró.
+  ///
+  /// NO todas las semanas tienen: solo las que una alianza pagó por
+  /// destacar. Null es el caso normal y el camino tiene que verse igual
+  /// de terminado sin logo — nada puede cambiar de tamaño ni de lugar
+  /// según si la semana está vendida.
+  ///
+  /// Cumplir una semana patrocinada paga el cupón de esa marca en vez
+  /// del premio genérico del catálogo. Las MONEDAS del rango se pagan
+  /// igual: el patrocinio cambia el premio, no la mecánica.
+  final Patrocinio? patrocinio;
+
+  /// Si esta semana la compró una marca.
+  bool get tienePatrocinio => patrocinio != null;
 
   /// Cuántos de los tres van cumplidos.
   int get cumplidos => objetivos.where((o) => o.completo).length;
@@ -445,6 +465,9 @@ class SemanaObjetivos {
     objetivos: (j['objetivos'] as List)
         .map((o) => ObjetivoSemanal.desdeJson(o as Map<String, dynamic>))
         .toList(),
+    patrocinio: j['patrocinio'] == null
+        ? null
+        : Patrocinio.desdeJson(j['patrocinio'] as Map<String, dynamic>),
   );
 }
 
@@ -1070,22 +1093,92 @@ class Solicitud {
   );
 }
 
+/// Una marca aliada que paga por aparecer.
+///
+/// Vive acá y no en cada pantalla porque patrocina dos cosas distintas
+/// con la misma forma: un ciclo de la liga (ver [GrupoRanking.patrocinio])
+/// y una semana del programa (ver `SemanaObjetivos.patrocinio`).
+///
+/// SIEMPRE llega del backend. Que hoy salga del mock es circunstancial:
+/// ninguna pantalla escribe el nombre de una marca a mano.
+class Patrocinio {
+  const Patrocinio({
+    required this.marca,
+    required this.logo,
+    required this.cupon,
+  });
+
+  /// El nombre de la marca, tal como se muestra.
+  final String marca;
+
+  /// Ruta del logo. Hoy es un asset local del catálogo de Premios; con el
+  /// backend va a ser una URL y solo cambia quién resuelve la imagen.
+  final String logo;
+
+  /// Qué se lleva quien cumpla: el texto del cupón de ESTA marca, que
+  /// reemplaza al premio genérico del catálogo.
+  final String cupon;
+
+  factory Patrocinio.desdeJson(Map<String, dynamic> j) => Patrocinio(
+    marca: j['marca'] as String,
+    logo: j['logo'] as String,
+    cupon: j['cupon'] as String,
+  );
+
+  Map<String, dynamic> aJson() => {
+    'marca': marca,
+    'logo': logo,
+    'cupon': cupon,
+  };
+}
+
+/// Cada cuánto cierra un ranking y se reparten los premios.
+///
+/// Son DOS ciclos distintos y no se pueden unificar: la liga local corre
+/// por trimestre y las competencias que arma el usuario con su gente
+/// corren por mes (decisión de Daniel, revisión de UI del 9 de
+/// septiembre de 2026).
+///
+/// Ninguno de los dos es el ciclo SEMANAL de los retos, que es otra
+/// mecánica y vive en `reglas_rango.dart`. Si algún día se tocan, se
+/// tocan ahí, no acá.
+enum CicloRanking {
+  mes('mensual', 'este mes'),
+  trimestre('trimestral', 'este trimestre');
+
+  const CicloRanking(this.adjetivo, this.cuando);
+
+  /// Cómo se llama el ciclo: "mensual", "trimestral".
+  final String adjetivo;
+
+  /// Cómo se dice el período en curso dentro de una frase: "este mes".
+  final String cuando;
+
+  static CicloRanking desde(String? s) =>
+      s == 'trimestre' ? CicloRanking.trimestre : CicloRanking.mes;
+}
+
 class RankingPersona {
   const RankingPersona({
     required this.nombre,
-    required this.puntosSemana,
+    required this.puntosPeriodo,
     required this.tendencia,
     required this.esUsuario,
   });
 
   final String nombre;
 
-  /// Puntos de la semana.
+  /// Puntos acumulados en el ciclo del grupo (ver [GrupoRanking.ciclo]):
+  /// del mes en una competencia personal, del trimestre en la liga local.
+  ///
+  /// Antes eran los de la SEMANA, y era un bug: ningún ranking del
+  /// producto corre por semana. Lo semanal son los retos, que no son
+  /// esto.
   ///
   /// SIEMPRE se usan para ordenar. Si se MUESTRAN o no lo decide el
   /// grupo (ver [GrupoRanking.mostrarPuntos]): entre conocidos se pueden
   /// ver, con desconocidos nunca.
-  final int puntosSemana;
+  final int puntosPeriodo;
 
   final Tendencia tendencia;
   final bool esUsuario;
@@ -1103,8 +1196,13 @@ class RankingPersona {
     final campos = esUsuario && yo != null ? {...yo, ...j} : j;
 
     return RankingPersona(
+      // `puntos_semana` es la clave vieja. Se sigue leyendo porque los
+      // grupos que el usuario ya creó están guardados en su teléfono con
+      // ese nombre (ver `AlmacenSocial`): quitarla le vaciaría los
+      // grupos al actualizar la app. Escribir, se escribe la nueva.
+      puntosPeriodo:
+          (campos['puntos_periodo'] ?? campos['puntos_semana']) as int,
       nombre: campos['nombre'] as String,
-      puntosSemana: campos['puntos_semana'] as int,
       tendencia: Tendencia.desde(campos['tendencia'] as String? ?? 'igual'),
       esUsuario: esUsuario,
     );
@@ -1112,7 +1210,7 @@ class RankingPersona {
 
   Map<String, dynamic> aJson() => {
     'nombre': nombre,
-    'puntos_semana': puntosSemana,
+    'puntos_periodo': puntosPeriodo,
     'tendencia': tendencia.name,
     if (esUsuario) 'es_usuario': true,
   };
@@ -1140,10 +1238,13 @@ class GrupoRanking {
     required this.tipo,
     required bool mostrarPuntos,
     required this.miembros,
+    this.ciclo = CicloRanking.mes,
     this.nivelActividad,
     this.zona,
+    this.arranca,
     this.cierra,
     this.premiosMonedas = const [],
+    this.patrocinio,
     this.creadoPorMi = false,
     String? codigo,
     // ignore: prefer_initializing_formals
@@ -1167,6 +1268,14 @@ class GrupoRanking {
 
   final List<RankingPersona> miembros;
 
+  /// Cada cuánto cierra este ranking.
+  ///
+  /// La liga local corre por TRIMESTRE; las competencias que arma el
+  /// usuario, por MES y sin opción de cambiarlo. El default es mensual
+  /// porque es lo que aplica a todo lo que crea el usuario; la liga trae
+  /// el suyo en el JSON.
+  final CicloRanking ciclo;
+
   /// Solo en ligas de desconocidos: contra qué nivel de actividad se
   /// arma la liga, para que compita gente parecida.
   final String? nivelActividad;
@@ -1177,12 +1286,33 @@ class GrupoRanking {
   /// no comparte ubicación de personas.
   final String? zona;
 
+  /// Cuándo arrancó el ciclo en curso. Con [cierra] arma el rango que se
+  /// le muestra al usuario ("del 1 de julio al 30 de septiembre"), que es
+  /// lo que hace entender que la liga dura un trimestre y no un mes.
+  ///
+  /// Las dos fechas las manda el backend en hora de Guatemala: el ciclo
+  /// va del día 1 del primer mes al último día del último, y el teléfono
+  /// NUNCA las calcula. Alguien de viaje tiene que ver el mismo cierre.
+  final DateTime? arranca;
+
   /// Cuándo cierra y se reparten los premios.
   final DateTime? cierra;
 
   /// MONEDAS que se lleva cada podio, del 1.o al 3.o. Vacío si el grupo
   /// no premia. Nunca puntos: los puntos no se regalan por competir.
   final List<int> premiosMonedas;
+
+  /// La marca que patrocina el ciclo en curso, si alguna lo hace.
+  ///
+  /// Los tres del podio se llevan un cupón de esta marca ADEMÁS de sus
+  /// monedas: el patrocinio suma un premio, no reemplaza el de siempre.
+  ///
+  /// Null es el caso normal, no un error: un ciclo sin marca vendida se
+  /// juega igual y la pantalla no puede cambiar de forma por eso.
+  final Patrocinio? patrocinio;
+
+  /// Si este ciclo lo patrocina una marca.
+  bool get tienePatrocinio => patrocinio != null;
 
   /// Si el usuario lo creó o se unió a él desde la app, en vez de venir
   /// del mock. Solo estos se guardan en el teléfono: los del mock ya
@@ -1247,14 +1377,26 @@ class GrupoRanking {
             (m) => RankingPersona.desdeJson(m as Map<String, dynamic>, yo: yo),
           )
           .toList(),
+      ciclo: CicloRanking.desde(
+        // Un grupo normal trae el ciclo arriba; la liga, adentro de su
+        // bloque. Si no viene ninguno queda mensual, que es lo que dura
+        // todo lo que crea el usuario.
+        (j['ciclo'] ?? liga['ciclo']) as String?,
+      ),
       nivelActividad: liga['nivel_actividad'] as String?,
       zona: liga['zona'] as String?,
+      arranca: liga['arranca'] == null
+          ? null
+          : DateTime.tryParse(liga['arranca'] as String),
       cierra: liga['cierra'] == null
           ? null
           : DateTime.tryParse(liga['cierra'] as String),
       premiosMonedas: ((liga['premios_monedas'] as List?) ?? const [])
           .cast<int>()
           .toList(),
+      patrocinio: liga['patrocinio'] == null
+          ? null
+          : Patrocinio.desdeJson(liga['patrocinio'] as Map<String, dynamic>),
       creadoPorMi: j['creado_por_mi'] as bool? ?? false,
       codigo: j['codigo'] as String?,
     );
@@ -1267,16 +1409,21 @@ class GrupoRanking {
     'nombre': nombre,
     'tipo': tipo.name,
     'mostrar_puntos': _mostrarPuntos,
+    'ciclo': ciclo.name,
     'miembros': miembros.map((m) => m.aJson()).toList(),
     if (nivelActividad != null ||
         zona != null ||
+        arranca != null ||
         cierra != null ||
-        premiosMonedas.isNotEmpty)
+        premiosMonedas.isNotEmpty ||
+        patrocinio != null)
       'liga': {
         if (nivelActividad != null) 'nivel_actividad': nivelActividad,
         if (zona != null) 'zona': zona,
+        if (arranca != null) 'arranca': arranca!.toIso8601String(),
         if (cierra != null) 'cierra': cierra!.toIso8601String(),
         if (premiosMonedas.isNotEmpty) 'premios_monedas': premiosMonedas,
+        if (patrocinio != null) 'patrocinio': patrocinio!.aJson(),
       },
     if (creadoPorMi) 'creado_por_mi': true,
     if (_codigo != null) 'codigo': _codigo,
