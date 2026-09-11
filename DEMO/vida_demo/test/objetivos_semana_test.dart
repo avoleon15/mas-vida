@@ -68,37 +68,39 @@ void main() {
     });
   });
 
-  group('Lo que falta se dice en unidades, nunca en porcentaje', () {
-    test('un objetivo pendiente dice cuánto falta y en qué unidad', () {
+  group('El avance se dice en unidades, nunca en porcentaje', () {
+    test('un objetivo pendiente dice el avance y en qué unidad', () {
       final semana = objetivos.enCurso!;
       final pendiente = semana.objetivos.firstWhere((o) => !o.completo);
-      final falta = pendiente.meta! - pendiente.progreso;
 
-      expect(faltanteDicho(pendiente), contains('$falta'));
-      expect(faltanteDicho(pendiente), startsWith('Falta'));
+      expect(avanceDicho(pendiente), contains('${pendiente.progreso}'));
+      expect(avanceDicho(pendiente), contains('de ${pendiente.meta}'));
+    });
+
+    test('NADA se dice con palabras de plazo', () {
+      // La razón de ser del cambio: "Faltan 42 min" y "Faltan 2 días" se
+      // leían como cuentas regresivas de cada objetivo, cuando los tres
+      // cierran juntos el domingo 23:59. La columna de la derecha es una
+      // CANTIDAD y no puede sonar a tiempo restante.
+      for (final o in objetivos.enCurso!.objetivos) {
+        final dicho = avanceDicho(o);
+        expect(dicho, isNot(startsWith('Falta')));
+        expect(dicho, isNot(contains('restan')));
+        expect(dicho, isNot(contains('queda')));
+      }
     });
 
     test('un objetivo cumplido dice "Completado"', () {
       final cumplido = objetivos.enCurso!.objetivos.firstWhere(
         (o) => o.completo,
       );
-      expect(faltanteDicho(cumplido), 'Completado');
+      expect(avanceDicho(cumplido), 'Completado');
     });
 
-    test('la unidad concuerda con el número', () {
+    test('la unidad concuerda con la meta', () {
       // "1 dias" era un error visible en pantalla. La unidad venía cruda
       // del JSON y se pegaba sin mirar la cantidad.
-      const uno = ObjetivoSemanal(
-        id: 'dias_ritmo_alto',
-        nombre: 'Días con ritmo cardíaco alto',
-        progreso: 2,
-        meta: 3,
-        unidad: 'días',
-        completo: false,
-      );
-      expect(faltanteDicho(uno), 'Falta 1 día');
-
-      const dos = ObjetivoSemanal(
+      const deVarios = ObjetivoSemanal(
         id: 'dias_ritmo_alto',
         nombre: 'Días con ritmo cardíaco alto',
         progreso: 1,
@@ -106,7 +108,17 @@ void main() {
         unidad: 'días',
         completo: false,
       );
-      expect(faltanteDicho(dos), 'Faltan 2 días');
+      expect(avanceDicho(deVarios), '1 de 3 días');
+
+      const deUno = ObjetivoSemanal(
+        id: 'dias_ritmo_alto',
+        nombre: 'Días con ritmo cardíaco alto',
+        progreso: 0,
+        meta: 1,
+        unidad: 'días',
+        completo: false,
+      );
+      expect(avanceDicho(deUno), '0 de 1 día');
     });
 
     test('los minutos se abrevian', () {
@@ -118,7 +130,21 @@ void main() {
         unidad: 'minutos',
         completo: false,
       );
-      expect(faltanteDicho(o), 'Faltan 42 min');
+      expect(avanceDicho(o), '48 de 90 min');
+    });
+
+    test('llegar al número sin que el servidor lo acredite no dice el par', () {
+      // "90 de 90" al lado de un círculo vacío se lee como un error de la
+      // app, no como que el servidor todavía no lo cerró.
+      const o = ObjetivoSemanal(
+        id: 'intensidad_semana',
+        nombre: 'Minutos de intensidad',
+        progreso: 90,
+        meta: 90,
+        unidad: 'minutos',
+        completo: false,
+      );
+      expect(avanceDicho(o), 'Casi');
     });
 
     test('sin meta NO se inventa un número', () {
@@ -133,7 +159,7 @@ void main() {
         unidad: 'minutos',
         completo: false,
       );
-      final dicho = faltanteDicho(o);
+      final dicho = avanceDicho(o);
       expect(dicho, isNot(contains('%')));
       expect(dicho, isNot(contains(RegExp(r'\d'))));
     });
@@ -183,9 +209,16 @@ void main() {
       await montarHome(t);
       // Llegó a estar dos veces: en el subtítulo del header viejo y otra
       // vez en la tarjeta.
+      //
+      // Se busca la frase COMPLETA, con la palabra "objetivos". Desde que
+      // cada fila dice su avance igual ("1 de 3 días"), buscar solo los
+      // dos números encuentra también la fila de días cuando coinciden
+      // los dígitos, que es otra cosa y no una repetición.
       final s = objetivos.enCurso!;
       expect(
-        find.textContaining('${s.cumplidos} de ${s.objetivos.length}'),
+        find.textContaining(
+          '${s.cumplidos} de ${s.objetivos.length} objetivos',
+        ),
         findsOneWidget,
       );
     });

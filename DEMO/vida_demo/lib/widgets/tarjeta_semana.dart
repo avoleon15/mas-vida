@@ -6,6 +6,7 @@ import '../datos/modelos.dart';
 import '../reglas_rango.dart';
 import '../theme.dart';
 import 'moneda_animada.dart';
+import 'patrocinio.dart';
 
 // ============================================================
 // LA TARJETA DE UNA SEMANA.
@@ -28,8 +29,8 @@ import 'moneda_animada.dart';
 //    mismo que al 0% — un objetivo entero, y sin él la semana no cuenta.
 //
 // 2. EL PORCENTAJE. Decía "48 minutos · 55% del objetivo". Un porcentaje
-//    no le dice a nadie qué hacer hoy. Ahora dice "Faltan 42 min", que es
-//    una instrucción.
+//    no le dice a nadie qué hacer hoy. Ahora dice "48 de 90 min", que es
+//    una cantidad concreta.
 //
 // 3. EL ACTION SHEET. Tocar un objetivo abría un CupertinoActionSheet con
 //    su nombre y su avance, más dos botones para salir. Existía solo
@@ -38,26 +39,43 @@ import 'moneda_animada.dart';
 //    un dato que cabe en la tarjeta.
 // ============================================================
 
-/// Cómo se dice cuánto falta de un objetivo.
+/// Cómo se dice el avance de un objetivo: "48 de 90 min".
 ///
-/// En UNIDADES REALES, nunca en porcentaje: "Faltan 42 min" se puede
-/// hacer hoy, "55% del objetivo" no le dice nada a nadie.
+/// En UNIDADES REALES, nunca en porcentaje: "48 de 90 min" se puede
+/// terminar hoy, "55% del objetivo" no le dice nada a nadie.
+///
+/// POR QUÉ NO DICE "FALTAN" (revisión de Daniel, 10 de septiembre de
+/// 2026). Antes decía "Faltan 42 min" y "Faltan 2 días", y se leía como
+/// una cuenta regresiva: parecía que a un objetivo le quedaban 42 minutos
+/// de plazo y al otro 2 días. Los TRES cierran juntos el domingo 23:59
+/// —eso lo dice [plazoDeLaSemana], una sola vez, abajo—, así que la
+/// columna de la derecha no puede sonar a plazo. "Faltan" más una unidad
+/// que además es unidad de tiempo ("días") era la combinación exacta que
+/// lo hacía sonar así.
+///
+/// El formato es el MISMO que el del titular de la tarjeta ("1 de 3
+/// objetivos") a propósito: dos formas distintas de decir un avance en la
+/// misma tarjeta se leen como dos cosas distintas.
 ///
 /// Sin meta devuelve un texto sin número. La tabla de dificultad por
 /// rango todavía no existe en ninguna fuente (la define Luis en L7): el
 /// día que el servidor no mande la meta, esta función NO inventa una
 /// dividiendo el progreso por un porcentaje redondeado.
-String faltanteDicho(ObjetivoSemanal objetivo) {
+String avanceDicho(ObjetivoSemanal objetivo) {
   if (objetivo.completo) return 'Completado';
 
   final meta = objetivo.meta;
   if (meta == null) return 'En curso';
 
-  final falta = meta - objetivo.progreso;
-  if (falta <= 0) return 'Casi';
+  // Llegó al número pero el servidor todavía no lo dio por cumplido. No
+  // se muestra "90 de 90": eso se lee como completado y lo contradiría
+  // el círculo vacío de al lado.
+  if (objetivo.progreso >= meta) return 'Casi';
 
-  final verbo = falta == 1 ? 'Falta' : 'Faltan';
-  return '$verbo ${_conMiles(falta)} ${_unidadCorta(objetivo.unidad, falta)}';
+  // La unidad concuerda con la META, que es el número que la precede:
+  // "1 de 3 días", "0 de 1 día".
+  return '${_conMiles(objetivo.progreso)} de ${_conMiles(meta)} '
+      '${_unidadCorta(objetivo.unidad, meta)}';
 }
 
 /// La unidad, abreviada y concordada con el número.
@@ -288,6 +306,25 @@ class TarjetaSemana extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
+              // Qué paga la marca, entero. Acá sí cabe el cupón completo:
+              // en el camino solo entra el nombre de la marca, y de un
+              // "Cupón de Ookii" nadie sabe qué se lleva.
+              if (_semana.patrocinio != null) ...[
+                const SizedBox(height: 14),
+                CintaPatrocinio(
+                  patrocinio: _semana.patrocinio!,
+                  compacta: true,
+                  texto: _semana.estado == EstadoSemana.cerrada
+                      ? (_semana.subioDeRango
+                            ? 'Ganaste ${_semana.patrocinio!.cupon}.'
+                            : 'Esta semana pagaba '
+                                  '${_semana.patrocinio!.cupon}.')
+                      // Sin explicar de nuevo la regla de los tres
+                      // objetivos: ya está arriba, en el conteo y en el
+                      // plazo. Acá solo se dice qué paga la marca.
+                      : 'Esta semana paga ${_semana.patrocinio!.cupon}.',
+                ),
+              ],
             ],
           ),
         ),
@@ -385,7 +422,7 @@ class _FilaObjetivo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hecho = objetivo.completo;
-    final cola = faltanteDicho(objetivo);
+    final cola = avanceDicho(objetivo);
 
     return Semantics(
       key: llaveObjetivo(objetivo.id),
@@ -423,7 +460,7 @@ class _FilaObjetivo extends StatelessWidget {
             // partía en dos líneas aunque sobrara espacio a la derecha.
             //
             // El tope existe para el otro extremo: con el tamaño de letra
-            // de iOS al máximo, "Faltan 3,400 pasos" empujaba la fila
+            // de iOS al máximo, "36,600 de 40,000 pasos" empujaba la fila
             // fuera de la tarjeta. Acotada, envuelve. Hay un test a 1.6x.
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 112),
@@ -524,6 +561,13 @@ class _FranjaPrograma extends StatelessWidget {
           if (monedas > 0) ...[
             const SizedBox(width: 14),
             _ChipRecompensa(monedas: monedas, cobradas: cobradas),
+          ],
+          // El cupón al lado de las monedas, no en su lugar: son dos
+          // premios y se entregan los dos. El logo lo hace distinto de un
+          // premio del catálogo sin gastar otro color.
+          if (semana.patrocinio != null) ...[
+            const SizedBox(width: 8),
+            ChipCuponMarca(patrocinio: semana.patrocinio!),
           ],
         ],
       ),
