@@ -13,15 +13,15 @@ logger = logging.getLogger(__name__)
 def sync(request):
     payload = request.data
     logger.debug("Payload recibido: %s", payload)
-    usuario_id = payload.get('usuario_id')
+
 
 
     try:
-        usuario = Usuario.objects.get(usuario_id=usuario_id)
+        usuario = request.user.usuario
     except Usuario.DoesNotExist:
         return Response(
-            {'mensaje': 'Usuario no encontrado'},
-            status=status.HTTP_404_NOT_FOUND
+            {'mensaje': 'Usuario autenticado no tiene un perfil asociado'},
+            status=status.HTTP_403_FORBIDDEN
         )
 
     pasos = payload.get("pasos", [])
