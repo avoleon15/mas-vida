@@ -5,9 +5,9 @@ from django.db.utils import DataError, IntegrityError
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from Apps.users.models import Usuario
 from services.hearth_rate import (calculate_age, calculate_intensity_from_heart_rate,)
 from .models import Muestra, MuestraBPM, Sesion
+from users.models import Usuario
 
 
 logger = logging.getLogger(__name__)

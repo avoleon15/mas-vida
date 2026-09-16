@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path
 from rest_framework.decorators  import api_view
 from rest_framework.response import Response
+from activities.views import sync
 
 
 @api_view(["GET"])
@@ -29,5 +30,7 @@ def health_check(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("api/health/", health_check)
+    path("api/health/", health_check),
+    path("api/v1/sync/", sync, name="sync"),
+
 ]

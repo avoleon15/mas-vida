@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
 
     "rest_framework",
-     "Apps.coins", "Apps.goals", "Apps.policies","Apps.rewards","Apps.activities","Apps.poincs",'Apps.users.apps.UsersConfig'
+     "Apps.coins", "Apps.goals", "Apps.policies","Apps.rewards","Apps.activities","Apps.poincs",'Apps.users'
 ]
 
 MIDDLEWARE = [
