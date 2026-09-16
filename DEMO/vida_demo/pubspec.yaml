@@ -40,6 +40,22 @@ dependencies:
   google_fonts: ^6.2.1
   dotted_border: ^3.1.0
 
+  # Gráficas de la pantalla de Progreso. Licencia MIT.
+  fl_chart: ^1.2.0
+  shadcn_ui: ^0.56.2
+  getwidget: ^7.0.2
+  shared_preferences: ^2.5.5
+  share_plus: ^13.3.0
+
+  # Animaciones de LottieFiles. Lee archivos .lottie (que son un zip con
+  # el JSON adentro) además de los .json sueltos. Licencia MIT.
+  lottie: ^3.3.2
+
+  # Varios comercios entregan su logo en SVG y no en mapa de bits.
+  # Image.asset no sabe leerlos, así que sin esto esas tarjetas caían al
+  # placeholder rayado. Lo usa lib/widgets/placeholder_imagen.dart.
+  flutter_svg: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -50,6 +66,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -61,6 +79,25 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Datos de prueba mientras el backend no está conectado. Los lee
+  # únicamente MockVidaRepository — ninguna pantalla toca estos archivos.
+  assets:
+    - assets/mock/
+    # Animaciones Lottie. La moneda se usa en toda la app vía
+    # lib/widgets/moneda_animada.dart.
+    - assets/lottie/
+    # El logo de la marca, que va en el header de todas las pantallas.
+    - assets/img/
+    # Fotos de los comercios aliados, una carpeta por filtro de Premios.
+    # Flutter NO recorre subcarpetas solo: cada una va listada aparte, y
+    # si mañana se agrega un filtro nuevo hay que agregar su línea acá.
+    - assets/img/premios/restaurantes/
+    - assets/img/premios/ropa/
+    - assets/img/premios/cafecitos/
+    - assets/img/premios/conveniencia/
+    - assets/img/premios/deportes-ejercicio/
+    - assets/img/premios/farmacias/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -92,3 +129,48 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# ============================================================
+# ÍCONO Y SPLASH DE LA MARCA
+#
+# Los PNG de assets/marca/ NO están declarados arriba en `assets:` a
+# propósito. Los leen únicamente los dos generadores de acá abajo, al
+# correrlos desde la terminal; ninguna pantalla de lib/ los abre.
+# Declararlos los metería dentro del bundle de la app pesando de gusto,
+# porque el ícono real que usa el teléfono es el que estos generadores
+# escriben en ios/ y android/, no el PNG original.
+#
+# Los dos se corren a mano y dejan archivos versionados:
+#   dart run flutter_launcher_icons
+#   dart run flutter_native_splash:create
+# ============================================================
+
+flutter_launcher_icons:
+  ios: true
+  android: true
+  image_path: "assets/marca/icono-masvida-1024.png"
+
+  # App Store Connect RECHAZA un ícono que traiga canal alfa, y el error
+  # no aparece hasta que se sube el build. Esto le aplana la
+  # transparencia antes de que eso pase.
+  remove_alpha_ios: true
+
+  # Android dibuja el ícono en dos capas y les aplica la máscara del
+  # launcher (círculo, redondeado, etc.), así que la cruz va suelta y
+  # transparente sobre un fondo blanco puesto por separado.
+  adaptive_icon_foreground: "assets/marca/icono-masvida-android-foreground.png"
+  adaptive_icon_background: "#FFFFFF"
+
+flutter_native_splash:
+  # El MISMO color que pinta PantallaCargando (AppColors.background).
+  # El splash nativo entrega la pantalla al primer frame de Flutter: si
+  # los dos fondos no son idénticos, en ese cambio se ve un parpadeo de
+  # color.
+  color: "#F5F6FA"
+  image: "assets/marca/splash-cruz.png"
+
+  # Android 12 en adelante ignora la configuración de arriba y usa su
+  # propio splash del sistema, así que hay que repetírselo acá.
+  android_12:
+    color: "#F5F6FA"
+    image: "assets/marca/splash-cruz.png"

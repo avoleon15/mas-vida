@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/placeholder_imagen.dart';
+import '../widgets/moneda_animada.dart';
 import 'premios_screen.dart' show monedasUsuario;
 
 /// Detalle de un premio: recibe los datos del premio seleccionado como
@@ -11,9 +13,8 @@ class PremioDetalleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final premio =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    final costo = premio['costoMonedas'] as int;
+    final premio = ModalRoute.of(context)!.settings.arguments as Premio;
+    final costo = premio.costoMonedas;
     final alcanza = monedasUsuario >= costo;
     final saldoRestante = monedasUsuario - costo;
 
@@ -27,10 +28,18 @@ class PremioDetalleScreen extends StatelessWidget {
                 children: [
                   Stack(
                     children: [
-                      const SizedBox(
+                      SizedBox(
                         width: double.infinity,
                         height: 240,
-                        child: PlaceholderImagen(texto: 'FOTO DEL COMERCIO'),
+                        child: FotoComercio(
+                          ruta: premio.foto,
+                          fondo: premio.fondo,
+                          texto: 'LOGO DEL COMERCIO',
+                          // Más aire que en la tarjeta: acá el logo tiene
+                          // 240 px de alto y a ancho completo se ve como
+                          // un cartel si toca los bordes.
+                          margen: 34,
+                        ),
                       ),
                       Positioned(
                         top: MediaQuery.paddingOf(context).top + 12,
@@ -45,8 +54,8 @@ class PremioDetalleScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${(premio['nombre'] as String).toUpperCase()} · '
-                          '${(premio['zona'] as String).toUpperCase()}',
+                          '${premio.nombre.toUpperCase()} · '
+                          '${premio.zona.toUpperCase()}',
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: AppColors.textSecondary,
@@ -55,7 +64,7 @@ class PremioDetalleScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          (premio['descripcion'] as String).toUpperCase(),
+                          premio.descripcion.toUpperCase(),
                           style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 color: AppColors.textPrimary,
@@ -66,7 +75,7 @@ class PremioDetalleScreen extends StatelessWidget {
                         _buildPillCosto(context, costo, alcanza, saldoRestante),
                         const SizedBox(height: 18),
                         Text(
-                          premio['detalle'] as String,
+                          premio.detalle,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: AppColors.textSecondary,
@@ -74,10 +83,7 @@ class PremioDetalleScreen extends StatelessWidget {
                               ),
                         ),
                         const SizedBox(height: 20),
-                        _buildCondicionesCard(
-                          context,
-                          premio['condiciones'] as String,
-                        ),
+                        _buildCondicionesCard(context, premio.condiciones),
                       ],
                     ),
                   ),
@@ -98,21 +104,15 @@ class PremioDetalleScreen extends StatelessWidget {
                           ? () => Navigator.of(context).pushNamed(
                               '/canje-exitoso',
                               arguments: {
-                                ...premio,
+                                'premio': premio,
                                 'monedasRestantes': saldoRestante,
                               },
                             )
                           : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.black,
-                        disabledBackgroundColor: AppColors.cardBorder,
-                        disabledForegroundColor: AppColors.textSecondary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                      ),
+                      // El color y la forma los pone el tema
+                      // (elevatedButtonTheme). Antes acá había un
+                      // foregroundColor negro sobre el azul de marca y
+                      // el botón no se leía.
                       child: Text(
                         alcanza
                             ? 'CANJEAR POR $costo MONEDAS'
@@ -174,11 +174,7 @@ class PremioDetalleScreen extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.monetization_on,
-                color: AppColors.accentSecondary,
-                size: 16,
-              ),
+              const MonedaAnimada(size: 21),
               const SizedBox(width: 6),
               Text(
                 '$costo monedas',
