@@ -8,6 +8,8 @@ from rest_framework.response import Response
 from services.hearth_rate import (calculate_age, calculate_intensity_from_heart_rate,)
 from .models import Muestra, MuestraBPM, Sesion
 from users.models import Usuario
+from services.points import (apply_daily_points_limit, calculate_daily_step_points,)
+from poincs.models import Ledger, VersionRegla
 
 
 logger = logging.getLogger(__name__)
@@ -120,23 +122,56 @@ def sync(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    pasos_totales_dia = sum(m["cantidad"] for m in pasos)
+    puntos_pasos = calculate_daily_step_points(
+        pasos_totales_dia,
+        edad,
+    )
+
     puntos_intensidad = calculate_intensity_from_heart_rate(
         frecuencia_cardiaca,
         sesiones,
         edad,
     )
 
+    puntos_brutos = puntos_pasos + puntos_intensidad
+    puntos_dia = apply_daily_points_limit(puntos_brutos)
+    tope_diario_aplicado = puntos_brutos > puntos_dia
+
+    version_regla = (
+        VersionRegla.objects
+        .filter(vigente_desde__lte=fecha_puntuacion)
+        .order_by("-vigente_desde")
+        .first()
+    )
+
+    if version_regla is None:
+        return Response(
+            {"mensaje": "No existe una versión de regla vigente"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    Ledger.objects.update_or_create(
+        usuario=usuario,
+        fecha=fecha_puntuacion,
+        tipo="puntos_diarios",
+        defaults={
+            "puntos": puntos_dia,
+            "version_regla": version_regla,
+        },
+    )
+
     return Response(
         {
             "fecha": fecha_puntuacion.isoformat(),
-            "puntos_pasos": 0,
+            "puntos_pasos": puntos_pasos,
             "puntos_intensidad": puntos_intensidad,
-            "puntos_dia": 0,
-            "tope_diario_aplicado": False,
+            "puntos_dia": puntos_dia,
+            "tope_diario_aplicado": tope_diario_aplicado,
             "puntos_ano": 0,
             "tope_anual_aplicado": False,
             "nivel": 0,
-            "pasos_totales_dia": 0,
+            "pasos_totales_dia": pasos_totales_dia,
         },
         status=status.HTTP_200_OK,
     )
