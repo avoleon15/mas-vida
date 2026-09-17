@@ -347,13 +347,35 @@ resuelven, no por cómo se ven de fábrica.
 - "Objetivos de la semana": las semanas del mes, cada una plegable, con
   sus 3 objetivos (progreso/monedas/check) y el rango. Las metas mensuales
   ya NO existen
+- **El camino de las semanas** (`camino_semanas_screen.dart`) va y
+  vuelve por FILAS, como un tablero de mesa: 3 nodos por fila, la fila
+  siguiente al revés, y el giro siempre en la misma columna. Así ningún
+  tramo sale en diagonal, no quedan huecos en la grilla y diez semanas
+  entran en 4 filas (antes era una columna de diez renglones: 1.520 px
+  de scroll). **Cada nodo dice arriba qué semana es** ("Semana 7"), y la
+  etiqueta de la semana en curso es la única rellena de azul: eso
+  reemplaza a la píldora "ESTA SEMANA". El titular de la pantalla es la
+  SEMANA EN CURSO ("SEMANA 3" + "Patrocinada por Montanos"), no el
+  programa entero
 - **Semanas patrocinadas:** una alianza puede comprar una semana. Esa
-  semana muestra el logo de la marca junto a su burbuja en el camino y
-  paga un cupón de esa marca además de las monedas del rango. **No todas
-  las semanas tienen marca** y el camino tiene que verse igual de
-  terminado sin logo: el carril del logo se reserva siempre, así la
-  burbuja nunca se mueve ni cambia de tamaño según si la semana está
-  vendida
+  semana paga un cupón de esa marca **además** de las monedas del rango,
+  nunca en lugar de ellas. Se ve en tres lugares: el logo del local
+  montado en el borde del nodo, un anillo con el color de la marca
+  alrededor del círculo, y —solo si la semana EN CURSO está vendida— la
+  tarjeta animada con la foto, debajo del título. Las semanas vendidas
+  que faltan viven detrás del botón "Patrocinadores de las próximas
+  semanas", no a la vista: el protagonista es el camino
+- **No todas las semanas tienen marca, y ese es el caso normal.** Sin
+  patrocinador no se dibuja tarjeta, ni logo, ni botón, y el título no
+  menciona el patrocinio: **nunca un hueco ni un cartel que anuncie la
+  ausencia.** El nodo no cambia de tamaño ni de lugar por tener marca —
+  la celda mide 160 px de alto clavados y la curva se dibuja aparte,
+  contra los centros ya calculados, así que un nodo que crece se despega
+  de su propia curva
+- La marca trae dos colores y **no son lo mismo**: `fondo` es el color
+  detrás de la foto (el de Montanos es negro, y sin él su logo blanco
+  desaparece) y `acento` es el del anillo y el cupón. Un anillo negro no
+  va con una app que tiene que transmitir calma
 
 **Progress** (`lib/screens/progress_screen.dart`) — construida
 - Selector Semana/Mes/Año con contenido real por pestaña
