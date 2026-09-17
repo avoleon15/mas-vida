@@ -197,7 +197,12 @@ void main() {
           home: TemaVida(child: pantalla),
         ),
       );
-      await tester.pump();
+      // Con tiempo, no un pump pelado: Premios entra con los logos
+      // escalonados (flutter_animate), y esa entrada deja programado un
+      // arranque que el test tiene que dejar correr. Sin esto el árbol
+      // se destruye con un timer vivo y el test falla por eso, no por
+      // la pantalla.
+      await tester.pump(const Duration(milliseconds: 900));
     }
 
     testWidgets('Home', (t) async {

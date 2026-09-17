@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
@@ -36,6 +37,52 @@ int get monedasUsuario => Datos.i.resumen.monedas.saldo;
 List<Premio> get _premios => Datos.i.catalogo.premios;
 
 List<String> get _categorias => Datos.i.catalogo.categorias;
+
+// ============================================================
+// LA CUADRÍCULA.
+//
+// Todas las tarjetas son IGUALES: dos columnas, misma forma, misma
+// proporción. Se probó un mosaico con una tarjeta apaisada cada cinco
+// para el comercio destacado y no funcionó: mezclar tarjetas
+// horizontales y verticales en la misma grilla se lee como dos
+// catálogos pegados, no como uno.
+//
+// Así que lo que el comercio destacado compra es el SELLO y el primer
+// lugar, no un tamaño distinto. La alianza sigue teniendo qué vender
+// —es una de las tres vías de ingreso del producto— sin romper la
+// grilla.
+// ============================================================
+
+/// Columnas del catálogo.
+const int premiosPorFila = 2;
+
+/// Proporción de la tarjeta (ancho ÷ alto). Vertical: el logo manda
+/// arriba y los datos van debajo.
+const double proporcionTarjeta = 0.7;
+
+/// Cada cuántas tarjetas vuelve a arrancar el escalonado de entrada de
+/// los logos. Son dos filas: con las 29 del catálogo, escalonar de
+/// punta a punta dejaría la última entrando dos segundos después.
+const int logosPorTanda = 4;
+
+/// Pone los comercios destacados al principio del catálogo.
+///
+/// Es lo único que les da la alianza: aparecer primero. El tamaño de la
+/// tarjeta no cambia.
+///
+/// El resto conserva su orden original: el catálogo viene mezclado a
+/// propósito para que en "Todos" las categorías queden intercaladas, y
+/// esto no puede reagruparlas.
+///
+/// Con cero destacados —que es el caso normal— devuelve la lista igual.
+/// Un catálogo sin nadie destacado se ve exactamente como éste, sin
+/// huecos ni cartel que anuncie la ausencia.
+List<Premio> destacadosPrimero(List<Premio> premios) {
+  final destacados = premios.where((p) => p.destacado).toList();
+  if (destacados.isEmpty) return premios;
+
+  return [...destacados, ...premios.where((p) => !p.destacado)];
+}
 
 class PremiosScreen extends StatefulWidget {
   const PremiosScreen({super.key});
@@ -114,22 +161,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                       else
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                          sliver: SliverGrid(
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 14,
-                                  mainAxisSpacing: 14,
-                                  childAspectRatio: 0.7,
-                                ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, i) => _buildTarjetaPremio(
-                                context,
-                                premiosFiltrados[i],
-                              ),
-                              childCount: premiosFiltrados.length,
-                            ),
-                          ),
+                          sliver: _buildCuadricula(context, premiosFiltrados),
                         ),
                     ],
                   );
@@ -306,18 +338,63 @@ class _PremiosScreenState extends State<PremiosScreen> {
     );
   }
 
-  /// Todas las tarjetas se ven igual, alcance o no el saldo.
-  ///
-  /// Antes las que no alcanzaban iban atenuadas y con un "te faltan N"
-  /// en la tarjeta. Se leía como si el premio estuviera agotado o
-  /// bloqueado, cuando en realidad es al revés: son justo los que hay
-  /// que querer. Cuánto falta se dice adentro, al abrir el premio.
-  Widget _buildTarjetaPremio(BuildContext context, Premio premio) {
-    final costo = premio.costoMonedas;
+  /// El catálogo: dos columnas, todas las tarjetas iguales.
+  Widget _buildCuadricula(BuildContext context, List<Premio> premios) {
+    final ordenados = destacadosPrimero(premios);
 
+    return SliverGrid(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: premiosPorFila,
+        mainAxisSpacing: 14,
+        crossAxisSpacing: 14,
+        childAspectRatio: proporcionTarjeta,
+      ),
+      delegate: SliverChildBuilderDelegate((context, i) {
+        final premio = ordenados[i];
+        return _TarjetaPremio(
+          // Por id y no por posición: al filtrar por categoría la misma
+          // tarjeta cambia de índice, y sin esto Flutter reusaría el
+          // estado de la tarjeta que estaba en ese lugar.
+          key: ValueKey(premio.id),
+          premio: premio,
+          posicionEnTanda: i % logosPorTanda,
+        );
+      }, childCount: ordenados.length),
+    );
+  }
+}
+
+/// Una tarjeta del catálogo.
+///
+/// Todas se ven igual, alcance o no el saldo. Antes las que no
+/// alcanzaban iban atenuadas y con un "te faltan N" encima. Se leía como
+/// si el premio estuviera agotado o bloqueado, cuando en realidad es al
+/// revés: son justo los que hay que querer. Cuánto falta se dice
+/// adentro, al abrir el premio.
+class _TarjetaPremio extends StatelessWidget {
+  const _TarjetaPremio({
+    super.key,
+    required this.premio,
+    required this.posicionEnTanda,
+  });
+
+  final Premio premio;
+
+  /// Lugar que ocupa dentro de la tanda de cuatro, para escalonar la
+  /// entrada del logo. No es el índice absoluto a propósito: con 29
+  /// premios, el último arrancaría dos segundos después del primero.
+  final int posicionEnTanda;
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () =>
-          Navigator.of(context).pushNamed('/premio-detalle', arguments: premio),
+      onTap: () {
+        // Abrir un premio es de lo poco que el usuario viene a hacer
+        // acá: el golpecito confirma el toque antes de que la pantalla
+        // termine de entrar.
+        HapticFeedback.lightImpact();
+        Navigator.of(context).pushNamed('/premio-detalle', arguments: premio);
+      },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -325,63 +402,173 @@ class _PremiosScreenState extends State<PremiosScreen> {
             color: AppColors.card,
             border: Border.all(color: AppColors.cardBorder),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AspectRatio(
-                aspectRatio: 1.4,
-                child: FotoComercio(
-                  ruta: premio.foto,
-                  fondo: premio.fondo,
-                  texto: 'LOGO',
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      premio.nombre,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      premio.descripcion,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const MonedaAnimada(size: 19),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$costo',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: AppColors.accentSecondary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: _adentro(context),
         ),
       ),
     );
+  }
+
+  /// Logo arriba, datos abajo. Una sola forma para todas.
+  ///
+  /// El logo va en [Expanded] y no con proporción fija: así ocupa lo que
+  /// sobra de la celda, y si el usuario agranda la letra del sistema es
+  /// el logo el que cede lugar, no la tarjeta la que desborda.
+  Widget _adentro(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _logo()),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _nombre(context, maxLineas: 1),
+              const SizedBox(height: 4),
+              Text(
+                premio.descripcion,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              _costo(context),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// El logo, con el sello del destacado encima si corresponde.
+  ///
+  /// El sello va montado SOBRE el logo y no arriba del nombre a
+  /// propósito: así el bloque de texto mide exactamente lo mismo en
+  /// todas las tarjetas. Metido entre el nombre y el logo, la tarjeta
+  /// del destacado terminaría con el logo más chico que las de al lado
+  /// —justo lo contrario de lo que se compró— y la grilla volvería a
+  /// verse despareja.
+  Widget _logo() {
+    final logo = _LogoAnimado(
+      posicionEnTanda: posicionEnTanda,
+      child: FotoComercio(ruta: premio.foto, fondo: premio.fondo, texto: 'LOGO'),
+    );
+    if (!premio.destacado) return logo;
+
+    return Stack(
+      children: [
+        Positioned.fill(child: logo),
+        const Positioned(top: 8, left: 8, child: _SelloDestacado()),
+      ],
+    );
+  }
+
+  Widget _nombre(BuildContext context, {required int maxLineas}) {
+    return Text(
+      premio.nombre,
+      maxLines: maxLineas,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
+  Widget _costo(BuildContext context) {
+    return Row(
+      children: [
+        const MonedaAnimada(size: 19),
+        const SizedBox(width: 4),
+        Text(
+          '${premio.costoMonedas}',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            // El naranja del costo es el de las MONEDAS, que es uno de
+            // los cuatro lugares donde el naranja significa algo.
+            color: AppColors.accentSecondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// El sello del comercio que compró visibilidad.
+///
+/// Azul y no naranja: el naranja está reservado a las monedas, la llama
+/// de la racha, las alertas reales y el check de una etapa. Un sello
+/// comercial no es ninguna de las cuatro.
+///
+/// Lleva relleno propio y no es texto suelto porque se monta sobre el
+/// logo, y los logos traen el fondo que quieren: el de Montanos es
+/// negro y el de El Cafecito verde oscuro. Sin su propia píldora, el
+/// sello desaparecería en esas dos tarjetas.
+class _SelloDestacado extends StatelessWidget {
+  const _SelloDestacado();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.azulBruma,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Destacado',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: AppColors.accent,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+/// Cuánto tarda en entrar un logo.
+const Duration duracionEntradaLogo = Duration(milliseconds: 420);
+
+/// Cuánto espera cada logo respecto del anterior de su ciclo.
+const Duration escalonEntradaLogo = Duration(milliseconds: 70);
+
+/// El logo de un comercio, apareciendo.
+///
+/// Los logos entran escalonados en vez de aparecer los cinco de golpe:
+/// el ojo los recorre en el orden en que están puestos, que es el mismo
+/// en el que se leen. Es un fundido con un acercamiento mínimo —de 94% a
+/// 100%—, no un rebote: la app tiene que transmitir calma.
+///
+/// Se anima el LOGO y no la tarjeta entera a propósito. Moviendo la
+/// tarjeta se movería también el borde, y una grilla donde las cajas
+/// entran volando se lee como una web, no como iOS.
+class _LogoAnimado extends StatelessWidget {
+  const _LogoAnimado({required this.posicionEnTanda, required this.child});
+
+  final int posicionEnTanda;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // "Reducir movimiento" del sistema: ahí el logo aparece y listo.
+    if (MediaQuery.of(context).disableAnimations) return child;
+
+    return child
+        .animate()
+        .fadeIn(
+          duration: duracionEntradaLogo,
+          delay: escalonEntradaLogo * posicionEnTanda,
+          curve: Curves.easeOut,
+        )
+        .scale(
+          begin: const Offset(0.94, 0.94),
+          end: const Offset(1, 1),
+          duration: duracionEntradaLogo,
+          curve: Curves.easeOutCubic,
+        );
   }
 }
 

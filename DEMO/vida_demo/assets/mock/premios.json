@@ -4,6 +4,7 @@
   "_comentario_fotos": "Cada premio apunta a su logo con el campo 'foto'. Los archivos viven en assets/img/premios/<filtro>/, una carpeta por categoría. El nombre del archivo no tiene que coincidir con el 'id': la ruta es explícita. Si el archivo no está, la tarjeta cae al placeholder rayado. Al agregar una carpeta nueva hay que declararla en pubspec.yaml.",
   "_comentario_fondo": "El campo 'fondo' es opcional y va en hex '#RRGGBB'. Sin él, detrás del logo va blanco, que sirve para casi todos. Se pone solo cuando el logo es claro y sobre blanco desaparecería (Frutalle y Montanos son blancos sobre negro).",
   "_comentario_orden": "El orden está mezclado a propósito: en el filtro 'Todos' las categorías tienen que quedar intercaladas, no en cinco bloques seguidos.",
+  "_comentario_destacado": "El campo 'destacado' es opcional (falso por defecto) y marca al comercio que compró visibilidad: su tarjeta sale ancha en el mosaico. Los dos que están marcados acá son PLACEHOLDER de Diego, igual que Ookii en las semanas patrocinadas — ninguna alianza está cerrada. Quién está vendido lo tiene que decir el endpoint de patrocinios que debe Luis. Un catálogo con cero destacados tiene que verse bien igual.",
   "categorias": [
     "Todos",
     "Restaurantes",
@@ -20,6 +21,7 @@
       "zona": "Guatemala",
       "categoria": "Restaurantes",
       "foto": "assets/img/premios/restaurantes/ookii.webp",
+      "destacado": true,
       "descripcion": "Beneficio por definir",
       "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
       "condiciones": "Pendiente de acordar con el comercio.",
@@ -32,6 +34,7 @@
       "zona": "Guatemala",
       "categoria": "Deportes/ejercicio",
       "foto": "assets/img/premios/deportes-ejercicio/smart-fit.webp",
+      "destacado": true,
       "descripcion": "Beneficio por definir",
       "detalle": "Todavía no se cierra el beneficio con este comercio. Acá va lo que el asegurado recibe al canjear.",
       "condiciones": "Pendiente de acordar con el comercio.",

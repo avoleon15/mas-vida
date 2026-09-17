@@ -933,6 +933,7 @@ class Premio {
     required this.vence,
     this.foto,
     this.fondo,
+    this.destacado = false,
   });
 
   final String id;
@@ -961,6 +962,18 @@ class Premio {
   /// importa Flutter, y el que sabe de colores es el widget.
   final String? fondo;
 
+  /// El comercio compró visibilidad: su tarjeta va ancha en el mosaico.
+  ///
+  /// Es una de las tres vías de ingreso del producto (alianzas), así que
+  /// vale que se vea más grande y no solo más arriba. Falso por defecto:
+  /// **un catálogo sin ningún destacado es el caso normal** y tiene que
+  /// verse entero, sin huecos ni cartel que anuncie la ausencia.
+  ///
+  /// [PENDIENTE: hoy sale del mock. Qué comercio está vendido lo tiene
+  /// que decir el endpoint de patrocinios que debe Luis — el mismo que
+  /// falta para las semanas y los ciclos de liga.]
+  final bool destacado;
+
   factory Premio.desdeJson(Map<String, dynamic> j) => Premio(
     id: j['id'] as String,
     nombre: j['nombre'] as String,
@@ -973,6 +986,7 @@ class Premio {
     vence: j['vence'] as String,
     foto: j['foto'] as String?,
     fondo: j['fondo'] as String?,
+    destacado: j['destacado'] as bool? ?? false,
   );
 }
 
