@@ -284,6 +284,13 @@ Reglas visuales:
 - **Header** (`lib/widgets/app_header.dart`, reutilizado en TODAS las
   pantallas): "+VIDA" pegado a la esquina superior IZQUIERDA, foto de
   perfil pegada a la DERECHA
+- **La foto del usuario sale de `lib/widgets/avatar_usuario.dart`** y de
+  ningún otro lado. Aparece en tres lugares —el header, la ficha de
+  Perfil y el escalón de Mi Plan donde el usuario está parado— y los
+  tres tienen que mostrar la MISMA. Es el único archivo que nombra la
+  ruta del asset; el día que la foto llegue del backend cambia ahí y
+  nada más. En la escalera de cashback la foto REEMPLAZA al cartel
+  "ESTÁS AQUÍ": una cara se reconoce sola y un cartel hay que leerlo
 - **Barra inferior** (`lib/widgets/bottom_nav_bar.dart`, reutilizada en
   TODAS las pantallas): 5 ítems fijos en este orden: Hoy, Progreso,
   Social, Premios, Mi Plan. El ítem activo necesita fondo de píldora sutil
@@ -354,9 +361,20 @@ resuelven, no por cómo se ven de fábrica.
   entran en 4 filas (antes era una columna de diez renglones: 1.520 px
   de scroll). **Cada nodo dice arriba qué semana es** ("Semana 7"), y la
   etiqueta de la semana en curso es la única rellena de azul: eso
-  reemplaza a la píldora "ESTA SEMANA". El titular de la pantalla es la
-  SEMANA EN CURSO ("SEMANA 3" + "Patrocinada por Montanos"), no el
-  programa entero
+  reemplaza a la píldora "ESTA SEMANA"
+- **El titular nombra la PANTALLA, no una semana: "TU CAMINO".** Antes
+  decía "SEMANA 3" y se leía como si la pantalla fuera de esa sola
+  semana, con diez nodos debajo. En qué semana va y quién la patrocina
+  bajaron al renglón de apoyo, que es su tamaño. (Esto reemplaza a la
+  versión anterior de este documento, que pedía la semana en curso de
+  titular.)
+- **El rango va en una insignia** (`insignia_rango.dart`): un medallón
+  con el número adentro y un anillo de 10 muescas alrededor, encendidas
+  hasta el rango del usuario, de `azulMedio` al `accent` — lo que separa
+  una muesca de la siguiente es la LUMINOSIDAD, igual que los niveles de
+  cashback. Las muescas se encienden ENTERAS: media muesca sería el
+  medidor de XP que `reglas_rango.dart` sacó a propósito, y el rango se
+  mueve por cumplir los tres objetivos, no por juntar puntitos
 - **Semanas patrocinadas:** una alianza puede comprar una semana. Esa
   semana paga un cupón de esa marca **además** de las monedas del rango,
   nunca en lugar de ellas. Se ve en tres lugares: el logo del local
