@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
+import 'package:vida_demo/reglas_rango.dart';
 import 'package:vida_demo/screens/camino_semanas_screen.dart';
 import 'package:vida_demo/widgets/carrusel_patrocinadores.dart';
 import 'package:vida_demo/widgets/cintillo_patrocinador.dart';
+import 'package:vida_demo/widgets/insignia_rango.dart';
 import 'package:vida_demo/widgets/patrocinio.dart';
 
 import 'ayudas.dart';
@@ -74,16 +76,37 @@ void main() {
     await Datos.cargar();
   });
 
-  group('El título es la semana en curso', () {
-    testWidgets('dice la semana y quién la patrocina', (t) async {
+  group('El título nombra la pantalla, no la semana', () {
+    testWidgets('el titular no se apropia de una sola semana', (t) async {
       await montarCamino(t);
       final enCurso = objetivos.enCurso!;
 
-      expect(find.text('SEMANA ${enCurso.numero}'), findsOneWidget);
+      expect(find.text('TU CAMINO'), findsOneWidget);
+      // El titular viejo decía "SEMANA 3" arriba de las diez, y se leía
+      // como si la pantalla fuera de esa semana sola. En qué semana va se
+      // dice en el renglón de abajo, que es el tamaño que le toca.
+      expect(find.text('SEMANA ${enCurso.numero}'), findsNothing);
+      expect(
+        find.text(
+          'Rango ${objetivos.rangoActual} de $rangoMaximo · '
+          'Semana ${enCurso.numero}',
+        ),
+        findsOneWidget,
+      );
       expect(
         find.text('Patrocinada por ${enCurso.patrocinio!.marca}'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('la insignia dice el rango que manda el servidor', (t) async {
+      await montarCamino(t);
+
+      final insignia = t.widget<InsigniaRango>(find.byType(InsigniaRango));
+      expect(insignia.rango, objetivos.rangoActual);
+      // La escalera sale de las reglas, no de un 10 escrito en la
+      // pantalla: si el programa cambia de largo, el anillo lo sigue.
+      expect(insignia.maximo, rangoMaximo);
     });
 
     testWidgets('sin marca no menciona el patrocinio', (t) async {
@@ -94,8 +117,12 @@ void main() {
       expect(find.byType(CintilloPatrocinador), findsNothing);
       expect(find.textContaining('Patrocinada por'), findsNothing);
       expect(find.textContaining('sin patrocinador'), findsNothing);
-      // Y el titular sigue ubicando al usuario.
-      expect(find.text('SEMANA ${objetivos.enCurso!.numero}'), findsOneWidget);
+      // Y el encabezado sigue ubicando al usuario: rango y semana.
+      expect(find.text('TU CAMINO'), findsOneWidget);
+      expect(
+        find.textContaining('Semana ${objetivos.enCurso!.numero}'),
+        findsWidgets,
+      );
     });
 
     testWidgets('la tarjeta animada es la de la semana en curso', (t) async {
@@ -277,8 +304,8 @@ void main() {
       await t.tap(find.byKey(llaveBotonProximosPatrocinadores));
       await t.pumpAndSettle();
 
-      // Se busca DENTRO del carrusel: el título de la pantalla también
-      // dice "SEMANA 3" y se queda vivo detrás de la hoja.
+      // Se busca DENTRO del carrusel: el camino, que se queda vivo
+      // detrás de la hoja, también rotula sus nodos con la semana.
       expect(
         find.descendant(
           of: find.byType(CarruselLoQueViene),

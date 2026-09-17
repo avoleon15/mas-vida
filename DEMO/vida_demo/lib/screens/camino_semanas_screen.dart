@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../datos/modelos.dart';
+import '../reglas_rango.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/moneda_animada.dart';
 import '../widgets/carrusel_patrocinadores.dart';
 import '../widgets/cintillo_patrocinador.dart';
 import '../widgets/curva_camino.dart';
+import '../widgets/insignia_rango.dart';
 import '../widgets/patrocinio.dart';
 import '../widgets/tarjeta_semana.dart';
 
@@ -139,40 +141,54 @@ class CaminoSemanasScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // El medallón va de PRIMERO, antes que el título: es lo
+                  // único de esta pantalla que habla del usuario y no del
+                  // programa, y es lo que hace que la pantalla se sienta
+                  // suya y no un calendario.
+                  InsigniaRango(rango: objetivos.rangoActual),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // El titular es la SEMANA EN CURSO, no el programa
-                        // entero. Cuántas semanas son ya lo dice el camino
-                        // de abajo de un vistazo; en qué semana va el
-                        // usuario, no.
+                        // El titular nombra la PANTALLA, no la semana en
+                        // curso: acá abajo está el programa entero, y un
+                        // titular que dice "SEMANA 3" arriba de diez
+                        // nodos se lee como si la pantalla fuera de esa
+                        // sola semana. En qué semana va se dice en el
+                        // renglón de abajo, que es su tamaño.
+                        Text('TU CAMINO', style: AppTheme.sectionTitle),
+                        const SizedBox(height: 2),
                         Text(
+                          // El rango se escribe además de dibujarse: el
+                          // medallón se lee de un vistazo, pero "2 de 10"
+                          // es lo que lo vuelve una escalera con largo.
                           enCurso == null
-                              ? 'LAS ${objetivos.semanas.length} SEMANAS'
-                              : 'SEMANA ${enCurso.numero}',
-                          style: AppTheme.sectionTitle,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          // Quién patrocina la semana se dice ACÁ y no
-                          // adentro de la tarjeta de abajo: sobre la foto
-                          // de la marca el texto necesita una sombra que
-                          // ensucia el logo que la marca pagó por mostrar.
-                          //
-                          // Sin marca no se menciona el patrocinio: el
-                          // renglón dice dónde va el usuario y listo.
-                          // Nunca "esta semana no hay patrocinador".
-                          enCurso?.patrocinio != null
-                              ? 'Patrocinada por '
-                                    '${enCurso!.patrocinio!.marca}'
-                              : 'Rango ${objetivos.rangoActual} · '
-                                    '${objetivos.semanas.length} semanas',
+                              ? 'Rango ${objetivos.rangoActual} de '
+                                    '$rangoMaximo'
+                              : 'Rango ${objetivos.rangoActual} de '
+                                    '$rangoMaximo · Semana ${enCurso.numero}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: AppColors.textSecondary),
                         ),
+                        // Quién patrocina la semana se dice ACÁ y no
+                        // adentro de la tarjeta de abajo: sobre la foto
+                        // de la marca el texto necesita una sombra que
+                        // ensucia el logo que la marca pagó por mostrar.
+                        //
+                        // Sin marca no se dibuja este renglón y el bloque
+                        // se encoge: nunca un hueco ni un "esta semana no
+                        // hay patrocinador".
+                        if (enCurso?.patrocinio != null)
+                          Text(
+                            'Patrocinada por ${enCurso!.patrocinio!.marca}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: AppColors.azulMedio),
+                          ),
                       ],
                     ),
                   ),
