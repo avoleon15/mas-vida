@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:getwidget/getwidget.dart';
 import '../theme.dart';
+import 'avatar_usuario.dart';
 import 'logo_vida.dart';
 
 /// Alto del logo en el header.
@@ -58,14 +58,10 @@ class AppHeader extends StatelessWidget {
               },
               child: const Padding(
                 padding: EdgeInsets.all(4),
-                // GFAvatar de getwidget: los colores siguen saliendo de
-                // nuestros tokens, no de la paleta de la librería.
-                child: GFAvatar(
-                  size: GFSize.SMALL,
-                  shape: GFAvatarShape.circle,
-                  backgroundColor: AppColors.cardBorder,
-                  child: Icon(Icons.person, color: AppColors.textSecondary),
-                ),
+                // La foto sale de `AvatarUsuario`, que es el único lugar
+                // de la app que sabe dónde está: el header, Perfil y el
+                // escalón de Mi Plan muestran la MISMA.
+                child: AvatarUsuario(),
               ),
             ),
           ],

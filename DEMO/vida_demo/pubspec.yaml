@@ -56,6 +56,12 @@ dependencies:
   # placeholder rayado. Lo usa lib/widgets/placeholder_imagen.dart.
   flutter_svg: ^2.3.0
 
+  # Entrada escalonada de los logos del catálogo de Premios. Es una capa
+  # de conveniencia sobre las animaciones de Flutter (no trae motor
+  # propio) y respeta el "reducir movimiento" del sistema porque nosotros
+  # la apagamos a mano. Licencia MIT.
+  flutter_animate: ^4.5.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -98,6 +104,9 @@ flutter:
     - assets/img/premios/conveniencia/
     - assets/img/premios/deportes-ejercicio/
     - assets/img/premios/farmacias/
+    # La foto del usuario. Es UNA sola y sale por `AvatarUsuario`, que es
+    # el único lugar de la app que la nombra.
+    - assets/Foto de perfil/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
