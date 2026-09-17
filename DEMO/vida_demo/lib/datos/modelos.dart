@@ -1103,32 +1103,87 @@ class Solicitud {
 /// ninguna pantalla escribe el nombre de una marca a mano.
 class Patrocinio {
   const Patrocinio({
+    required this.id,
     required this.marca,
     required this.logo,
     required this.cupon,
-  });
+    List<String> fotos = const [],
+    this.fondo,
+    this.acento,
+    // ignore: prefer_initializing_formals
+  }) : _fotos = fotos;
+
+  /// El id del comercio, el MISMO que usa el catálogo de Premios.
+  ///
+  /// Sirve para poder llevar al usuario al premio de esa marca sin tener
+  /// que adivinarlo por el nombre.
+  final String id;
 
   /// El nombre de la marca, tal como se muestra.
   final String marca;
 
-  /// Ruta del logo. Hoy es un asset local del catálogo de Premios; con el
-  /// backend va a ser una URL y solo cambia quién resuelve la imagen.
+  /// Ruta de la foto del local. Hoy es un asset local del catálogo de
+  /// Premios; con el backend va a ser una URL y solo cambia quién
+  /// resuelve la imagen.
   final String logo;
+
+  /// Las fotos que rota el cintillo de la semana en curso.
+  ///
+  /// Vienen de los datos y NO se arman en el widget: el día que el
+  /// endpoint traiga tres fotos de verdad, no hay que tocar pantalla
+  /// ninguna.
+  ///
+  /// Si el backend no manda ninguna, queda [logo] sola y el cintillo se
+  /// muestra quieto — que es lo correcto: con una sola foto no hay nada
+  /// que rotar.
+  ///
+  /// [PENDIENTE: Diego consigue 3 fotos por aliado. Hasta entonces el
+  /// mock repite la única que hay en el catálogo de Premios, así que el
+  /// cintillo rota entre tres fotos iguales y el movimiento no se nota.]
+  List<String> get fotos => _fotos.isEmpty ? [logo] : _fotos;
+  final List<String> _fotos;
 
   /// Qué se lleva quien cumpla: el texto del cupón de ESTA marca, que
   /// reemplaza al premio genérico del catálogo.
   final String cupon;
 
+  /// Color DETRÁS de la foto, en hex "#RRGGBB". Es el mismo campo que ya
+  /// trae el catálogo de Premios y existe por una razón concreta: los
+  /// logos blancos sobre fondo transparente desaparecen si se los pone
+  /// sobre blanco. Null quiere decir blanco.
+  final String? fondo;
+
+  /// Color de marca para los detalles: el anillo del nodo y el borde del
+  /// cupón. En hex "#RRGGBB", o null para usar el azul de +Vida.
+  ///
+  /// Va SEPARADO de [fondo] a propósito. `fondo` es el color sobre el que
+  /// se lee el logo —el de Montanos es negro— y un anillo negro sobre una
+  /// pantalla clara no transmite calma, que es lo que pide el sistema de
+  /// diseño. Con dos campos, la marca elige con qué acento aparece sin
+  /// arrastrar el color de su fondo.
+  final String? acento;
+
   factory Patrocinio.desdeJson(Map<String, dynamic> j) => Patrocinio(
+    // El id es nuevo. Los patrocinios que un cliente viejo tenga
+    // guardados no lo traen, así que se cae al nombre en minúsculas en
+    // vez de reventar.
+    id: (j['id'] ?? (j['marca'] as String).toLowerCase()) as String,
     marca: j['marca'] as String,
     logo: j['logo'] as String,
     cupon: j['cupon'] as String,
+    fotos: ((j['fotos'] as List?) ?? const []).cast<String>().toList(),
+    fondo: j['fondo'] as String?,
+    acento: j['acento'] as String?,
   );
 
   Map<String, dynamic> aJson() => {
+    'id': id,
     'marca': marca,
     'logo': logo,
     'cupon': cupon,
+    if (_fotos.isNotEmpty) 'fotos': _fotos,
+    if (fondo != null) 'fondo': fondo,
+    if (acento != null) 'acento': acento,
   };
 }
 
