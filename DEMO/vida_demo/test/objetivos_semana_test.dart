@@ -41,6 +41,14 @@ void main() {
   }
 
   Future<void> montarCamino(WidgetTester t) async {
+    // Tamaño de iPhone y no el 800x600 apaisado que trae flutter_test por
+    // defecto: en una ventana ancha la tarjeta del patrocinador —que es
+    // apaisada— empuja el camino fuera de cuadro y los toques no llegan
+    // a los nodos.
+    t.view.physicalSize = const Size(390, 844);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+
     await montarPantalla(t, CaminoSemanasScreen(objetivos: objetivos));
     await t.pump();
   }
@@ -272,9 +280,31 @@ void main() {
       expect(find.byIcon(Icons.lock_rounded), findsNothing);
     });
 
+    testWidgets('cada nodo dice qué semana es', (t) async {
+      await montarCamino(t);
+      for (final s in objetivos.semanas) {
+        expect(
+          find.text('Semana ${s.numero}'),
+          findsOneWidget,
+          reason: 'el nodo de la semana ${s.numero} no dice cuál es',
+        );
+      }
+    });
+
     testWidgets('marca cuál es la semana en curso', (t) async {
       await montarCamino(t);
-      expect(find.text('ESTA SEMANA'), findsOneWidget);
+
+      // Una sola etiqueta rellena de azul, y es la de la semana que
+      // corre: es lo que dice "acá estás" ahora que todos los nodos
+      // llevan etiqueta.
+      expect(find.byKey(llaveEtiquetaEnCurso), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(llaveEtiquetaEnCurso),
+          matching: find.text('Semana ${objetivos.enCurso!.numero}'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('tocar un nodo abre esa semana en una hoja', (t) async {
