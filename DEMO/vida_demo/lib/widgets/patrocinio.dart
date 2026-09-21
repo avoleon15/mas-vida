@@ -102,11 +102,7 @@ class FotoPatrocinador extends StatelessWidget {
 
 /// El logo de la marca en chico, para una fila o un chip.
 class LogoPatrocinio extends StatelessWidget {
-  const LogoPatrocinio({
-    super.key,
-    required this.patrocinio,
-    this.tamano = 34,
-  });
+  const LogoPatrocinio({super.key, required this.patrocinio, this.tamano = 34});
 
   final Patrocinio patrocinio;
   final double tamano;
@@ -165,10 +161,9 @@ class CintaPatrocinio extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final estilo = Theme.of(context).textTheme.bodySmall?.copyWith(
-      color: AppColors.textPrimary,
-      height: 1.3,
-    );
+    final estilo = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: AppColors.textPrimary, height: 1.3);
 
     return Container(
       width: double.infinity,
@@ -197,6 +192,116 @@ class CintaPatrocinio extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(texto, style: estilo),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Quién acompaña la semana, en una tarjetita de esquina.
+///
+/// Es un RÓTULO, no un premio: dice qué marca está en esta semana. Por
+/// eso lleva el nombre y no el cupón —el cupón se cuenta abajo, donde
+/// hay lugar para decir qué se gana— y por eso es del tamaño de una
+/// etiqueta y no de una tarjeta.
+///
+/// EL RÓTULO VA AFUERA DE LA CAJA (revisión de Daniel, 21 de septiembre
+/// de 2026). "PATROCINADO POR" estaba adentro, apilado sobre el nombre:
+/// tres cosas de tamaños distintos encerradas en un rectángulo de 38 px
+/// de alto, y la caja se leía apretada. Afuera y arriba, el rótulo hace
+/// de encabezado —dice QUÉ es lo que viene abajo— y adentro del
+/// rectángulo quedan las dos cosas que son la marca: su cara y su
+/// nombre, del mismo tamaño y en un solo renglón.
+///
+/// Sin el rótulo adentro, "Montanos" pasa de 13 a 14 px: es lo que la
+/// alianza compró y ahora tiene la caja para él solo.
+///
+/// POR QUÉ NO ES UN RENGLÓN DE TEXTO GRIS. "Patrocinada por Montanos"
+/// suelto abajo del título era un renglón más de letra chica y se leía
+/// como nota legal. Acá la marca trae su CARA y su COLOR, que es
+/// exactamente lo que la alianza compró.
+///
+/// El color del borde y del texto sale de `acentoDeMarca`, o sea del
+/// dato del patrocinio, nunca de un hex escrito acá.
+class ChipMarcaSemana extends StatelessWidget {
+  const ChipMarcaSemana({super.key, required this.patrocinio});
+
+  final Patrocinio patrocinio;
+
+  @override
+  Widget build(BuildContext context) {
+    final acento = acentoDeMarca(patrocinio);
+
+    return Semantics(
+      label: 'Patrocinada por ${patrocinio.marca}',
+      excludeSemantics: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        // Pegado al borde derecho de la caja: el chip vive en la esquina
+        // derecha de la tarjeta, y un rótulo alineado a la izquierda
+        // quedaría flotando lejos de lo que rotula.
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Padding(
+            // Los 2 px de la derecha alinean el rótulo con el BORDE de
+            // la caja de abajo, no con su relleno.
+            padding: const EdgeInsets.only(right: 2, bottom: 5),
+            child: Text(
+              'PATROCINADO POR',
+              maxLines: 1,
+              style: TextStyle(
+                // El mismo acento pero apagado: el rótulo acompaña a la
+                // marca, no le compite.
+                color: acento.withValues(alpha: 0.7),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.9,
+                height: 1.1,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(6, 6, 11, 6),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              // Radio de tarjetita y no de píldora: el logo adentro es
+              // un cuadrado redondeado, y una caja de puntas completas
+              // alrededor de un cuadrado deja aire muerto en las
+              // esquinas.
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: acento.withValues(alpha: 0.45)),
+              // Una sombra mínima del color de la marca: la separa del
+              // fondo sin encenderla. Nunca un glow.
+              boxShadow: [
+                BoxShadow(
+                  color: acento.withValues(alpha: 0.14),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LogoPatrocinio(patrocinio: patrocinio, tamano: 26),
+                const SizedBox(width: 9),
+                Flexible(
+                  child: Text(
+                    patrocinio.marca,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: acento,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.1,
+                      height: 1.15,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
