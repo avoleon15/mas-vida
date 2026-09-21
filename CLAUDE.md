@@ -68,25 +68,29 @@ este documento, que pedía lo contrario.)
 | 0 | 0 – 2,499 | 0% |
 | 1 | 2,500 – 4,999 | 5% |
 | 2 | 5,000 – 9,999 | 7,5% |
-| 3 | 10,000 – 14,999 | 10% |
-| 4 | 15,000+ | 20% |
+| 3 | 10,000 – 11,999 | 10% |
+| 4 | 12,000+ | 20% |
 
-Tabla **confirmada** (Daniel, 1 de septiembre de 2026). Reemplaza a la versión
-anterior de este documento, que dejaba los niveles 0, 1 y 2 sin definir. Vive
-en `niveles`, dentro de `lib/reglas_puntos.dart`: ese es el único lugar donde
-se escriben estos números.
+Tabla **confirmada** (Daniel, 1 de septiembre de 2026; los pisos de los niveles
+3 y 4 corregidos el 17 de septiembre de 2026). Reemplaza a la versión anterior
+de este documento, que dejaba los niveles 0, 1 y 2 sin definir y ponía el nivel
+4 en 15.000+. Vive en `niveles`, dentro de `lib/reglas_puntos.dart`: ese es el
+único lugar donde se escriben estos números, y **el código es la fuente de
+verdad** — si este documento y esa tabla se contradicen, manda el código.
 
 **Techo anual de actividad física: 12.000 puntos.** Topa los puntos por pasos
 e intensidad, y NO es un techo de los puntos del año: **los chequeos médicos
 dan puntos aparte, que se suman POR ENCIMA de ese techo.**
 
-Consecuencia: **el nivel 4 (15.000+) SÍ es alcanzable**, pero solo si el
-afiliado además se hace los chequeos — con pura actividad física no llega.
-Esto reemplaza a la versión anterior de este documento, que decía que el nivel
-4 quedaba fuera de alcance en el piloto.
+Consecuencia: **el nivel 4 SÍ es alcanzable.** Su piso son 12.000 puntos, que
+es exactamente lo máximo que da la actividad física sola: se llega caminando,
+pero justo. Los chequeos médicos son los que dejan MOVERSE dentro del nivel 4,
+porque suman por encima de ese techo. Esto reemplaza a la versión anterior de
+este documento, que decía que el nivel 4 quedaba fuera de alcance en el piloto.
 
-Los 15.000 son el **piso** del nivel 4, no un techo. Nunca poner un tope duro
-ahí.
+Los 12.000 son el **piso** del nivel 4. La tabla de `reglas_puntos.dart` cierra
+el nivel en 15.000 (`Nivel(4, 12000, 15000, 20)`) y ese número queda como está:
+es el tope de la tabla, no un tope de lo que el usuario puede acumular.
 
 [PENDIENTE: cuántos puntos da un chequeo médico. **No inventarlo**, y no
 nombrar ninguna cifra de chequeos en la UI hasta que esté definido.]
@@ -286,11 +290,18 @@ Reglas visuales:
   perfil pegada a la DERECHA
 - **La foto del usuario sale de `lib/widgets/avatar_usuario.dart`** y de
   ningún otro lado. Aparece en tres lugares —el header, la ficha de
-  Perfil y el escalón de Mi Plan donde el usuario está parado— y los
-  tres tienen que mostrar la MISMA. Es el único archivo que nombra la
-  ruta del asset; el día que la foto llegue del backend cambia ahí y
-  nada más. En la escalera de cashback la foto REEMPLAZA al cartel
-  "ESTÁS AQUÍ": una cara se reconoce sola y un cartel hay que leerlo
+  Perfil y el escalón de la escalera de cashback de **Home** donde el
+  usuario está parado— y los tres tienen que mostrar la MISMA. Es el
+  único archivo que nombra la ruta del asset; el día que la foto llegue
+  del backend cambia ahí y nada más. En la escalera de cashback la foto
+  REEMPLAZA al cartel "ESTÁS AQUÍ": una cara se reconoce sola y un
+  cartel hay que leerlo.
+
+  La escalera con la foto vive en **Home** (`escalera_cashback.dart`), no
+  en Mi Plan (decisión de Daniel, 17 de septiembre de 2026). Esto
+  reemplaza a la versión anterior de este documento, que la ubicaba en Mi
+  Plan: esa pantalla muestra el nivel de HOY en su tarjeta hero y el
+  camino completo de niveles no se repite ahí.
 - **Barra inferior** (`lib/widgets/bottom_nav_bar.dart`, reutilizada en
   TODAS las pantallas): 5 ítems fijos en este orden: Hoy, Progreso,
   Social, Premios, Mi Plan. El ítem activo necesita fondo de píldora sutil
