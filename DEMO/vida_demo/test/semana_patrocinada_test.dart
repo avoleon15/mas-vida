@@ -4,7 +4,6 @@ import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/reglas_rango.dart';
 import 'package:vida_demo/screens/camino_semanas_screen.dart';
-import 'package:vida_demo/widgets/carrusel_patrocinadores.dart';
 import 'package:vida_demo/widgets/cintillo_patrocinador.dart';
 import 'package:vida_demo/widgets/insignia_rango.dart';
 import 'package:vida_demo/widgets/patrocinio.dart';
@@ -87,18 +86,28 @@ void main() {
       // dice en el renglón de abajo, que es el tamaño que le toca.
       expect(find.text('SEMANA ${enCurso.numero}'), findsNothing);
       expect(
-        find.text(
-          'Rango ${objetivos.rangoActual} de $rangoMaximo · '
-          'Semana ${enCurso.numero}',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Patrocinada por ${enCurso.patrocinio!.marca}'),
+        find.text('Semana ${enCurso.numero} de ${objetivos.semanas.length}'),
         findsOneWidget,
       );
     });
 
+    testWidgets('el rango no comparte renglón con la semana', (t) async {
+      await montarCamino(t);
+
+      // Eran dos escaleras distintas —rangos y semanas— pegadas en el
+      // mismo renglon con un punto en el medio. El rango se mudó a su
+      // tarjeta, que es donde ademas se explica como se sube.
+      expect(
+        find.text(
+          'Rango ${objetivos.rangoActual} de $rangoMaximo · '
+          'Semana ${objetivos.enCurso!.numero}',
+        ),
+        findsNothing,
+      );
+    });
+  });
+
+  group('La tarjeta de rango', () {
     testWidgets('la insignia dice el rango que manda el servidor', (t) async {
       await montarCamino(t);
 
@@ -109,33 +118,93 @@ void main() {
       expect(insignia.maximo, rangoMaximo);
     });
 
-    testWidgets('sin marca no menciona el patrocinio', (t) async {
-      await montarCamino(t, conEstos: sinMarcaEnLaSemanaEnCurso());
+    testWidgets('dice CÓMO se sube y cómo se baja', (t) async {
+      await montarCamino(t);
 
-      // Ni el cintillo ni un cartel que anuncie la ausencia: un aviso de
-      // "esta semana no hay patrocinador" es peor que la ausencia.
+      // Lo que faltaba: el usuario veia una escalera de diez escalones y
+      // ningun lado decia que la mueve. Y que se pueda BAJAR no se puede
+      // callar: enterarse un lunes es un castigo escondido.
+      expect(find.byKey(llaveTarjetaRango), findsOneWidget);
+      expect(
+        find.textContaining('Rango ${objetivos.rangoActual} de $rangoMaximo'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('subís al ${objetivos.rangoActual + 1}'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('bajás uno'), findsOneWidget);
+    });
+
+    testWidgets('el nodo ya no repite el rango diez veces', (t) async {
+      await montarCamino(t);
+
+      // Decia "+15 al Rango 3" debajo de cada uno de los diez nodos: la
+      // misma frase diez veces con el numero cambiando de a uno.
+      expect(find.textContaining('al Rango'), findsNothing);
+      // Lo que paga sí sigue, que es lo que se compara entre nodos.
+      final paga = objetivos.recorrido.firstWhere((p) => p.monedas > 0);
+      expect(find.text('+${paga.monedas}'), findsWidgets);
+    });
+  });
+
+  group('El patrocinador se ve al ABRIR la semana', () {
+    testWidgets('el camino no lleva la tarjeta de la marca', (t) async {
+      await montarCamino(t);
+
+      // Estaba a pantalla completa arriba del camino: la marca de la
+      // semana en curso le pasaba por delante a todo el que entraba a
+      // ver el recorrido.
       expect(find.byType(CintilloPatrocinador), findsNothing);
       expect(find.textContaining('Patrocinada por'), findsNothing);
+    });
+
+    testWidgets('al abrir una semana vendida sale su slider', (t) async {
+      await montarCamino(t);
+      final s = objetivos.semanas.firstWhere((s) => s.tienePatrocinio);
+
+      await t.tap(find.byKey(llaveNodoSemana(s.numero)));
+      // Dos pumps y NO pumpAndSettle: la hoja trae la moneda de Lottie,
+      // que se repite para siempre y nunca se asienta.
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      final cintillo = t.widget<CintilloPatrocinador>(
+        find.byType(CintilloPatrocinador),
+      );
+      // Es la marca de ESA semana, no la de la que corre.
+      expect(cintillo.semana, s.numero);
+      expect(cintillo.marca, s.patrocinio!.marca);
+      // Las fotos salen de los datos, no se arman en la pantalla.
+      expect(cintillo.fotos, s.patrocinio!.fotos);
+    });
+
+    testWidgets('al abrir una semana sin marca no sale nada', (t) async {
+      await montarCamino(t);
+      final s = objetivos.semanas.firstWhere((s) => !s.tienePatrocinio);
+
+      await t.tap(find.byKey(llaveNodoSemana(s.numero)));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      // Ni slider ni un cartel que anuncie la ausencia.
+      expect(find.byType(CintilloPatrocinador), findsNothing);
       expect(find.textContaining('sin patrocinador'), findsNothing);
-      // Y el encabezado sigue ubicando al usuario: rango y semana.
+      expect(find.text('Semana ${s.numero}'), findsWidgets);
+    });
+
+    testWidgets('sin marca en la semana en curso el camino no cambia', (
+      t,
+    ) async {
+      await montarCamino(t, conEstos: sinMarcaEnLaSemanaEnCurso());
+
+      expect(find.byType(CintilloPatrocinador), findsNothing);
+      expect(find.textContaining('Patrocinada por'), findsNothing);
       expect(find.text('TU CAMINO'), findsOneWidget);
       expect(
         find.textContaining('Semana ${objetivos.enCurso!.numero}'),
         findsWidgets,
       );
-    });
-
-    testWidgets('la tarjeta animada es la de la semana en curso', (t) async {
-      await montarCamino(t);
-      final enCurso = objetivos.enCurso!;
-
-      final cintillo = t.widget<CintilloPatrocinador>(
-        find.byType(CintilloPatrocinador),
-      );
-      expect(cintillo.semana, enCurso.numero);
-      expect(cintillo.marca, enCurso.patrocinio!.marca);
-      // Las fotos salen de los datos, no se arman en la pantalla.
-      expect(cintillo.fotos, enCurso.patrocinio!.fotos);
     });
   });
 
@@ -275,70 +344,15 @@ void main() {
     });
   });
 
-  group('El botón de los próximos patrocinadores', () {
-    testWidgets('abre quiénes vienen, con su número de semana', (t) async {
-      await montarCamino(t);
-
-      expect(find.byKey(llaveBotonProximosPatrocinadores), findsOneWidget);
-      await t.tap(find.byKey(llaveBotonProximosPatrocinadores));
-      await t.pumpAndSettle();
-
-      final porVenir = objetivos.semanas.where(
-        (s) => s.tienePatrocinio && s.estado == EstadoSemana.futura,
-      );
-      expect(porVenir, isNotEmpty);
-      expect(find.byType(CarruselLoQueViene), findsOneWidget);
-
-      for (final s in porVenir) {
-        expect(
-          find.text('SEMANA ${s.numero}'),
-          findsOneWidget,
-          reason: 'falta la semana ${s.numero} en la hoja',
-        );
-      }
-    });
-
-    testWidgets('la semana EN CURSO no se repite adentro', (t) async {
-      // Ya tiene su tarjeta arriba; decirla dos veces es ruido.
-      await montarCamino(t);
-      await t.tap(find.byKey(llaveBotonProximosPatrocinadores));
-      await t.pumpAndSettle();
-
-      // Se busca DENTRO del carrusel: el camino, que se queda vivo
-      // detrás de la hoja, también rotula sus nodos con la semana.
-      expect(
-        find.descendant(
-          of: find.byType(CarruselLoQueViene),
-          matching: find.text('SEMANA ${objetivos.enCurso!.numero}'),
-        ),
-        findsNothing,
-      );
-    });
-
-    testWidgets('sin semanas vendidas por delante no hay botón', (t) async {
-      final sinFuturas = ObjetivosSemana(
-        rangoActual: objetivos.rangoActual,
-        semanas: [
-          for (final s in objetivos.semanas)
-            if (s.estado == EstadoSemana.futura)
-              SemanaObjetivos(
-                numero: s.numero,
-                cierra: s.cierra,
-                estado: s.estado,
-                objetivos: s.objetivos,
-              )
-            else
-              s,
-        ],
-      );
-
-      await montarCamino(t, conEstos: sinFuturas);
-
-      // Un botón que abre una hoja vacía es peor que no tener botón.
-      expect(find.byKey(llaveBotonProximosPatrocinadores), findsNothing);
-      expect(find.byType(CarruselLoQueViene), findsNothing);
-    });
-  });
+  // EL BOTÓN "PATROCINADORES DE LAS PRÓXIMAS SEMANAS" YA NO EXISTE.
+  //
+  // Abría una hoja con las marcas de las semanas vendidas que faltaban.
+  // Desde que cada semana muestra su marca al abrirse, esa hoja decía lo
+  // mismo que el camino con un toque más de por medio, y era el segundo
+  // bloque de publicidad antes de ver el recorrido.
+  //
+  // `CarruselLoQueViene` quedó sin pantalla que lo use. El widget sigue
+  // en `lib/widgets/carrusel_patrocinadores.dart` con su propio test.
 
   group('El premio de una semana patrocinada', () {
     testWidgets('el cupón NO reemplaza a las monedas de la semana', (t) async {

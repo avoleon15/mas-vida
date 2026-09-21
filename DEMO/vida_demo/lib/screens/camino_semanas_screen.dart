@@ -2,15 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../datos/modelos.dart';
 import '../reglas_rango.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/moneda_animada.dart';
-import '../widgets/carrusel_patrocinadores.dart';
-import '../widgets/cintillo_patrocinador.dart';
 import '../widgets/curva_camino.dart';
 import '../widgets/insignia_rango.dart';
 import '../widgets/patrocinio.dart';
@@ -49,11 +46,16 @@ import '../widgets/tarjeta_semana.dart';
 ///
 /// El círculo va clavado en el centro del renglón —por ahí pasa la
 /// curva—, así que el renglón tiene que aguantar la mitad del nodo más
-/// alto hacia arriba y hacia abajo: halo (44) + aire (5) + etiqueta (19)
-/// da 68 arriba, y halo (44) + aire (6) + monedas de dos renglones (32)
-/// da 82 abajo. La mitad de 160 son 80. El margen es para cuando el
-/// usuario sube el tamaño de letra en iOS.
-const double _altoFila = 160;
+/// alto hacia arriba y hacia abajo: halo (44) + aire (5) + etiqueta (20)
+/// da 69 arriba, y halo (44) + aire (6) + monedas de UN renglón (20) da
+/// 70 abajo. La mitad de 146 son 73, así que sobran 3 px de cada lado
+/// para cuando el usuario sube el tamaño de letra en iOS.
+///
+/// Bajó de 160 a 146 cuando el nodo dejó de llevar etiqueta propia y el
+/// pie pasó a un solo renglón. Las filas quedaron más juntas y el camino
+/// se lee como un camino y no como una grilla de círculos sueltos: eran
+/// 640 px de alto para diez semanas, ahora son 584.
+const double _altoFila = 146;
 
 /// Diámetro de cada tipo de nodo.
 const double _dCumplida = 62;
@@ -106,25 +108,11 @@ class CaminoSemanasScreen extends StatelessWidget {
 
   final ObjetivosSemana objetivos;
 
-  /// Las semanas patrocinadas que todavía no arrancaron.
-  ///
-  /// Van detrás del botón "Patrocinadores de las próximas semanas" y no a
-  /// la vista: el protagonista de la pantalla es el camino, y la marca
-  /// que importa hoy —la de la semana en curso— ya está arriba del todo.
-  ///
-  /// La en curso NO entra: esa ya tiene su tarjeta, y decirla dos veces
-  /// en la misma pantalla es ruido.
-  List<SemanaObjetivos> get _loQueViene => [
-    for (final s in objetivos.semanas)
-      if (s.tienePatrocinio && s.estado == EstadoSemana.futura) s,
-  ];
-
   @override
   Widget build(BuildContext context) {
     final recorrido = objetivos.recorrido;
     final enCurso = objetivos.enCurso;
     final ganadas = objetivos.monedasGanadas;
-    final loQueViene = _loQueViene;
 
     return Scaffold(
       body: SafeArea(
@@ -143,12 +131,6 @@ class CaminoSemanasScreen extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // El medallón va de PRIMERO, antes que el título: es lo
-                  // único de esta pantalla que habla del usuario y no del
-                  // programa, y es lo que hace que la pantalla se sienta
-                  // suya y no un calendario.
-                  InsigniaRango(rango: objetivos.rangoActual),
-                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,33 +144,17 @@ class CaminoSemanasScreen extends StatelessWidget {
                         Text('TU CAMINO', style: AppTheme.sectionTitle),
                         const SizedBox(height: 2),
                         Text(
-                          // El rango se escribe además de dibujarse: el
-                          // medallón se lee de un vistazo, pero "2 de 10"
-                          // es lo que lo vuelve una escalera con largo.
+                          // Solo la semana. El rango se fue a su tarjeta,
+                          // que es donde además se explica cómo se sube;
+                          // acá arriba los dos juntos eran dos escaleras
+                          // distintas en el mismo renglón.
                           enCurso == null
-                              ? 'Rango ${objetivos.rangoActual} de '
-                                    '$rangoMaximo'
-                              : 'Rango ${objetivos.rangoActual} de '
-                                    '$rangoMaximo · Semana ${enCurso.numero}',
+                              ? '${objetivos.semanas.length} semanas'
+                              : 'Semana ${enCurso.numero} de '
+                                    '${objetivos.semanas.length}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: AppColors.textSecondary),
                         ),
-                        // Quién patrocina la semana se dice ACÁ y no
-                        // adentro de la tarjeta de abajo: sobre la foto
-                        // de la marca el texto necesita una sombra que
-                        // ensucia el logo que la marca pagó por mostrar.
-                        //
-                        // Sin marca no se dibuja este renglón y el bloque
-                        // se encoge: nunca un hueco ni un "esta semana no
-                        // hay patrocinador".
-                        if (enCurso?.patrocinio != null)
-                          Text(
-                            'Patrocinada por ${enCurso!.patrocinio!.marca}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: AppColors.azulMedio),
-                          ),
                       ],
                     ),
                   ),
@@ -196,8 +162,8 @@ class CaminoSemanasScreen extends StatelessWidget {
                 ],
               ),
             ),
-            // Una sola tira que scrollea: cintillo, camino y carrusel se
-            // mueven juntos. Antes el camino tenía su propio scroll, y
+            // Una sola tira que scrollea: la tarjeta de rango y el camino
+            // se mueven juntos. Antes el camino tenía su propio scroll, y
             // con algo debajo habrían quedado dos scrolls anidados, que
             // es la forma más rápida de que ninguno de los dos responda
             // bien al dedo.
@@ -206,38 +172,34 @@ class CaminoSemanasScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 28),
                 child: Column(
                   children: [
-                    // El cintillo solo existe si la semana EN CURSO está
-                    // vendida. Si no, no se dibuja nada —ni un hueco ni
-                    // un "esta semana no hay patrocinador"— y el camino
-                    // sube: la pantalla se ve como si nunca hubiera
-                    // existido la sección.
-                    if (enCurso?.patrocinio != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                        child: CintilloPatrocinador(
-                          semana: enCurso!.numero,
-                          marca: enCurso.patrocinio!.marca,
-                          // La lista sale del repositorio, no de acá: hoy
-                          // el mock repite la única foto del catálogo.
-                          fotos: enCurso.patrocinio!.fotos,
-                          fondoMarca: enCurso.patrocinio!.fondo,
-                        ),
+                    // EL PATROCINADOR YA NO VIVE ACÁ (decisión de Daniel,
+                    // 21 de septiembre de 2026). Estaba la foto de la
+                    // marca de la semana en curso a pantalla completa y,
+                    // debajo, un botón con las marcas de las semanas que
+                    // vienen: dos bloques de publicidad antes de ver el
+                    // camino, que es el protagonista de la pantalla.
+                    //
+                    // Ahora cada marca aparece al ABRIR su semana, que es
+                    // el momento en que el usuario preguntó por ella. En
+                    // el camino quedan las dos señales chicas de siempre:
+                    // el logo montado en el borde del nodo y el anillo
+                    // con el color de la marca.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: _TarjetaRango(
+                        rango: objetivos.rangoActual,
+                        // El siguiente sale de las reglas y no de
+                        // `rango + 1`: en el tope de la escalera no hay
+                        // siguiente y la frase cambia.
+                        siguiente: objetivos.rangoActual < rangoMaximo
+                            ? objetivos.rangoActual + 1
+                            : null,
                       ),
-                    // Igual que la tarjeta: sin semanas patrocinadas por
-                    // delante, el botón no existe. Un botón que abre una
-                    // hoja vacía es peor que no tener botón.
-                    if (loQueViene.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                        child: _BotonProximosPatrocinadores(
-                          semanas: loQueViene,
-                        ),
-                      ),
+                    ),
                     _Camino(
                       recorrido: recorrido,
                       rangoActual: objetivos.rangoActual,
                       totalSemanas: objetivos.semanas.length,
-                      numeroSiguienteDe: objetivos.numeroDespuesDe,
                     ),
                   ],
                 ),
@@ -250,132 +212,83 @@ class CaminoSemanasScreen extends StatelessWidget {
   }
 }
 
-/// Llave del botón de próximos patrocinadores, para los tests.
-const Key llaveBotonProximosPatrocinadores = ValueKey('proximos-patrocinadores');
+/// Llave de la tarjeta de rango, para los tests.
+const Key llaveTarjetaRango = ValueKey('tarjeta-rango');
 
-/// Botón chico que abre quiénes patrocinan las semanas que vienen.
+/// En qué rango va el usuario y CÓMO SE SUBE.
 ///
-/// Es un botón y no una sección a la vista a propósito: el protagonista
-/// de esta pantalla es el camino, y las marcas que todavía no llegaron
-/// son un dato de curiosidad. Adentro sí se muestran en grande.
-class _BotonProximosPatrocinadores extends StatelessWidget {
-  const _BotonProximosPatrocinadores({required this.semanas});
+/// La segunda mitad es la razón de existir de esta tarjeta. El medallón
+/// ya estaba en la pantalla —suelto, al lado del título—, pero en ningún
+/// lado decía qué hace subir una muesca: el usuario veía una escalera de
+/// diez escalones y ninguna regla para moverse.
+///
+/// Es UNA oración y dice las dos direcciones. Que se pueda BAJAR no es
+/// un detalle que se pueda callar: es la mitad de la mecánica, y
+/// enterarse un lunes de que se bajó sin que nadie lo hubiera avisado se
+/// siente un castigo escondido.
+///
+/// Sin números de monedas acá: cuánto paga cada escalón está debajo de
+/// cada nodo del camino, que es donde se compara uno contra otro.
+class _TarjetaRango extends StatelessWidget {
+  const _TarjetaRango({required this.rango, required this.siguiente});
 
-  final List<SemanaObjetivos> semanas;
+  final int rango;
+
+  /// El escalón que sigue, o null si ya está en el último.
+  final int? siguiente;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: double.infinity,
-    // CupertinoButton y no un GestureDetector con un Container: trae
-    // gratis el atenuado al presionar que un usuario de iPhone ya
-    // conoce (ver CLAUDE.md).
-    child: CupertinoButton(
-      key: llaveBotonProximosPatrocinadores,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      minimumSize: Size.zero,
-      borderRadius: BorderRadius.circular(14),
-      color: AppColors.azulNiebla,
-      onPressed: () => _mostrarProximosPatrocinadores(context, semanas),
+  Widget build(BuildContext context) {
+    final siguiente = this.siguiente;
+
+    return Container(
+      key: llaveTarjetaRango,
+      padding: const EdgeInsets.fromLTRB(16, 16, 18, 16),
+      decoration: BoxDecoration(
+        // azulNiebla: es una superficie grande, y en la escala de azules
+        // lo grande va en el tono más pálido.
+        color: AppColors.azulNiebla,
+        borderRadius: BorderRadius.circular(18),
+      ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            CupertinoIcons.ticket,
-            size: 15,
-            color: AppColors.azulMedio,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              'Patrocinadores de las próximas semanas',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.accent,
-              ),
+          // Más grande que antes (56 → 68): era lo único de la pantalla
+          // que habla del usuario y estaba del tamaño de un ícono.
+          InsigniaRango(rango: rango, tamano: 68),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Rango $rango de $rangoMaximo',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  siguiente == null
+                      // En el tope no se promete un escalón que no
+                      // existe, pero se sigue pudiendo bajar.
+                      ? 'Llegaste al último. Cumplí los tres objetivos '
+                            'de la semana para quedarte acá.'
+                      : 'Cumplí los tres objetivos de la semana y subís '
+                            'al $siguiente. Si no, bajás uno.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 6),
-          const Icon(
-            CupertinoIcons.chevron_right,
-            size: 13,
-            color: AppColors.azulMedio,
           ),
         ],
       ),
-    ),
-  );
-}
-
-/// La hoja con las marcas que vienen.
-void _mostrarProximosPatrocinadores(
-  BuildContext context,
-  List<SemanaObjetivos> semanas,
-) {
-  HapticFeedback.selectionClick();
-  showCupertinoModalPopup<void>(
-    context: context,
-    builder: (_) => _HojaProximosPatrocinadores(semanas: semanas),
-  );
-}
-
-class _HojaProximosPatrocinadores extends StatelessWidget {
-  const _HojaProximosPatrocinadores({required this.semanas});
-
-  final List<SemanaObjetivos> semanas;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: AppColors.card,
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    ),
-    child: SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 18),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBorder,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text('Lo que viene', style: AppTheme.sectionTitle),
-            const SizedBox(height: 4),
-            Text(
-              semanas.length == 1
-                  ? 'Una semana más ya tiene marca aliada.'
-                  : '${semanas.length} semanas más ya tienen marca aliada.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            CarruselLoQueViene(semanas: semanas),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: CupertinoButton.filled(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Entendido'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 /// Lo ya ganado, en el encabezado.
@@ -414,11 +327,9 @@ class _Camino extends StatelessWidget {
     required this.recorrido,
     required this.rangoActual,
     required this.totalSemanas,
-    required this.numeroSiguienteDe,
   });
 
   final List<PasoDelPrograma> recorrido;
-  final int? Function(int) numeroSiguienteDe;
   final int rangoActual;
   final int totalSemanas;
 
@@ -521,9 +432,6 @@ class _Camino extends StatelessWidget {
                         paso: recorrido[i],
                         rangoActual: rangoActual,
                         totalSemanas: totalSemanas,
-                        numeroSiguiente: numeroSiguienteDe(
-                          recorrido[i].semana.numero,
-                        ),
                       ),
                     ),
                 ],
@@ -604,13 +512,11 @@ class _Nodo extends StatefulWidget {
     required this.paso,
     required this.rangoActual,
     required this.totalSemanas,
-    required this.numeroSiguiente,
   });
 
   final PasoDelPrograma paso;
   final int rangoActual;
   final int totalSemanas;
-  final int? numeroSiguiente;
 
   @override
   State<_Nodo> createState() => _NodoState();
@@ -626,7 +532,6 @@ class _NodoState extends State<_Nodo> {
     paso: widget.paso,
     rangoActual: widget.rangoActual,
     totalSemanas: widget.totalSemanas,
-    numeroSiguiente: widget.numeroSiguiente,
   );
 
   @override
@@ -702,27 +607,36 @@ class _NodoState extends State<_Nodo> {
                   ),
                   child: LogoPatrocinio(patrocinio: patrocinio, tamano: 26),
                 ),
-              // Qué semana es, ARRIBA del círculo y en todos los nodos.
-              // Adentro del círculo el número solo se lee de cerca; acá
-              // la pantalla se recorre sin contar nodos.
+              // LA ETIQUETA "SEMANA N" QUEDÓ SOLO EN LA QUE CORRE.
+              //
+              // La llevaban los diez nodos, y eran diez cajitas blancas
+              // con borde flotando sobre el camino: el ojo leía la
+              // grilla de etiquetas y no el recorrido. Ahora el número
+              // vive DENTRO del círculo en los tres estados —antes la
+              // semana cumplida mostraba un check y por eso hacía falta
+              // rotularla por fuera—, así que la etiqueta sobraba.
+              //
+              // La que queda es la de la semana en curso, rellena de
+              // azul: es la que dice "acá estás", y es la única que no
+              // se puede deducir mirando el círculo.
               //
               // Márgenes negativos: la etiqueta es más ancha que el halo
               // y tiene que quedar centrada sobre él sin correr el
               // círculo. `heightFactor` la deja pegada al borde de abajo
               // de su caja.
-              Positioned(
-                left: -_desbordeEtiqueta,
-                right: -_desbordeEtiqueta,
-                bottom:
-                    _altoFila / 2 + _diametroVisible(cumplida, enCurso) / 2 + 5,
-                child: Center(
-                  heightFactor: 1,
-                  child: _EtiquetaSemana(
-                    numero: _semana.numero,
-                    enCurso: enCurso,
+              if (enCurso)
+                Positioned(
+                  left: -_desbordeEtiqueta,
+                  right: -_desbordeEtiqueta,
+                  bottom:
+                      _altoFila / 2 +
+                      _diametroVisible(cumplida, enCurso) / 2 +
+                      5,
+                  child: Center(
+                    heightFactor: 1,
+                    child: _EtiquetaSemana(numero: _semana.numero),
                   ),
                 ),
-              ),
               // Lo que paga la semana, DEBAJO del círculo y centrado.
               Positioned(
                 left: 0,
@@ -753,15 +667,36 @@ class _NodoState extends State<_Nodo> {
   double _diametroVisible(bool cumplida, bool enCurso) =>
       enCurso ? _dHalo : _diametroDe(cumplida, enCurso);
 
-  String _dicho() => switch (_semana.estado) {
-    EstadoSemana.cerrada when _semana.subioDeRango =>
-      'cumplida, subiste al rango ${widget.paso.rangoAlCerrar}',
-    EstadoSemana.cerrada => 'cerrada, no subiste de rango',
-    EstadoSemana.enCurso =>
-      'esta semana, ${_semana.cumplidos} de '
-          '${_semana.objetivos.length} objetivos',
-    EstadoSemana.futura => 'empieza más adelante',
-  };
+  /// Qué le dice el nodo a VoiceOver.
+  ///
+  /// Lleva el rango que el pie del nodo dejó de escribir: en la pantalla
+  /// esa relación la explica la tarjeta de arriba, pero alguien que
+  /// recorre el camino con el lector de a un nodo por vez nunca la
+  /// escuchó, y "más 20 monedas" solo no dice a dónde lleva.
+  String _dicho() {
+    final paso = widget.paso;
+
+    return switch (_semana.estado) {
+      EstadoSemana.cerrada when _semana.subioDeRango =>
+        'cumplida, ganaste ${paso.monedas} monedas y subiste al rango '
+            '${paso.rangoAlCerrar}',
+      EstadoSemana.cerrada => 'cerrada, no subiste de rango',
+      EstadoSemana.enCurso =>
+        'esta semana, ${_semana.cumplidos} de '
+            '${_semana.objetivos.length} objetivos, '
+            '${_loQuePaga(paso)}',
+      EstadoSemana.futura => 'empieza más adelante, ${_loQuePaga(paso)}',
+    };
+  }
+
+  /// "paga 20 monedas al subir al rango 4", o nada si no paga.
+  ///
+  /// Una semana que no sube de rango no paga: decir "paga 0 monedas"
+  /// sería anunciar un premio que no existe.
+  String _loQuePaga(PasoDelPrograma paso) => paso.monedas <= 0
+      ? 'sin monedas'
+      : 'paga ${paso.monedas} monedas al subir al rango '
+            '${paso.rangoAlCerrar}';
 }
 
 /// El anillo con el color de la marca, alrededor del nodo de una semana
@@ -802,6 +737,16 @@ class _AnilloDeMarca extends StatelessWidget {
 }
 
 /// El círculo del nodo.
+///
+/// LOS TRES ESTADOS MUESTRAN EL NÚMERO DE LA SEMANA, y lo que los separa
+/// es el color, no el contenido: cumplida en azul sólido, la que corre
+/// en blanco con el borde azul y su halo, la futura en azul pálido.
+///
+/// La cumplida mostraba un check en vez del número, y por eso cada nodo
+/// necesitaba una etiqueta "Semana N" encima para poder ubicarse: diez
+/// cajitas flotando sobre el camino. El check decía algo que el color
+/// ya dice —esta se cumplió— y a cambio escondía lo único que el color
+/// no puede decir: cuál semana es.
 class _Circulo extends StatelessWidget {
   const _Circulo({
     required this.semana,
@@ -817,7 +762,7 @@ class _Circulo extends StatelessWidget {
   Widget build(BuildContext context) {
     if (enCurso) return _enCurso(context);
     if (cumplida) return _cumplida();
-    return _futura(context);
+    return _apagada();
   }
 
   /// La sombra sólida: un bloque de color desplazado, sin difuminar.
@@ -833,12 +778,22 @@ class _Circulo extends StatelessWidget {
   Widget _cumplida() => Container(
     width: _dCumplida,
     height: _dCumplida,
+    alignment: Alignment.center,
     decoration: BoxDecoration(
       color: AppColors.accent,
       shape: BoxShape.circle,
       boxShadow: _relieve(AppColors.azulSombra),
     ),
-    child: const Icon(Icons.check_rounded, size: 30, color: Colors.white),
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(
+          '${semana.numero}',
+          style: AppTheme.display(24).copyWith(color: Colors.white, height: 1),
+        ),
+      ),
+    ),
   );
 
   Widget _enCurso(BuildContext context) => SizedBox(
@@ -901,70 +856,78 @@ class _Circulo extends StatelessWidget {
     ),
   );
 
-  Widget _futura(BuildContext context) => Container(
-    width: _dFutura,
-    height: _dFutura,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: AppColors.azulBruma,
-      shape: BoxShape.circle,
-      boxShadow: _relieve(AppColors.azulTenue),
-    ),
-    // Sin candado, a propósito: no hay nada que el usuario pueda hacer
-    // para "abrir" esta semana. Llega cuando llega.
-    child: FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Text(
-          '${semana.numero}',
-          style: AppTheme.display(
-            22,
-          ).copyWith(color: AppColors.azulMedio, height: 1),
+  /// La que todavía no llegó, y también la que cerró SIN cumplirse.
+  ///
+  /// Las dos van pálidas porque las dos son lo mismo para el camino: por
+  /// ahí no se subió. La cerrada se distingue con un borde sólido —no
+  /// con rojo ni con una cruz—: la app tiene que transmitir calma, y
+  /// debajo del nodo ya dice "Sin monedas".
+  Widget _apagada() {
+    final fallada = semana.estado == EstadoSemana.cerrada;
+
+    return Container(
+      width: _dFutura,
+      height: _dFutura,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.azulBruma,
+        shape: BoxShape.circle,
+        border: fallada
+            ? Border.all(color: AppColors.azulSuave, width: 2)
+            : null,
+        boxShadow: _relieve(AppColors.azulTenue),
+      ),
+      // Sin candado, a propósito: no hay nada que el usuario pueda hacer
+      // para "abrir" esta semana. Llega cuando llega.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Text(
+            '${semana.numero}',
+            style: AppTheme.display(
+              22,
+            ).copyWith(color: AppColors.azulMedio, height: 1),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Llave de la etiqueta de la semana EN CURSO.
-///
-/// Es la única que va rellena de azul: es lo que dice "acá estás" ahora
-/// que todos los nodos llevan etiqueta.
 const Key llaveEtiquetaEnCurso = ValueKey('etiqueta-semana-en-curso');
 
-/// La etiqueta "Semana N" que flota sobre cada nodo.
+/// La etiqueta "Semana N" que flota sobre el nodo de la semana en curso.
+///
+/// Es la ÚNICA etiqueta del camino: la llevaban los diez nodos y el ojo
+/// terminaba leyendo diez cajitas en vez del recorrido. Rellena de azul
+/// de marca, que es lo que la hace saltar sin meter otro color.
 ///
 /// Va sobre fondo sólido y no suelta sobre el fondo de la pantalla: el
 /// tramo vertical del camino entra al nodo justo por ahí, y una línea
 /// azul cruzando el texto se lee como un tachón.
 class _EtiquetaSemana extends StatelessWidget {
-  const _EtiquetaSemana({required this.numero, required this.enCurso});
+  const _EtiquetaSemana({required this.numero});
 
   final int numero;
-  final bool enCurso;
 
   @override
   Widget build(BuildContext context) => Container(
-    key: enCurso ? llaveEtiquetaEnCurso : null,
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    key: llaveEtiquetaEnCurso,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
     decoration: BoxDecoration(
-      // La en curso rellena de azul de marca; las demás sobre blanco,
-      // que es lo que hace que la del medio salte sin usar otro color.
-      color: enCurso ? AppColors.accent : AppColors.card,
+      color: AppColors.accent,
       borderRadius: BorderRadius.circular(999),
-      border: enCurso
-          ? null
-          : Border.all(color: AppColors.cardBorder, width: 1),
     ),
     child: Text(
       'Semana $numero',
       maxLines: 1,
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
         fontSize: 11,
-        fontWeight: enCurso ? FontWeight.w800 : FontWeight.w700,
+        fontWeight: FontWeight.w800,
         letterSpacing: 0.1,
-        color: enCurso ? Colors.white : AppColors.azulMedio,
+        color: Colors.white,
         height: 1.2,
       ),
     ),
@@ -975,6 +938,12 @@ class _EtiquetaSemana extends StatelessWidget {
 ///
 /// Abajo y no al lado: con tres columnas en el ancho de un iPhone no
 /// queda lugar para poner nada a los costados del círculo.
+///
+/// SOLO EL NÚMERO. Decía "+15 al Rango 3", en dos renglones y en los
+/// diez nodos: la misma frase diez veces, con el rango cambiando de a
+/// uno. Cómo se sube de rango lo explica ahora la tarjeta de arriba, una
+/// sola vez y con palabras; acá abajo lo único que hace falta es cuánto
+/// paga cada semana, que es lo que se compara de un nodo al otro.
 class _PieDelNodo extends StatelessWidget {
   const _PieDelNodo({required this.paso, required this.cumplida});
 
@@ -1016,10 +985,6 @@ class _PieDelNodo extends StatelessWidget {
 
     final futura = paso.semana.estado == EstadoSemana.futura;
 
-    final texto = cumplida
-        ? '+${paso.monedas} ganadas'
-        : '+${paso.monedas} al Rango ${paso.rangoAlCerrar}';
-
     final fila = Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -1028,16 +993,16 @@ class _PieDelNodo extends StatelessWidget {
         const SizedBox(width: 3),
         Flexible(
           child: Text(
-            texto,
-            // Dos renglones: una celda de tres columnas es angosta y "al
-            // Rango 10" no entra de una sola línea.
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            '+${paso.monedas}',
+            maxLines: 1,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 10,
+              fontSize: 12,
               height: 1.2,
               fontWeight: cumplida ? FontWeight.w800 : FontWeight.w600,
+              // Naranja solo lo YA GANADO: el naranja está reservado a
+              // las monedas de verdad, y las de una semana que todavía
+              // no cerró son una proyección.
               color: cumplida
                   ? AppColors.accentSecondary
                   : AppColors.textSecondary,

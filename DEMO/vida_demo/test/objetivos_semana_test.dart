@@ -5,6 +5,7 @@ import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/reglas_rango.dart';
 import 'package:vida_demo/screens/camino_semanas_screen.dart';
+import 'package:vida_demo/widgets/patrocinio.dart';
 import 'package:vida_demo/widgets/semanas_objetivos.dart';
 import 'package:vida_demo/widgets/tarjeta_semana.dart';
 
@@ -198,10 +199,9 @@ void main() {
     testWidgets('dice por qué semana va', (t) async {
       await montarHome(t);
       final s = objetivos.enCurso!;
-      expect(
-        find.text('Semana ${s.numero} de ${objetivos.semanas.length}'),
-        findsOneWidget,
-      );
+      // Sin el "de 10": cuantas tiene el programa lo dice el boton de
+      // arriba ("Ver las 10 semanas"). Aca solo hace falta en cual va.
+      expect(find.text('Semana ${s.numero}'), findsWidgets);
     });
 
     testWidgets('debajo, en chico, cuántos objetivos van', (t) async {
@@ -239,23 +239,128 @@ void main() {
   });
 
   group('El pie ubica la semana en el programa', () {
-    testWidgets('dice el rango, y NO repite la semana', (t) async {
+    testWidgets('no repite la semana ni rotula el rango', (t) async {
       await montarHome(t);
       // La semana la dice el titular. Repetirla en el pie era decir dos
       // veces lo mismo a diez centímetros de distancia.
-      expect(find.text('RANGO ${objetivos.rangoActual}'), findsOneWidget);
       expect(find.textContaining('SEMANA'), findsNothing);
+      // Y el rango tampoco: ese dato vive en la insignia del camino, un
+      // medallon con el numero adentro y diez muescas alrededor. Aca era
+      // un rotulo suelto encima de una tira que cuenta SEMANAS, o sea
+      // explicando mal a lo que tenia debajo.
+      expect(find.text('RANGO ${objetivos.rangoActual}'), findsNothing);
+      expect(find.textContaining('RANGO'), findsNothing);
     });
 
-    testWidgets('la tira trae una marca por semana', (t) async {
+    testWidgets('la marca de la semana va al lado del titular', (t) async {
       await montarHome(t);
-      expect(find.byKey(llaveTiraSemanas), findsOneWidget);
+      final marca = objetivos.enCurso!.patrocinio!.marca;
+
+      // La pildora con el logo y el color de la marca, no la cinta de
+      // dos renglones que estaba al fondo de la tarjeta.
+      expect(find.bySemanticsLabel('Patrocinada por $marca'), findsOneWidget);
+      // La cinta vieja decia "PATROCINA MONTANOS" en un bloque aparte,
+      // con el logo repetido y dos renglones de texto.
+      expect(find.textContaining('PATROCINA $marca'), findsNothing);
+
+      // El rotulo dice QUE es esa marca ahi, no solo su nombre.
+      expect(find.text('PATROCINADO POR'), findsOneWidget);
+
+      // Y a la DERECHA del titular, no debajo.
+      final titular = t.getTopLeft(
+        find.text('Semana ${objetivos.enCurso!.numero}'),
+      );
+      expect(
+        t.getTopLeft(find.byType(ChipMarcaSemana)).dx,
+        greaterThan(titular.dx),
+      );
     });
 
-    testWidgets('el chip muestra lo que paga cumplir esta semana', (t) async {
+    testWidgets('el titular no se corta con puntos suspensivos', (t) async {
+      await montarHome(t);
+      // "Semana 3 de 10" mas la tarjetita de la marca no entran en un
+      // iPhone: el titular terminaba en "Semana 3 de ...", que pierde el
+      // numero que importa y encima se ve roto.
+      expect(find.textContaining('…'), findsNothing);
+      expect(find.textContaining('Semana 3 de'), findsNothing);
+    });
+
+    testWidgets('la franja del pie ya no existe', (t) async {
       await montarHome(t);
       final paso = objetivos.pasoDe(objetivos.enCurso!.numero)!;
-      expect(find.text('+${paso.monedas}'), findsOneWidget);
+
+      // La tira de diez marcas decia por que semana va, que es lo mismo
+      // que el titular dice con palabras quince centimetros mas arriba.
+      expect(find.byKey(const ValueKey('tira-semanas')), findsNothing);
+      // Y el chip de monedas vive en el nodo del camino, que es donde
+      // se compara contra lo que pagan las otras nueve semanas.
+      expect(find.text('+${paso.monedas}'), findsNothing);
+    });
+  });
+
+  group('El pie de la tarjeta es el botón del camino', () {
+    testWidgets('se ve sin tocar nada y dice cuántas semanas son', (t) async {
+      await montarHome(t);
+      expect(find.byKey(llaveBotonCamino), findsOneWidget);
+      expect(
+        find.text('Ver las ${objetivos.semanas.length} semanas'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('va DEBAJO de los tres objetivos, no arriba de todo', (
+      t,
+    ) async {
+      await montarHome(t);
+      final ultimo = objetivos.enCurso!.objetivos.last;
+
+      // Estaba flotando entre el encabezado de la seccion y la tarjeta,
+      // pegado a otro renglon azul: se leia como un rotulo mas.
+      expect(
+        t.getTopLeft(find.byKey(llaveBotonCamino)).dy,
+        greaterThan(t.getTopLeft(find.byKey(llaveObjetivo(ultimo.id))).dy),
+      );
+    });
+
+    testWidgets('abre el camino', (t) async {
+      t.view.physicalSize = const Size(390, 844);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+
+      await montarHome(t);
+      await t.tap(find.byKey(llaveBotonCamino));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(CaminoSemanasScreen), findsOneWidget);
+    });
+
+    testWidgets('en su lugar ya no hay parrafos', (t) async {
+      await montarHome(t);
+
+      // Dos oraciones de calendario para cerrar una tarjeta cuyo trabajo
+      // es decir que falta hacer esta semana.
+      expect(find.textContaining('Los tres cierran'), findsNothing);
+      expect(find.textContaining('11:59'), findsNothing);
+      expect(find.textContaining('12:00'), findsNothing);
+      // Y la promesa del cupon tampoco: ya la hace la pildora de la
+      // marca, arriba, al lado del titular.
+      expect(find.textContaining('Esta semana paga'), findsNothing);
+    });
+
+    testWidgets('el plazo se dice UNA vez, al lado del conteo', (t) async {
+      await montarHome(t);
+      final enCurso = objetivos.enCurso!;
+
+      // Sigue siendo uno solo para los tres objetivos —esa es la regla
+      // que lo puso ahi—, pero ahora son tres palabras y no un bloque.
+      expect(find.text(plazoCorto(enCurso)), findsOneWidget);
+      expect(
+        t.getTopLeft(find.text(plazoCorto(enCurso))).dy,
+        lessThan(
+          t.getTopLeft(find.byKey(llaveObjetivo(enCurso.objetivos.first.id))).dy,
+        ),
+      );
     });
   });
 
@@ -280,13 +385,36 @@ void main() {
       expect(find.byIcon(Icons.lock_rounded), findsNothing);
     });
 
-    testWidgets('cada nodo dice qué semana es', (t) async {
+    testWidgets('cada nodo dice qué semana es, adentro del círculo', (t) async {
       await montarCamino(t);
+
+      // El numero vive DENTRO del circulo en los tres estados. Antes la
+      // semana cumplida mostraba un check, y por eso los diez nodos
+      // necesitaban una etiqueta "Semana N" encima: diez cajitas blancas
+      // flotando sobre el camino, que es lo que el ojo terminaba leyendo
+      // en vez del recorrido.
       for (final s in objetivos.semanas) {
         expect(
-          find.text('Semana ${s.numero}'),
+          find.descendant(
+            of: find.byKey(llaveCirculoSemana(s.numero)),
+            matching: find.text('${s.numero}'),
+          ),
           findsOneWidget,
           reason: 'el nodo de la semana ${s.numero} no dice cuál es',
+        );
+      }
+    });
+
+    testWidgets('solo la semana en curso lleva etiqueta', (t) async {
+      await montarCamino(t);
+
+      expect(find.byKey(llaveEtiquetaEnCurso), findsOneWidget);
+      for (final s in objetivos.semanas) {
+        if (s.estado == EstadoSemana.enCurso) continue;
+        expect(
+          find.text('Semana ${s.numero}'),
+          findsNothing,
+          reason: 'la semana ${s.numero} volvió a rotularse',
         );
       }
     });
@@ -317,10 +445,7 @@ void main() {
 
       // La hoja trae la tarjeta de ESA semana, no la de la semana en
       // curso.
-      expect(
-        find.text('Semana ${primera.numero} de ${objetivos.semanas.length}'),
-        findsWidgets,
-      );
+      expect(find.text('Semana ${primera.numero}'), findsWidgets);
     });
   });
 

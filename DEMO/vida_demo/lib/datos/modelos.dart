@@ -258,6 +258,14 @@ class Historial {
     return dias.where((d) => !d.fecha.isBefore(lunes)).toList();
   }
 
+  /// Días del año calendario en curso.
+  ///
+  /// Hoy el historial no llega a tanto —trae poco más de un mes—, así
+  /// que devuelve todo. Filtra igual: el día que el backend mande dos
+  /// años, "este año" tiene que seguir siendo este año.
+  List<DiaActividad> get anioEnCurso =>
+      dias.where((d) => d.fecha.year == hoy.fecha.year).toList();
+
   /// Días del mes calendario en curso.
   List<DiaActividad> get mesEnCurso {
     final ultimo = hoy.fecha;
@@ -566,18 +574,6 @@ class ObjetivosSemana {
     return pasos;
   }
 
-  /// Cómo se llama la semana que va DESPUÉS de [numeroDeSemana], o null
-  /// si esa es la última del programa.
-  ///
-  /// Sale de la lista y no de `numero + 1`: el backend numera las semanas
-  /// y no hay nada que garantice que sean consecutivas.
-  int? numeroDespuesDe(int numeroDeSemana) {
-    for (var i = 0; i < semanas.length - 1; i++) {
-      if (semanas[i].numero == numeroDeSemana) return semanas[i + 1].numero;
-    }
-    return null;
-  }
-
   /// El paso del recorrido que le toca a [numeroDeSemana].
   PasoDelPrograma? pasoDe(int numeroDeSemana) {
     for (final p in recorrido) {
@@ -784,6 +780,7 @@ class Poliza {
     required this.formaPago,
     required this.redCobertura,
     required this.estado,
+    this.primaAnualQ,
   });
 
   final String numero;
@@ -799,6 +796,18 @@ class Poliza {
   final String redCobertura;
   final String estado;
 
+  /// La prima anual como NÚMERO, para poder hacer cuentas con ella.
+  ///
+  /// [primaAnual] es el texto que se muestra ("Q18,000") y no se puede
+  /// multiplicar. Este campo existe para una sola cuenta: cuánto pagaría
+  /// el nivel siguiente, que Mi Plan muestra en su tarjeta de proyección.
+  ///
+  /// Nullable a propósito: si la aseguradora no manda el número, la
+  /// pantalla dice cuántos puntos faltan y se calla el monto, en vez de
+  /// derivarlo dividiendo el cashback por el porcentaje (que reventaría
+  /// en el nivel 0, donde el porcentaje es 0).
+  final int? primaAnualQ;
+
   factory Poliza.desdeJson(Map<String, dynamic> j) => Poliza(
     numero: j['numero'] as String,
     titularYDependientes: j['titular_y_dependientes'] as String,
@@ -809,6 +818,7 @@ class Poliza {
     vigencia: j['vigencia'] as String,
     fechaRenovacion: j['fecha_renovacion'] as String,
     primaAnual: j['prima_anual'] as String,
+    primaAnualQ: j['prima_anual_q'] as int?,
     formaPago: j['forma_pago'] as String,
     redCobertura: j['red_cobertura'] as String,
     estado: j['estado'] as String,

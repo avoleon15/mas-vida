@@ -1,17 +1,14 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import '../datos/modelos.dart';
 import '../screens/camino_semanas_screen.dart';
-import '../theme.dart';
 import 'tarjeta_semana.dart';
 
 // ============================================================
 // "OBJETIVOS DE LA SEMANA" EN HOY.
 //
-// Es la tarjeta de la semana en curso y un enlace al camino completo. Y
-// nada más.
+// Es la tarjeta de la semana en curso, con el camino colgado de su pie.
+// Y nada más.
 //
 // Lo que había antes era un tallo dibujado: tres nodos, tres brotes que
 // crecían con el avance, y una curva pintada a mano. Se veía bien pero
@@ -48,87 +45,16 @@ class SemanasObjetivos extends StatelessWidget {
     final paso = _paso;
     if (paso == null) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ARRIBA de la tarjeta, no abajo. Debajo quedaba después de la
-        // franja azul del pie y se leía como un pie de página más: nadie
-        // llegaba hasta ahí. Acá es lo primero que se ve de la sección y
-        // funciona como entrada al recorrido.
-        _BotonRecorrido(
-          totalSemanas: objetivos.semanas.length,
-          onPressed: () {
-            HapticFeedback.selectionClick();
-            abrirCaminoDeSemanas(context, objetivos);
-          },
-        ),
-        const SizedBox(height: AppSpacing.dentro),
-        TarjetaSemana(
-          paso: paso,
-          rangoActual: objetivos.rangoActual,
-          totalSemanas: objetivos.semanas.length,
-          numeroSiguiente: objetivos.numeroDespuesDe(paso.semana.numero),
-        ),
-      ],
-    );
-  }
-}
-
-/// La entrada al camino de las semanas.
-///
-/// Es una barra con fondo y no un texto azul suelto: un enlace de texto
-/// al lado de una tarjeta blanca con borde se pierde, y este es el único
-/// camino hacia el recorrido completo. Con relleno propio se lee como
-/// algo en lo que se puede tocar antes de leer qué dice.
-class _BotonRecorrido extends StatelessWidget {
-  const _BotonRecorrido({required this.totalSemanas, required this.onPressed});
-
-  final int totalSemanas;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    // CupertinoButton y no un GestureDetector: trae gratis el atenuado al
-    // presionar que un usuario de iPhone ya conoce.
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      minimumSize: Size.zero,
-      onPressed: onPressed,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        decoration: BoxDecoration(
-          // azulBruma: es el relleno de "seleccionable" de la app. No va
-          // en `accent` entero porque no es la acción principal de la
-          // pantalla — la principal es cumplir los objetivos de abajo.
-          color: AppColors.azulBruma,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.route_rounded, size: 19, color: AppColors.accent),
-            const SizedBox(width: 10),
-            // Expanded: con el tamaño de letra de iOS al máximo este
-            // renglón ya no entra de una línea. Así envuelve en vez de
-            // empujar la fila fuera del borde — hay un test a 1.6x.
-            Expanded(
-              child: Text(
-                'Ver las $totalSemanas semanas',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Icon(
-              CupertinoIcons.chevron_right,
-              size: 15,
-              color: AppColors.accent,
-            ),
-          ],
-        ),
-      ),
+    // Una sola pieza: la tarjeta de la semana, con el camino colgado de
+    // su pie. El botón vivía acá afuera, arriba de la tarjeta, y quedaba
+    // pegado al encabezado de la sección: dos renglones azules seguidos
+    // que se leían como un mismo rótulo. Adentro de la tarjeta es
+    // claramente otra cosa — el renglón que sigue a los objetivos.
+    return TarjetaSemana(
+      paso: paso,
+      rangoActual: objetivos.rangoActual,
+      totalSemanas: objetivos.semanas.length,
+      onVerCamino: () => abrirCaminoDeSemanas(context, objetivos),
     );
   }
 }
