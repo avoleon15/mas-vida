@@ -1,13 +1,36 @@
-# Contrato v3 — +Vida
+# Contrato v4 — +Vida
 
 Este documento define cómo se comunican las tres capas del proyecto: iOS (Alvaro),
 backend (Luis) y Flutter (Daniel). Una vez congelado, los tres construyen contra
 este documento — no contra lo que cada quien tenga corriendo en su máquina.
 
-Cualquier cambio de campo, tipo o forma es un **v4**, no un parche silencioso a este
+Cualquier cambio de campo, tipo o forma es un **v5**, no un parche silencioso a este
 archivo. Si algo no está aquí, no existe todavía. Este documento es autocontenido:
-no hace falta abrir `contrato-v2.md` ni `contrato-v1.md` para nada de lo que sigue.
+no hace falta abrir `contrato-v3.md`, `contrato-v2.md` ni `contrato-v1.md` para nada
+de lo que sigue.
 
+> **Qué cambió de v3.4 a v4 (9 sep 2026):** cambia **la mecánica de retos
+> semanales**, que es lo primero desde v1 que toca reglas de producto y no
+> plomería entre capas. Los dos JSON siguen intactos — esto vive entero en el
+> endpoint de retos de Luis (L11) y en la pantalla de Daniel (D12).
+>
+> 1. **Fallar una semana ya no baja de nivel.** El nivel se congela: si vas por
+>    objetivo 4 y no lo cumplís, seguís en 4 la semana siguiente. Antes bajabas
+>    a 3.
+> 2. **Se agregan las seasons: ciclos de 3 meses que reinician todos los niveles
+>    de reto a 1.** Arrancan en fechas fijas de calendario (1 ene, 1 abr, 1 jul,
+>    1 oct), son 4 al año, y **solo afectan al nivel de reto semanal** — no tocan
+>    los puntos anuales, ni el cashback, ni la liga mensual.
+> 3. **Cada season queda registrada en el historial** del usuario, con el nivel
+>    máximo que alcanzó.
+>
+> **Por qué los dos cambios van juntos:** quitar la bajada sin nada más dejaría a
+> cada usuario clavado para siempre en el nivel más alto que alcanzó — sin razón
+> para volver a esforzarse, y conservando el acceso a las recompensas mayores sin
+> sostener nada. La season es exactamente lo que devuelve el movimiento, pero cada
+> 13 semanas en vez de cada semana. El castigo semanal se cambió por un reinicio
+> periódico y parejo para todos.
+>
 > **Qué cambió de v3.3 a v3.4 (6 sep 2026):** se cierra **L14 — la ventana de
 > datos rezagados**, que hasta ahora era un ticket suelto que nunca se cruzó con
 > el comportamiento real del cliente. Es el primer cambio desde v3 que **sí le
@@ -270,9 +293,10 @@ fuera de alcance en el piloto — es una consecuencia aceptada y documentada, no
 un bug.
 
 **Nota importante — no confundir `nivel` con el nivel de reto semanal:** `nivel`
-en este JSON es el nivel anual (0–4, cashback). El nivel de reto semanal (1, 2,
-3... dificultad progresiva) es un concepto totalmente distinto, con su propio
-ciclo (lunes a domingo) y su propio endpoint — ver sección de retos abajo. Que
+en este JSON es el nivel anual (0–4, cashback), y corre sobre el año calendario.
+El nivel de reto semanal (1, 2, 3... dificultad progresiva) es un concepto
+totalmente distinto, con su propio ciclo (lunes a domingo), su propio reinicio
+trimestral por season, y su propio endpoint — ver sección de retos abajo. Que
 los dos se llamen "nivel" en la conversación del día a día es una fuente fácil
 de confusión; en el código y en las respuestas de la API nunca deben compartir
 el mismo nombre de campo.
@@ -286,32 +310,71 @@ que no — se mantiene en su propio endpoint separado (detalle abajo).
 
 Confirmado: **es por nivel de dificultad progresiva, no por meta de puntos.**
 
-**No hay rachas diarias.** La consistencia se premia exclusivamente por este
-mecanismo — mantenerse en un nivel alto exige cumplir semana tras semana, y
-fallar una semana baja el nivel y con él el acceso a las recompensas mayores. Si
-aparece una "racha" o unos "escudos" en algún documento de pantallas, es material
-viejo: el documento de Reglas de Puntaje nunca los tuvo.
+**No hay rachas diarias.** Si aparece una "racha" o unos "escudos" en algún
+documento de pantallas, es material viejo: el documento de Reglas de Puntaje
+nunca los tuvo.
 
-- Todos los usuarios arrancan en **nivel de reto 1**.
-- Si completan la meta de la semana, suben a **nivel 2** la semana siguiente.
-- Si no la completan, bajan un nivel.
+### Cómo se mueve el nivel (cambiado en v4)
+
+- Todos los usuarios arrancan en **nivel de reto 1** al inicio de cada season.
+- Si completan la meta de la semana, suben **un nivel** la semana siguiente.
+- **Si no la completan, el nivel se congela** — se quedan en el mismo nivel y
+  les toca esa misma meta la semana siguiente. **No bajan.** (Cambiado en v4;
+  hasta v3.4 bajaban un nivel.)
 - La dificultad de la meta aumenta con el nivel — Luis define la tabla de
   dificultad progresiva al construir el motor de reglas de retos (L11).
-- El ciclo corre de **lunes 00:00 a domingo 23:59** — separado del ciclo de la
-  liga mensual (día 1 al último día del mes calendario), que corre en paralelo
-  y premia en monedas.
+- **La tabla necesita ~13 niveles, no infinitos.** Una season dura 13 semanas
+  (ver abajo), así que el techo real alcanzable es nivel 13: arrancar en 1 y
+  ganar las 13 semanas seguidas. Diseñar más allá de ~15 es trabajo que nadie
+  va a ver.
+
+### Seasons (nuevo en v4)
+
+El nivel de reto se reinicia a 1 cada 3 meses. Cuatro seasons por año, en
+**fechas fijas de calendario**, iguales para todos los usuarios:
+
+| Season | Arranca | Termina |
+|---|---|---|
+| 1 | 1 de enero | 31 de marzo |
+| 2 | 1 de abril | 30 de junio |
+| 3 | 1 de julio | 30 de septiembre |
+| 4 | 1 de octubre | 31 de diciembre |
+
+- **Las seasons afectan únicamente al nivel de reto semanal.** No tocan los
+  puntos acumulados del año, ni el nivel anual de cashback (0–4), ni el techo
+  anual de 12.000, ni la liga mensual. Esos tres siguen sus propios ciclos.
+- Al cerrar una season, **todos los usuarios vuelven a nivel de reto 1**, sin
+  importar dónde hayan llegado.
+- **Cada season queda en el historial del usuario**, con el nivel máximo que
+  alcanzó — es un dato que Luis guarda y Daniel puede mostrar ("Season 3 2026:
+  llegaste a nivel 9").
+- Fechas fijas en vez de 3 meses corridos desde el registro: así todos los
+  usuarios comparten el mismo ciclo, que es lo que hace comparable el ranking y
+  simplifica la corrida del servidor.
+
+**Qué resuelve esto:** sin la bajada semanal, un usuario que llega a nivel 9 se
+quedaría ahí para siempre aunque no vuelva a cumplir nunca — conservando el
+acceso a las recompensas de nivel 9 sin sostener nada. El reinicio trimestral es
+lo que devuelve el movimiento, pero de forma pareja y predecible, no como castigo
+por una mala semana.
+
+### Ciclos y cortes
+
+- El ciclo semanal corre de **lunes 00:00 a domingo 23:59** — separado del ciclo
+  de la liga mensual (día 1 al último día del mes calendario), que corre en
+  paralelo y premia en monedas.
 - **La semana cierra el domingo 23:59, pero se evalúa el lunes a las 12:00**
   (decidido el 5 sep 2026). Esas 12 horas son un período de gracia para que
   lleguen los syncs atrasados: un día de la semana ya cerrada que aterrice antes
   del mediodía del lunes todavía cuenta para el reto.
 - **Después del mediodía del lunes, un día atrasado ya no mueve el reto de esa
   semana** — pero sí sigue sumando al acumulado anual de puntos y al historial,
-  **siempre que llegue dentro de la ventana de 14 días** (nuevo en v3.4 — ver
-  "Ventana de aceptación de datos rezagados"). Dentro de esa ventana los datos
-  tardíos nunca se descartan; solo dejan de poder cambiar un reto ya evaluado.
-  Pasados los 14 días sí se rechazan.
+  **siempre que llegue dentro de la ventana de 14 días** (ver "Ventana de
+  aceptación de datos rezagados"). Dentro de esa ventana los datos tardíos nunca
+  se descartan; solo dejan de poder cambiar un reto ya evaluado. Pasados los 14
+  días sí se rechazan.
 
-**Tres cosas que hay que definir junto con esto:**
+**Cuatro cosas que hay que definir junto con esto:**
 
 - **Qué ve el usuario entre el domingo 23:59 y el lunes 12:00.** Si la app
   muestra el resultado provisional y después cambia al mediodía, se reproduce en
@@ -326,15 +389,26 @@ viejo: el documento de Reglas de Puntaje nunca los tuvo.
 - **En qué huso horario es ese mediodía.** El JSON #1 manda `zona_horaria` por
   usuario y el corte de la semana es local. Para el piloto (todo Guatemala) una
   sola corrida del servidor alcanza, pero la regla hay que escribirla igual.
+- **Cómo encaja el arranque de season con el corte semanal (nuevo en v4).** Las
+  seasons arrancan el día 1 del mes, y **ninguno de los 8 arranques de 2026 y
+  2027 cae lunes** (1 ene 2026 es jueves, 1 abr miércoles, 1 jul miércoles, 1 oct
+  jueves; en 2027: viernes, jueves, jueves, viernes). No es un caso raro, es
+  siempre. Hay que decidir qué pasa con la semana partida: si el reinicio a nivel
+  1 ocurre el día 1 exacto (dejando una semana corta a caballo entre dos
+  seasons), o si espera al primer lunes de la season (dejando unos días de la
+  season nueva contando para el nivel de la vieja). Las dos son defendibles; lo
+  que no se puede es dejarlo sin definir.
 
 **Por qué no viaja en el JSON #2:** el nivel de reto cambia una sola vez por
 semana, en el corte de lunes 00:00 — no como consecuencia de cada sync
 individual. Incluirlo en cada respuesta de `/api/v1/sync` repetiría el mismo
 dato sin necesidad, en contra del principio de mantener la respuesta mínima.
+Lo mismo aplica a la season: cambia 4 veces al año.
 
 Daniel lo consulta por HTTP directo, ej. `GET /api/v1/retos/estado` — ver
 tickets **L11 · Retos semanales** (Luis) y **D12 · Retos: selección y
-progreso** (Daniel), que ya asumen este endpoint separado.
+progreso** (Daniel), que ya asumen este endpoint separado. Ese endpoint ahora
+también tiene que devolver **en qué season está el usuario y cuándo termina**.
 
 ---
 
@@ -504,14 +578,20 @@ Donde eso pega es en la **evaluación del reto semanal**. Para decidir si alguie
 cumplió su meta de la semana, Luis suma los días de esa semana. Un día ausente
 puede ser un cero que cuenta, o un día que todavía no llegó y que podría cambiar
 el resultado. Y el ciclo semanal tiene un **corte duro** (domingo 23:59): si al
-evaluar falta un día que termina llegando el martes, se degrada de nivel a
-alguien que sí había cumplido — y una bajada de nivel es un evento visible para
-el usuario, mucho más feo de revertir que un contador interno.
+evaluar falta un día que termina llegando el martes, se le niega un ascenso a
+alguien que sí había cumplido.
+
+> **Esto se volvió menos grave en v4.** Hasta v3.4, fallar una semana bajaba de
+> nivel, así que un día que llegaba tarde podía **degradar** a alguien que había
+> cumplido — un evento visible y feo de revertir. Ahora el nivel se congela: lo
+> peor que pasa es que el usuario no suba esa semana y se quede donde estaba.
+> Sigue siendo un error que hay que evitar, pero ya no destruye progreso
+> acumulado.
 
 > +Vida **no tiene rachas diarias**: la consistencia se premia con los niveles de
 > reto semanal, no con días consecutivos (ver la sección de retos). Eso hace que
 > este problema ocurra **menos veces** —un día atrasado que llega antes del
-> domingo no hace ningún daño— pero que **cueste más caro** cuando ocurre.
+> domingo no hace ningún daño.
 
 **Qué hay que decidir (Alvaro + Luis):** son dos cosas, no una.
 
@@ -696,7 +776,10 @@ contar días.
   llamada independiente con su propio `fecha`.
 - **Retos semanales:** endpoint separado, `GET /api/v1/retos/estado` — ver
   sección de retos arriba. No confundir el nivel de reto con `nivel` (el
-  anual) del JSON #2.
+  anual) del JSON #2. **Nuevo en v4:** el nivel ya no baja al fallar una
+  semana (se congela), y se reinicia a 1 en cada season (trimestral, fechas
+  fijas). El endpoint tiene que devolver también la season actual y su fecha
+  de cierre, y el historial de seasons pasadas con el nivel máximo alcanzado.
 - **Ledger append-only:** cada acreditación de puntos es una fila nueva con la
   versión de la regla que la generó — nunca un `UPDATE` sobre una fila
   existente.
@@ -742,6 +825,15 @@ contar días.
   pedirlo aparte con `GET /api/v1/retos/estado` cuando se necesite mostrar en
   la pantalla de retos. No lo confundas con `nivel` (el anual, de cashback)
   que sí viene en la respuesta del sync.
+- **Cambió la mecánica de retos en v4.** Si ya escribiste algo de D12 contra
+  v3.4, revisá estos tres puntos:
+  1. **Fallar una semana ya no baja de nivel** — el nivel se congela y la meta
+     se repite. Nada de animación de "bajaste a nivel 3".
+  2. **Existen las seasons:** cada 3 meses (1 ene, 1 abr, 1 jul, 1 oct) todos
+     vuelven a nivel 1. La pantalla tiene que mostrar en qué season está el
+     usuario y cuánto falta para que cierre.
+  3. **Hay historial de seasons pasadas** con el nivel máximo alcanzado en cada
+     una — es material para una pantalla de logros, si la querés.
 - Nada de SDKs de terceros (ej. Firebase) puede tocar datos que vengan de
   HealthKit, ni siquiera indirectamente — Apple lo trata como filtración y
   causa remoción inmediata de la app.
@@ -801,6 +893,19 @@ Tampoco aparece la corrida programada del lunes 12:00, que se decidió el 5 sep.
 
 Hay que ampliar el alcance de L11 o abrir un ticket propio. Sin eso, la mitad de
 la protección de libros cerrados queda sin construir.
+
+**Nuevo en v4 — L11 creció otra vez.** El ticket tal como está escrito hoy
+describe la mecánica vieja (subir/bajar). Ahora tiene que cubrir además:
+
+- Nivel que se congela al fallar, en vez de bajar
+- El concepto de season: reinicio trimestral en fechas fijas
+- Persistencia del historial de seasons con el nivel máximo por season
+- La regla de la semana partida al arrancar una season (ver "Cuatro cosas que hay
+  que definir")
+
+Esto ya no es "ampliar el criterio de aceptación" — es prácticamente reescribir
+el ticket. Conviene revisarlo con Luis antes de que empiece a construir, no
+después.
 
 ### 4. `usuario_id` sigue siendo un placeholder
 
