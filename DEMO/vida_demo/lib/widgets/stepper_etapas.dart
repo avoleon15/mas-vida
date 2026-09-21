@@ -343,7 +343,12 @@ class _TarjetaEtapa extends StatelessWidget {
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
-                          alcanzada ? 'Completada' : 'Todavía no llegás acá',
+                          // "Bloqueado" y no "Todavía no llegás acá"
+                          // (revisión de Daniel, 21 de septiembre de
+                          // 2026): una palabra al lado del candado dice
+                          // lo mismo que una oración, y las tres etapas
+                          // se leen de un vistazo en vez de leerse.
+                          alcanzada ? 'Completada' : 'Bloqueado',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.labelSmall
