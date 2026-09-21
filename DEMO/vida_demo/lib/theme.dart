@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -336,16 +337,47 @@ class AppTheme {
   /// Va en Archivo, la misma display font de los números, para que la
   /// app hable con dos voces y no con tres.
   ///
+  /// EN EL AZUL DE MARCA, no en el gris oscuro del texto. Era
+  /// `textPrimary` y se leía como un encabezado más de la pantalla, no
+  /// como su nombre — sobre todo en las pantallas que arrancan con una
+  /// tarjeta grande a pocos píxeles debajo, donde el título quedaba
+  /// tapado por lo que venía después. En azul de marca el nombre de la
+  /// pantalla se lee de una y hace juego con los números grandes, que
+  /// son el otro azul entero de la app.
+  ///
   /// El tamaño bajó de 34 a 26 al cambiar de fuente, y no es un capricho:
   /// Bebas Neue es condensada y a 34 ocupaba lo que Archivo ocupa a 26.
   /// Manteniendo el 34 los títulos largos ("TUS RÉCORDS") se salían de
-  /// pantalla en un iPhone angosto.
+  /// pantalla en un iPhone angosto. De 26 subió a 30, que es lo que
+  /// aguanta "TUS RÉCORDS" en un iPhone SE sin cortarse.
   static TextStyle get sectionTitle => GoogleFonts.archivo(
-    color: AppColors.textPrimary,
-    fontSize: 26,
+    color: AppColors.accent,
+    fontSize: 30,
     fontWeight: FontWeight.w800,
     letterSpacing: 0.6,
     height: 1.05,
+  );
+
+  /// Subtítulo de sección: "DIARIO", "SEMANAL", "ANUAL" en Home.
+  ///
+  /// Es el [sectionTitle] en chico: la MISMA fuente, el mismo peso y el
+  /// mismo azul de marca, a 12 px en vez de 30. Así un subtítulo se lee
+  /// como pariente del título de la pantalla —la app habla con una sola
+  /// voz— pero sin pelearle la atención: lo que tiene que resaltar en
+  /// Home son los números, no los rótulos que los ordenan.
+  ///
+  /// El tracking va amplio (2,4) porque a 12 px y en mayúsculas las
+  /// letras se apelmazan. Es la regla de Apple al revés: cuanto más
+  /// chico el texto, más hay que abrirlo.
+  ///
+  /// Era `labelSmall` en `textSecondary`, o sea gris y en Manrope: se
+  /// leía como una nota al margen y no como el encabezado de un bloque.
+  static TextStyle get subsectionTitle => GoogleFonts.archivo(
+    color: AppColors.accent,
+    fontSize: 12,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 2.4,
+    height: 1.1,
   );
 
   static ThemeData get temaClaro {
@@ -353,6 +385,18 @@ class AppTheme {
       brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.fondoDePantalla,
       primaryColor: AppColors.accent,
+      // TODAS las plataformas entran deslizándose como iOS, no solo
+      // iOS. Sin esto, la demo en Chrome usa el zoom de Android: una
+      // pantalla que entra creciendo desde el centro es de Material, y
+      // +Vida tiene que sentirse nativa de iOS (ver CLAUDE.md). De paso
+      // es más barato de animar que el zoom, que escala la pantalla
+      // entera cuadro por cuadro.
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: {
+          for (final plataforma in TargetPlatform.values)
+            plataforma: const CupertinoPageTransitionsBuilder(),
+        },
+      ),
       colorScheme: const ColorScheme.light(
         primary: AppColors.accent,
         secondary: AppColors.accentSecondary,

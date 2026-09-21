@@ -1036,9 +1036,11 @@ class _SaldoMonedasChipState extends State<_SaldoMonedasChip> {
 /// Uno de los tres bloques de Home, con su etiqueta de horizonte
 /// temporal: DIARIO, SEMANAL, ANUAL.
 ///
-/// La etiqueta es chica, en mayúsculas y con tracking amplio: tiene que
-/// ordenar la pantalla sin competir con los números grandes. Es la misma
-/// pauta de "PUNTOS ACUMULADOS 2026" y "PUNTOS HOY".
+/// La etiqueta va en `AppTheme.subsectionTitle`: el mismo azul de marca
+/// y la misma fuente que el título de la pantalla, pero a 12 px. Así un
+/// bloque se lee como pariente del título y no como una nota al margen
+/// —era gris y en Manrope—, sin competirle a los números grandes, que
+/// son lo que tiene que resaltar en Home.
 ///
 /// La etiqueta va suelta sobre el fondo tintado: no hace falta ningún
 /// contenedor, porque el fondo ya separa los bloques de las tarjetas.
@@ -1050,16 +1052,7 @@ class _BloqueHorizonte extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final etiqueta = Text(
-      titulo,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: AppColors.textSecondary,
-        fontWeight: FontWeight.w700,
-        // Tracking amplio: es lo que hace que se lea como etiqueta de
-        // sección y no como un título más.
-        letterSpacing: 2.4,
-      ),
-    );
+    final etiqueta = Text(titulo, style: AppTheme.subsectionTitle);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
