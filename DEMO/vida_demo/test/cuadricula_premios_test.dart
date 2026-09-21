@@ -86,8 +86,8 @@ void main() {
 
       expect(tester.takeException(), isNull);
 
-      // La del destacado incluida: el sello va montado sobre el logo
-      // justamente para que no le cambie el alto a la tarjeta.
+      // La del destacado incluida: lo que compra la alianza es el
+      // primer lugar, nunca un tamaño distinto.
       final medidas = tester
           .widgetList<GestureDetector>(find.byType(GestureDetector))
           .map((w) => tester.getSize(find.byWidget(w)))
@@ -99,7 +99,42 @@ void main() {
         1,
         reason: 'Hay tarjetas de tamaños distintos: $medidas',
       );
-      expect(find.text('Destacado'), findsWidgets);
+    });
+
+    testWidgets('el sello "Destacado" ya no se dibuja', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await montarPantalla(tester, const PremiosScreen());
+      await tester.pump();
+
+      // El rotulo se saco: "destacado" no es un beneficio del usuario,
+      // es un acuerdo comercial. Lo que compra la alianza sigue vivo en
+      // `destacadosPrimero`, que es lo que prueba el grupo de arriba.
+      expect(find.text('Destacado'), findsNothing);
+    });
+
+    testWidgets('abajo va el nombre y su categoria, nunca la descripcion', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await montarPantalla(tester, const PremiosScreen());
+      await tester.pump();
+
+      final primero = Datos.i.catalogo.premios.first;
+      expect(find.text(primero.nombre), findsWidgets);
+      // La categoria SI va: cambia en cada tarjeta y es lo que le da al
+      // bloque dos niveles en vez de un renglon solo.
+      expect(find.text(primero.categoria), findsWidgets);
+      // La descripcion NO: era la misma frase de relleno en las 29
+      // tarjetas y empujaba los logos a la mitad de su tamaño.
+      expect(find.text(primero.descripcion), findsNothing);
+      // Y el costo sigue estando, pero montado en la esquina del logo.
+      expect(find.text('${primero.costoMonedas}'), findsWidgets);
     });
 
     testWidgets('el catálogo de verdad tiene destacados que ubicar', (
@@ -110,7 +145,7 @@ void main() {
       expect(
         Datos.i.catalogo.premios.where((p) => p.destacado),
         isNotEmpty,
-        reason: 'Nadie está ejercitando el sello con datos reales',
+        reason: 'Nadie está ejercitando el orden con datos reales',
       );
     });
   });
