@@ -8,7 +8,6 @@ import '../widgets/bottom_nav_bar.dart';
 import '../widgets/calendario_actividad.dart';
 import '../widgets/refresco_vida.dart';
 import '../widgets/tarjeta_puntos.dart';
-import '../widgets/tarjeta_racha.dart';
 
 // ============================================================
 // Pantalla de PROGRESO.
@@ -33,6 +32,12 @@ import '../widgets/tarjeta_racha.dart';
 //
 // El número del período y las barras de actividad, que eran dos tarjetas
 // distintas diciendo lo mismo, ahora son una sola: `TarjetaPuntos`.
+//
+// Y con ellas se fue la racha (21 de septiembre de 2026), que se ve en
+// Hoy y en Social. Lo que queda es UNA idea por pantalla: cuánto hiciste
+// en el período que elegiste. Todo lo que hay debajo del selector —el
+// número, las dos gráficas y tu actividad— cambia cuando cambia el
+// filtro. Nada más se queda quieto ahí ocupando lugar.
 // ============================================================
 
 class ProgressScreen extends StatefulWidget {
@@ -96,19 +101,37 @@ class _ProgressScreenState extends State<ProgressScreen> {
                               const SizedBox(height: 20),
                             ],
 
-                            // La racha: lo único de la pantalla que mide
-                            // constancia y no esfuerzo de un día. Va en todos los
-                            // períodos porque no pertenece a ninguno.
-                            const TarjetaRacha(),
-                            const SizedBox(height: 20),
+                            // LA RACHA SE FUE DE ACÁ (decisión de Daniel,
+                            // 21 de septiembre de 2026). Vive en Hoy —en
+                            // el saludo— y en Social, con la alerta de
+                            // racha en riesgo. Entera y con su historial
+                            // de ocho semanas era la tarjeta más alta de
+                            // la pantalla, y empujaba hasta abajo del
+                            // todo lo que esta pantalla sí tiene que
+                            // contar: el progreso del período que se
+                            // está mirando.
 
-                            // Los entrenamientos, tal como los entrega HealthKit.
-                            // Solo en Semana, que es el horizonte al que
-                            // pertenecen.
-                            if (_periodo == Periodo.semana)
-                              EntrenamientosRecientes(
-                                dias: Datos.i.historial.dias,
-                              ),
+                            // La actividad del período, que ahora SÍ
+                            // cambia con el filtro: antes existía solo en
+                            // Semana y contaba siempre los últimos siete
+                            // días, así que en Mes y en Año la pantalla
+                            // terminaba en la racha.
+                            ActividadDelPeriodo(
+                              tramo: switch (_periodo) {
+                                Periodo.semana => TramoActividad.semana,
+                                Periodo.mes => TramoActividad.mes,
+                                Periodo.anio => TramoActividad.anio,
+                              },
+                              // El recorte sale del modelo y no de acá:
+                              // dónde empieza una semana o un mes en hora
+                              // de Guatemala es regla de negocio.
+                              dias: switch (_periodo) {
+                                Periodo.semana =>
+                                  Datos.i.historial.semanaEnCurso,
+                                Periodo.mes => Datos.i.historial.mesEnCurso,
+                                Periodo.anio => Datos.i.historial.anioEnCurso,
+                              },
+                            ),
                             const SizedBox(height: 16),
                           ],
                         ),
