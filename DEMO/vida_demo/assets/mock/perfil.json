@@ -1,5 +1,5 @@
 {
-  "_comentario": "Mock del perfil del asegurado. La edad viene de la póliza que provee la aseguradora, NUNCA autodeclarada: autodeclararla es un vector de fraude. El teléfono manda la edad; la FCM (219 − edad) la calcula el servidor.",
+  "_comentario": "Mock del perfil del asegurado. La edad viene de la póliza que provee la aseguradora, NUNCA autodeclarada: autodeclararla es un vector de fraude. Va en esta dirección y solo en esta: el servidor se la manda a la app para mostrarla. El teléfono NUNCA manda para arriba la edad, ni la FCM, ni los puntos — el contrato lo prohíbe expresamente. La FCM (219 − edad) la calcula el servidor con la edad que ya tiene en el perfil.",
   "usuario_id": "diego-001",
   "nombre": "Diego",
   "edad": 45,
@@ -24,5 +24,34 @@
     "forma_pago": "Mensual",
     "red_cobertura": "Red nacional + emergencias internacionales",
     "estado": "Al día"
+  },
+
+  "_pendiente_aseguradora": "TODOS los datos de este bloque son INVENTADOS y estan marcados con [PENDIENTE]. NO se pueden mostrar a un usuario real: un telefono de emergencia falso es peligroso. Los tiene que dar la aseguradora antes del piloto.",
+  "aseguradora": {
+    "nombre": "[PENDIENTE] Nombre de la aseguradora",
+    "telefono_emergencias": "[PENDIENTE]",
+    "telefono_servicio": "[PENDIENTE]",
+    "correo": "[PENDIENTE]",
+    "horario": "[PENDIENTE]",
+    "verificado": false
+  },
+
+  "_pendiente_uso": "Los pasos son una propuesta de redaccion. El procedimiento real (a quien se llama primero, que documentos piden, plazos) lo tiene que confirmar la aseguradora.",
+  "uso_del_seguro": {
+    "verificado": false,
+    "pasos": [
+      {
+        "titulo": "Antes de ir a cualquier hospital",
+        "detalle": "Llamá primero a la línea de emergencias de tu aseguradora. Ellos autorizan y te dicen a qué hospital de la red ir."
+      },
+      {
+        "titulo": "Llevá tu número de póliza y tu DPI",
+        "detalle": "Con eso el hospital verifica tu cobertura en el momento."
+      },
+      {
+        "titulo": "Guardá todos los papeles",
+        "detalle": "Facturas, recetas e informes médicos. Sin ellos el reembolso se puede atrasar."
+      }
+    ]
   }
 }

@@ -1,42 +1,238 @@
 {
-  "_comentario": "Mock de la pantalla Social. De las conexiones solo se expone racha, nivel y monedas — NUNCA pasos ni historial crudo. Los duelos no otorgan monedas ni premios: son puramente competitivos. El ranking muestra posición, nunca los puntos de los demás.",
-
-  "duelo": {
-    "activo": true,
-    "rival_handle": "@mery_run",
-    "tiempo_restante": "2 días restantes",
-    "superacion_propia": 18,
-    "superacion_rival": 12,
-    "_nota": "Superación sobre el propio promedio de cada quien, nunca comparación directa de pasos."
+  "_comentario": [
+    "Mock de la pantalla Social. Cuatro bloques: yo, duelos, conexiones y grupos.",
+    "De una conexion solo se exponen racha, nivel y monedas — NUNCA pasos ni historial crudo.",
+    "Los duelos no dan monedas ni premios: son puramente competitivos.",
+    "En un grupo de tipo 'desconocidos' los puntos NUNCA se muestran, solo la posicion.",
+    "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
+  ],
+  "yo": {
+    "nombre": "Diego",
+    "puntos_semana": 200,
+    "tendencia": "subida"
   },
-
-  "historial_duelos": [
-    { "rival": "@mery_run", "ganado": true },
-    { "rival": "@juan_fit", "ganado": false },
-    { "rival": "@carlos_gt", "ganado": true },
-    { "rival": "@ana_runner", "ganado": true },
-    { "rival": "@luis_gym", "ganado": false }
-  ],
-
-  "conexiones": [
-    { "nombre": "Juan Perez", "handle": "@juan_fit", "racha_semanas": 12, "nivel": 3, "monedas_totales": 9 },
-    { "nombre": "Maria Rodriguez", "handle": "@mery_run", "racha_semanas": 8, "nivel": 3, "monedas_totales": 5 }
-  ],
-
-  "grupos_ranking": ["Oficina", "Familia"],
-
-  "ranking_por_grupo": {
-    "Oficina": [
-      { "nombre": "Ana Martinez", "puntos_semana": 340, "tendencia": "subida" },
-      { "nombre": "David S.", "puntos_semana": 275, "tendencia": "igual" },
-      { "nombre": "Diego", "puntos_semana": 200, "tendencia": "subida", "es_usuario": true },
-      { "nombre": "Juan Perez", "puntos_semana": 150, "tendencia": "bajada" },
-      { "nombre": "Sofia L.", "puntos_semana": 125, "tendencia": "igual" }
-    ],
-    "Familia": [
-      { "nombre": "Diego", "puntos_semana": 200, "tendencia": "subida", "es_usuario": true },
-      { "nombre": "Maria Rodriguez", "puntos_semana": 175, "tendencia": "subida" },
-      { "nombre": "Carlos Piña", "puntos_semana": 100, "tendencia": "bajada" }
+  "duelos": {
+    "activo": {
+      "activo": true,
+      "rival_handle": "@mery_run",
+      "tiempo_restante": "2 días restantes",
+      "superacion_propia": 18,
+      "superacion_rival": 12
+    },
+    "historial": [
+      {
+        "rival": "@mery_run",
+        "ganado": true
+      },
+      {
+        "rival": "@juan_fit",
+        "ganado": false
+      },
+      {
+        "rival": "@carlos_gt",
+        "ganado": true
+      },
+      {
+        "rival": "@ana_runner",
+        "ganado": true
+      },
+      {
+        "rival": "@luis_gym",
+        "ganado": false
+      }
     ]
-  }
+  },
+  "conexiones": [
+    {
+      "nombre": "Juan Perez",
+      "handle": "@juan_fit",
+      "racha_semanas": 12,
+      "nivel": 3,
+      "monedas_totales": 9
+    },
+    {
+      "nombre": "Maria Rodriguez",
+      "handle": "@mery_run",
+      "racha_semanas": 8,
+      "nivel": 3,
+      "monedas_totales": 5
+    },
+    {
+      "nombre": "Pablo Arriaga",
+      "handle": "@pablo_a",
+      "racha_semanas": 5,
+      "nivel": 2,
+      "monedas_totales": 12
+    },
+    {
+      "nombre": "Rodrigo Mendez",
+      "handle": "@rodri_m",
+      "racha_semanas": 3,
+      "nivel": 2,
+      "monedas_totales": 4
+    },
+    {
+      "nombre": "Joaquin Monrroy",
+      "handle": "@joaco",
+      "racha_semanas": 1,
+      "nivel": 1,
+      "monedas_totales": 2
+    }
+  ],
+  "grupos": [
+    {
+      "id": "oficina",
+      "nombre": "Oficina",
+      "tipo": "conocidos",
+      "mostrar_puntos": true,
+      "miembros": [
+        {
+          "nombre": "Ana Martinez",
+          "puntos_semana": 340,
+          "tendencia": "subida"
+        },
+        {
+          "nombre": "David S.",
+          "puntos_semana": 275,
+          "tendencia": "igual"
+        },
+        {
+          "es_usuario": true
+        },
+        {
+          "nombre": "Juan Perez",
+          "puntos_semana": 150,
+          "tendencia": "bajada"
+        },
+        {
+          "nombre": "Sofia L.",
+          "puntos_semana": 125,
+          "tendencia": "igual"
+        }
+      ]
+    },
+    {
+      "id": "familia",
+      "nombre": "Familia",
+      "tipo": "conocidos",
+      "mostrar_puntos": false,
+      "miembros": [
+        {
+          "es_usuario": true
+        },
+        {
+          "nombre": "Maria Rodriguez",
+          "puntos_semana": 175,
+          "tendencia": "subida"
+        },
+        {
+          "nombre": "Carlos Piña",
+          "puntos_semana": 100,
+          "tendencia": "bajada"
+        }
+      ]
+    },
+    {
+      "id": "amigos",
+      "nombre": "Amigos",
+      "tipo": "conocidos",
+      "mostrar_puntos": true,
+      "miembros": [
+        {
+          "nombre": "Pablo A.",
+          "puntos_semana": 260,
+          "tendencia": "subida"
+        },
+        {
+          "es_usuario": true
+        },
+        {
+          "nombre": "Rodrigo M.",
+          "puntos_semana": 190,
+          "tendencia": "igual"
+        },
+        {
+          "nombre": "Joaquin Monrroy",
+          "puntos_semana": 90,
+          "tendencia": "bajada"
+        }
+      ]
+    },
+    {
+      "id": "liga_local",
+      "nombre": "Liga local",
+      "tipo": "desconocidos",
+      "mostrar_puntos": false,
+      "liga": {
+        "nivel_actividad": "Intermedio",
+        "zona": "Zona 10, Guatemala",
+        "cierra": "2026-09-06T23:59:59-06:00",
+        "premios_monedas": [
+          10,
+          6,
+          3
+        ]
+      },
+      "miembros": [
+        {
+          "nombre": "Daniel pinol",
+          "puntos_semana": 410,
+          "tendencia": "subida"
+        },
+        {
+          "nombre": "Luis Montenegro",
+          "puntos_semana": 365,
+          "tendencia": "igual"
+        },
+        {
+          "nombre": "Dhidel Osorio",
+          "puntos_semana": 290,
+          "tendencia": "subida"
+        },
+        {
+          "es_usuario": true
+        },
+        {
+          "nombre": "Alexander Lopez",
+          "puntos_semana": 180,
+          "tendencia": "bajada"
+        },
+        {
+          "nombre": "Sofia Bilbao",
+          "puntos_semana": 140,
+          "tendencia": "igual"
+        },
+        {
+          "nombre": "Daniela De Leon",
+          "puntos_semana": 95,
+          "tendencia": "bajada"
+        }
+      ]
+    }
+  ],
+  "_pendiente_amigos": "Las solicitudes son mock: no hay backend de amistades. Aceptar o rechazar solo cambia la lista en memoria.",
+  "solicitudes_recibidas": [
+    {
+      "nombre": "Estefania Solis",
+      "handle": "@estefa",
+      "amigos_en_comun": 3
+    },
+    {
+      "nombre": "Luis Montenegro",
+      "handle": "@luis_gt",
+      "amigos_en_comun": 1
+    }
+  ],
+  "solicitudes_enviadas": [
+    {
+      "nombre": "Alexander Lopez",
+      "handle": "@alex_lp",
+      "amigos_en_comun": 2
+    },
+    {
+      "nombre": "Dhidel Osorio",
+      "handle": "@dhidel",
+      "amigos_en_comun": 0
+    }
+  ]
 }

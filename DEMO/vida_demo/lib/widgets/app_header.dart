@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:getwidget/getwidget.dart';
 import '../theme.dart';
+import 'logo_vida.dart';
+
+/// Alto del logo en el header.
+///
+/// 26 es el alto al que la palabra "vida" pesa ópticamente lo mismo que
+/// pesaba el texto "+VIDA" que había antes acá.
+const double _altoLogo = 26;
 
 /// Encabezado reutilizable: se repite igual en todas las pantallas de
-/// la app ("+VIDA" a la izquierda, avatar del usuario a la derecha).
+/// la app (el logo de +Vida a la izquierda, avatar del usuario a la
+/// derecha).
 ///
 /// En pantallas de detalle que necesiten volver atrás, activar
 /// [showBackButton] agrega una flecha "←" a la izquierda de todo.
@@ -34,19 +43,30 @@ class AppHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
             ],
-            Text(
-              '+VIDA',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1,
-              ),
-            ),
+            const LogoVida(alto: _altoLogo),
             const Spacer(),
-            const CircleAvatar(
-              radius: 20,
-              backgroundColor: AppColors.cardBorder,
-              child: Icon(Icons.person, color: AppColors.textSecondary),
+            // El avatar es el acceso a Perfil desde cualquier pantalla.
+            //
+            // El área de toque se agranda con el padding: el avatar mide
+            // 40 y apuntarle justo a eso con el dedo cuesta.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                // Si ya estamos en Perfil, no se apila otra copia.
+                if (ModalRoute.of(context)?.settings.name == '/perfil') return;
+                Navigator.of(context).pushNamed('/perfil');
+              },
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                // GFAvatar de getwidget: los colores siguen saliendo de
+                // nuestros tokens, no de la paleta de la librería.
+                child: GFAvatar(
+                  size: GFSize.SMALL,
+                  shape: GFAvatarShape.circle,
+                  backgroundColor: AppColors.cardBorder,
+                  child: Icon(Icons.person, color: AppColors.textSecondary),
+                ),
+              ),
             ),
           ],
         ),

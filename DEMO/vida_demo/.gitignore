@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Capturas que deja un golden test cuando falla. No van al repo.
+test/failures/

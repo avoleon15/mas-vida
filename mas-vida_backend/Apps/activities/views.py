@@ -40,8 +40,8 @@ def sync(request):
         )
     except (KeyError, TypeError, ValueError):
         return Response(
-            {"mensaje": "Fecha inválida en payload"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {'mensaje': 'Usuario no encontrado'},
+            status=status.HTTP_404_NOT_FOUND
         )
 
     pasos = payload.get("pasos", [])
@@ -93,8 +93,8 @@ def sync(request):
         ]
     except KeyError as e:
         return Response(
-            {"mensaje": f"Campo faltante en payload: {e.args[0]}"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {'mensaje': f'Campo faltante en payload: {e.args[0]}'},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
@@ -160,7 +160,6 @@ def sync(request):
             "version_regla": version_regla,
         },
     )
-
     return Response(
         {
             "fecha": fecha_puntuacion.isoformat(),

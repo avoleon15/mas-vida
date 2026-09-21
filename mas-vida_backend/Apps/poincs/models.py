@@ -7,6 +7,8 @@ class Ledger(models.Model):
     )
 
     puntos = models.IntegerField()
+
+
     tipo = models.CharField(
         max_length=50
     )

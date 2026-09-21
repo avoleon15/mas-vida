@@ -5,6 +5,8 @@ import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/lluvia_confeti.dart';
+import '../widgets/moneda_animada.dart';
 
 /// Confirmación de canje: recibe los datos del premio canjeado (más
 /// 'monedasRestantes', el saldo ya descontado) como argumento de la
@@ -18,64 +20,67 @@ class CanjeExitosoScreen extends StatelessWidget {
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: const AppHeader(showBackButton: true),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 32),
-                    _buildCheckIcon(context),
-                    const SizedBox(height: 20),
-                    Text(
-                      '¡Canje Exitoso!',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: 28),
-                    _buildTarjetaCupon(context, datos),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil('/home', (route) => false),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accent,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                  child: const Text(
-                    'Volver al Inicio',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ),
-            const BottomNavBar(currentIndex: 3),
-          ],
-        ),
+      // El confeti va en un Stack por ENCIMA de la pantalla entera, no
+      // adentro del scroll: tiene que caer sobre todo, incluida la barra
+      // de abajo, y seguir cayendo aunque el usuario scrollee.
+      body: Stack(
+        children: [
+          SafeArea(child: _contenido(context, datos)),
+          const LluviaConfeti(),
+        ],
       ),
+    );
+  }
+
+  Widget _contenido(BuildContext context, Map<String, dynamic> datos) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          child: const AppHeader(showBackButton: true),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 32),
+                _buildCheckIcon(context),
+                const SizedBox(height: 20),
+                Text(
+                  '¡Canje Exitoso!',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                _buildTarjetaCupon(context, datos),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/home', (route) => false),
+              // Color y forma vienen del tema: ver
+              // elevatedButtonTheme en theme.dart.
+              child: const Text(
+                'Volver al Inicio',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ),
+        const BottomNavBar(currentIndex: 3),
+      ],
     );
   }
 
@@ -142,27 +147,19 @@ class CanjeExitosoScreen extends StatelessWidget {
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 18),
-          _buildFilaMonedas(
-            context,
-            Icons.monetization_on,
-            '$costo monedas descontadas',
-          ),
+          _buildFilaMonedas(context, '$costo monedas descontadas'),
           const SizedBox(height: 4),
-          _buildFilaMonedas(
-            context,
-            Icons.monetization_on,
-            'Te quedan $monedasRestantes monedas',
-          ),
+          _buildFilaMonedas(context, 'Te quedan $monedasRestantes monedas'),
         ],
       ),
     );
   }
 
-  Widget _buildFilaMonedas(BuildContext context, IconData icon, String texto) {
+  Widget _buildFilaMonedas(BuildContext context, String texto) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: AppColors.accentSecondary, size: 16),
+        const MonedaAnimada(size: 21),
         const SizedBox(width: 6),
         Text(
           texto,
