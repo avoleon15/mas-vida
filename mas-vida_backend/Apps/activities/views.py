@@ -7,9 +7,9 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from services.hearth_rate import (calculate_age, calculate_intensity_from_heart_rate,)
 from .models import Muestra, MuestraBPM, Sesion
-from users.models import Usuario
+from Apps.users.models import Usuario
 from services.points import (apply_daily_points_limit, calculate_daily_step_points,)
-from poincs.models import Ledger, VersionRegla
+from Apps.poincs.models import Ledger, VersionRegla
 
 
 logger = logging.getLogger(__name__)
@@ -18,18 +18,16 @@ logger = logging.getLogger(__name__)
 @api_view(["POST"])
 def sync(request):
     payload = request.data
-
     logger.debug("Payload recibido: %s", payload)
 
-    usuario_id = payload.get("usuario_id")
 
     try:
-        usuario = Usuario.objects.get(usuario_id=usuario_id)
+        usuario = request.user.usuario
     except Usuario.DoesNotExist:
         return Response(
-            {"mensaje": "Usuario no encontrado"},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+            {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+    )
 
     try:
         fecha_puntuacion = date.fromisoformat(payload["fecha"])
@@ -40,7 +38,7 @@ def sync(request):
         )
     except (KeyError, TypeError, ValueError):
         return Response(
-            {'mensaje': 'Usuario no encontrado'},
+            {'mensaje': 'Fecha inválida en payload'},
             status=status.HTTP_404_NOT_FOUND
         )
 
