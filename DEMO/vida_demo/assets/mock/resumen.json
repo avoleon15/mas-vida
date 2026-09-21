@@ -5,7 +5,7 @@
   "techo_anual": 12000,
   "tope_anual_aplicado": false,
   "nivel": 3,
-  "_nota_nivel": "Nivel 3 = 10.000–15.000 pts → 10% de cashback. El contrato v1 documenta que con el techo anual de 12.000 el nivel 4 (15.000+) queda fuera de alcance en el piloto.",
+  "_nota_nivel": "Nivel 3 = 10.000–11.999 pts → 10% de cashback. Con 11.240 pts faltan 760 para el nivel 4, cuyo piso son 12.000 (corregido el 17 de septiembre de 2026; antes este mock decia 15.000+ y que el nivel 4 quedaba fuera de alcance). La tabla que manda es `niveles` en lib/reglas_puntos.dart.",
   "cashback": {
     "porcentaje": 10,
     "proyectado_q": 1800,
