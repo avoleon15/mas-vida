@@ -111,7 +111,12 @@ void reiniciarCompuertaAnimacion() => _generacionYaAnimada = -1;
 /// Con "Reducir movimiento" el avance es 1 desde el primer cuadro y
 /// [animando] es false: nada se mueve y los tests leen el valor final.
 class CrecerAlRefrescar extends StatefulWidget {
-  const CrecerAlRefrescar({super.key, required this.builder});
+  const CrecerAlRefrescar({
+    super.key,
+    required this.builder,
+    this.crecerAlMontar = false,
+    this.duracionAlMontar,
+  });
 
   /// [avance] va de 0 a 1 ya pasado por la curva. [animando] dice si en
   /// este cuadro el crecimiento está en curso, para que quien dibuja
@@ -120,6 +125,24 @@ class CrecerAlRefrescar extends StatefulWidget {
   final Widget Function(BuildContext context, double avance, bool animando)
   builder;
 
+  /// True para crecer TAMBIÉN al montarse, sin esperar una tanda de
+  /// datos nueva.
+  ///
+  /// Lo usan las gráficas de Progreso cuando se cambia de período: ahí
+  /// la que se monta es otra gráfica, con otros datos y otra escala, y
+  /// tiene que entrar subiendo desde la base. La compuerta por tanda de
+  /// datos no sirve para ese caso —los datos son los mismos, lo que
+  /// cambió es qué tramo se está mirando—, pero tampoco se puede dejar
+  /// prendido siempre: la barra de abajo navega desmontando la pantalla
+  /// entera, y entonces todo volvería a crecer en cada cambio de
+  /// pestaña.
+  final bool crecerAlMontar;
+
+  /// Cuánto dura ese crecimiento de entrada. Por defecto, lo mismo que
+  /// el número grande. Un cambio de filtro pide algo más corto: es la
+  /// respuesta a un toque, no la llegada de datos nuevos.
+  final Duration? duracionAlMontar;
+
   @override
   State<CrecerAlRefrescar> createState() => _CrecerAlRefrescarState();
 }
@@ -127,6 +150,11 @@ class CrecerAlRefrescar extends StatefulWidget {
 class _CrecerAlRefrescarState extends State<CrecerAlRefrescar>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controlador;
+
+  /// Para que el crecimiento de entrada corra UNA vez y no cada vez que
+  /// cambia algo de lo que el widget depende (el tamaño de letra del
+  /// sistema, por ejemplo, vuelve a llamar a didChangeDependencies).
+  bool _yaArranco = false;
 
   @override
   void initState() {
@@ -144,9 +172,17 @@ class _CrecerAlRefrescarState extends State<CrecerAlRefrescar>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    if (_yaArranco) return;
+    _yaArranco = true;
+
     // Acá y no en initState porque hace falta el MediaQuery.
-    if (!MediaQuery.disableAnimationsOf(context) &&
-        animacionPendiente(datosRecargados.value)) {
+    if (widget.crecerAlMontar) {
+      _controlador.duration = widget.duracionAlMontar ?? duracionNumeroAnimado;
+      _controlador.forward(from: 0);
+      return;
+    }
+    if (animacionPendiente(datosRecargados.value)) {
       _controlador.forward(from: 0);
     }
   }
@@ -155,6 +191,10 @@ class _CrecerAlRefrescarState extends State<CrecerAlRefrescar>
     if (!mounted) return;
     if (MediaQuery.disableAnimationsOf(context)) return;
     if (!animacionPendiente(datosRecargados.value)) return;
+    // Una tanda de datos nueva crece con la duración del número grande,
+    // aunque este widget haya entrado con una más corta: los dos tienen
+    // que terminar juntos.
+    _controlador.duration = duracionNumeroAnimado;
     _controlador.forward(from: 0);
   }
 

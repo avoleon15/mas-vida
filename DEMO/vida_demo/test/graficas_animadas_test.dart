@@ -38,8 +38,8 @@ Widget _pantalla({bool animaciones = true}) => MaterialApp(
           child: Scaffold(
             body: Column(
               children: const [
-                GraficaLineaPasos(serie: _serie),
-                GraficaBarrasPuntos(serie: _serie),
+                GraficaLineaPasos(serie: _serie, nombreEjeX: 'días'),
+                GraficaBarrasPuntos(serie: _serie, nombreEjeX: 'días'),
               ],
             ),
           ),

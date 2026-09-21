@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -61,6 +63,20 @@ class TarjetaPuntos extends StatefulWidget {
 }
 
 class _TarjetaPuntosState extends State<TarjetaPuntos> {
+  /// ¿Ya se cambió de período al menos una vez?
+  ///
+  /// Es lo que separa "la pantalla se está abriendo" de "el usuario tocó
+  /// el selector". La primera vez las gráficas aparecen dibujadas —o
+  /// creciendo con la tanda de datos, si es que le toca—; a partir del
+  /// primer cambio, cada una entra subiendo desde la base.
+  bool _huboCambioDePeriodo = false;
+
+  @override
+  void didUpdateWidget(TarjetaPuntos anterior) {
+    super.didUpdateWidget(anterior);
+    if (anterior.periodo != widget.periodo) _huboCambioDePeriodo = true;
+  }
+
   // ----------------------------------------------------------
   // Datos del período.
   // ----------------------------------------------------------
@@ -113,12 +129,19 @@ class _TarjetaPuntosState extends State<TarjetaPuntos> {
     return [
       for (var i = 0; i < ordenadas.length; i++)
         PuntoPeriodo(
-          // El rango de días de esa semana, no "S1".
+          // QUÉ SEMANA DEL MES ES: 1, 2, 3 (pedido de Daniel, 21 de
+          // septiembre de 2026).
           //
-          // "S1" se confundía con la pestaña Semana del selector: parecía
-          // que la gráfica seguía mostrando semanas sueltas. El rango de
-          // fechas dice exactamente qué tramo del mes es.
-          etiqueta: _diaDeInicio(porSemana[ordenadas[i]]!),
+          // Antes acá iba el día en que arrancaba esa semana ("3", "10",
+          // "17", "24") y no se entendía: son números de día sueltos
+          // debajo de una gráfica que habla de semanas, así que el
+          // primer tramo del mes parecía el tercero.
+          //
+          // Numerarlas de 1 en adelante sí se entiende, y ahora se puede
+          // sin ambigüedad: el eje dice abajo de qué mes son ("semanas
+          // de agosto"), que es lo que antes faltaba y hacía que "S1" se
+          // confundiera con la pestaña Semana del selector.
+          etiqueta: '${i + 1}',
           pasos: porSemana[ordenadas[i]]!.fold(0, (t, d) => t + (d.pasos ?? 0)),
           puntos: porSemana[ordenadas[i]]!.fold(0, (t, d) => t + d.puntosDia),
           hayDatos: true,
@@ -126,21 +149,7 @@ class _TarjetaPuntosState extends State<TarjetaPuntos> {
     ];
   }
 
-  /// El día en que arranca esa semana dentro del mes.
-  ///
-  /// Solo el número: el mes va una vez en el subtítulo de la gráfica, no
-  /// repetido en cada etiqueta.
-  ///
-  /// Antes acá iba el rango completo ("3-9"). Ocupaba mucho y las semanas
-  /// partidas por el borde del mes quedaban como "1-2" o "24-26", que se
-  /// leen como errores. Y antes de eso decía "S1", que se confundía con
-  /// la pestaña Semana del selector.
-  static String _diaDeInicio(List<DiaActividad> dias) {
-    final ordenados = [...dias]..sort((a, b) => a.fecha.compareTo(b.fecha));
-    return '${ordenados.first.fecha.day}';
-  }
-
-  /// Nombre del mes en curso, para el subtítulo de la gráfica.
+  /// Nombre del mes en curso, para el nombre del eje.
   static String get _nombreMesActual {
     const nombres = [
       'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', //
@@ -225,8 +234,11 @@ class _TarjetaPuntosState extends State<TarjetaPuntos> {
     // El resumen anual no los trae, así que en Año no se dibuja en vez de
     // mostrar una línea plana en cero que parecería un dato real.
     final hayPasos = serie.any((p) => p.pasos > 0);
-    // En Año no hay barras: ahí el calendario de cuadritos cuenta la
-    // misma historia con mucho más detalle.
+    // EN AÑO NO HAY BARRAS (decisión de Daniel, 21 de septiembre de
+    // 2026). Se probó con los puntos mes a mes y no le gustó: doce
+    // columnas casi iguales no dicen nada que el mapa de calor no diga
+    // mejor, y ese sí muestra el año día por día. En Año la gráfica es
+    // el calendario de cuadritos, y una sola.
     final hayBarras = widget.periodo != Periodo.anio;
 
     return Column(
@@ -245,18 +257,31 @@ class _TarjetaPuntosState extends State<TarjetaPuntos> {
         if (hayPasos || hayBarras) ...[
           const SizedBox(height: AppSpacing.entre),
           _TarjetaGraficas(
+            periodo: widget.periodo,
+            crecerAlMontar: _huboCambioDePeriodo,
             serie: serie,
             hayPasos: hayPasos,
             hayBarras: hayBarras,
             subtituloPasos: switch (widget.periodo) {
               Periodo.semana => 'Pasos de la semana',
-              // El mes se dice una sola vez acá, no en cada etiqueta.
-              Periodo.mes => 'Pasos por semana de $_nombreMesActual',
+              // Sin el mes: lo dice el eje, abajo, que es donde están
+              // las semanas que hay que ubicar.
+              Periodo.mes => 'Pasos por semana',
               Periodo.anio => 'Pasos',
             },
-            subtituloBarras: widget.periodo == Periodo.semana
-                ? 'Puntos por día'
-                : 'Puntos por semana de $_nombreMesActual',
+            subtituloBarras: switch (widget.periodo) {
+              Periodo.semana => 'Puntos por día',
+              Periodo.mes => 'Puntos por semana',
+              Periodo.anio => 'Puntos por mes',
+            },
+            // Qué mide el eje de abajo. En Mes además dice DE QUÉ MES
+            // son esas semanas: "1 · 2 · 3" sin el mes son números
+            // sueltos.
+            nombreEjeX: switch (widget.periodo) {
+              Periodo.semana => 'días de la semana',
+              Periodo.mes => 'semanas de $_nombreMesActual',
+              Periodo.anio => 'meses del año',
+            },
           ),
         ],
       ],
@@ -396,12 +421,27 @@ class _TarjetaNumero extends StatelessWidget {
 /// en los datos y no en el fondo.
 class _TarjetaGraficas extends StatelessWidget {
   const _TarjetaGraficas({
+    required this.periodo,
+    required this.crecerAlMontar,
     required this.serie,
     required this.hayPasos,
     required this.hayBarras,
     required this.subtituloPasos,
     required this.subtituloBarras,
+    required this.nombreEjeX,
   });
+
+  /// Qué son las marcas del eje de abajo, en las dos gráficas.
+  final String nombreEjeX;
+
+  /// True cuando el usuario ya tocó el selector al menos una vez: de ahí
+  /// en adelante cada gráfica entra subiendo desde la base.
+  final bool crecerAlMontar;
+
+  /// Qué período se está mirando. No se dibuja: sirve de LLAVE, para que
+  /// al cambiar de pestaña la gráfica se reemplace en vez de deformarse
+  /// hasta la del otro período (ver [_CambioDePeriodo]).
+  final Periodo periodo;
 
   final List<PuntoPeriodo> serie;
   final bool hayPasos;
@@ -426,18 +466,90 @@ class _TarjetaGraficas extends StatelessWidget {
             _Subtitulo(texto: subtituloPasos),
             const SizedBox(height: AppSpacing.dentro),
             // Una sola serie: sin leyenda, el subtítulo ya dice qué es.
-            GraficaLineaPasos(serie: serie),
+            _CambioDePeriodo(
+              periodo: periodo,
+              child: GraficaLineaPasos(
+                serie: serie,
+                nombreEjeX: nombreEjeX,
+                crecerAlMontar: crecerAlMontar,
+              ),
+            ),
           ],
           if (hayPasos && hayBarras) const SizedBox(height: AppSpacing.grupo),
           if (hayBarras) ...[
             _Subtitulo(texto: subtituloBarras),
             const SizedBox(height: AppSpacing.dentro),
-            GraficaBarrasPuntos(serie: serie),
+            _CambioDePeriodo(
+              periodo: periodo,
+              child: GraficaBarrasPuntos(
+                serie: serie,
+                nombreEjeX: nombreEjeX,
+                crecerAlMontar: crecerAlMontar,
+              ),
+            ),
           ],
         ],
       ),
     );
   }
+}
+
+/// Cambia la gráfica al cambiar de período: la saliente se desvanece y
+/// la entrante SUBE DESDE LA BASE.
+///
+/// EL BUG QUE ARREGLA (visto por Daniel el 21 de septiembre de 2026). Al
+/// pasar de Semana a Mes, la línea se disparaba hasta arriba —se salía
+/// de su tarjeta y pintaba encima del número de puntos— y recién después
+/// se acomodaba.
+///
+/// Por qué pasaba: `fl_chart` interpola entre los datos viejos y los
+/// nuevos punto por punto, pero las dos series no tienen la misma
+/// cantidad de puntos (7 días contra 4 o 5 semanas). Para los puntos que
+/// sobran no hay viejo con quien interpolar, así que arrancan YA en su
+/// valor final —el total de una semana entera, cinco veces más grande
+/// que el de un día— mientras el techo del eje todavía viene subiendo
+/// desde el de la semana. Un valor de 60.000 dibujado contra un eje que
+/// todavía marca 14.000 cae muy por encima del borde de arriba.
+///
+/// POR QUÉ ESTA ANIMACIÓN NO PUEDE SALIRSE DE RANGO. No interpola entre
+/// las dos series: cada gráfica dibuja SUS datos contra SU propio techo,
+/// y lo único que se anima es una escala de 0 a 1 que multiplica los
+/// valores. Un valor multiplicado por algo entre 0 y 1 nunca queda por
+/// encima de sí mismo, así que nunca pasa el techo — pase lo que pase
+/// con los datos, la cantidad de puntos o la diferencia de escala entre
+/// un período y otro.
+///
+/// Y además es la animación que la app ya usa cuando llegan datos: las
+/// cosas suben desde la base. Interpolar entre dos períodos tampoco
+/// significaría nada —el lunes de la semana y la primera semana del mes
+/// no son el mismo dato moviéndose, son dos datos distintos.
+///
+/// La animación de `fl_chart` sigue prendida para lo que SÍ es el mismo
+/// dato moviéndose: un refresco, que trae la misma forma con otros
+/// valores.
+class _CambioDePeriodo extends StatelessWidget {
+  const _CambioDePeriodo({required this.periodo, required this.child});
+
+  final Periodo periodo;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSwitcher(
+    // Con "Reducir movimiento" el cambio es instantáneo. Sin esto, las
+    // dos gráficas conviven un cuadro y un test que hace un solo pump
+    // encuentra los datos de los dos períodos a la vez.
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : duracionSalidaDePeriodo,
+    // El fundido es el de fábrica, para las dos. La de 150 ms apenas se
+    // nota en la que entra —a esa altura su línea recién va por un
+    // tercio— y es lo que evita que la saliente desaparezca de golpe.
+    switchInCurve: Curves.easeOut,
+    switchOutCurve: Curves.easeIn,
+    // La llave es el período: es lo que le dice a Flutter que esta es
+    // OTRA gráfica y no la misma con otros datos.
+    child: KeyedSubtree(key: ValueKey(periodo), child: child),
+  );
 }
 
 class _Subtitulo extends StatelessWidget {
@@ -508,6 +620,19 @@ class _SelectorPeriodo extends StatelessWidget {
 // Gráficas — fl_chart
 // ============================================================
 
+/// Cuánto tarda una gráfica en entrar al cambiar de período.
+///
+/// Más corta que el crecimiento de una tanda de datos (800 ms): esto es
+/// la respuesta a un toque en el selector, y a 800 ms se siente que la
+/// app tarda en obedecer. Lo suficientemente larga para que se vea subir.
+const Duration duracionCambioDePeriodo = Duration(milliseconds: 420);
+
+/// Cuánto tarda la gráfica saliente en desvanecerse.
+///
+/// Más corta todavía: las dos conviven en pantalla mientras dura, y dos
+/// series encimadas mucho tiempo se leen como un borrón.
+const Duration duracionSalidaDePeriodo = Duration(milliseconds: 150);
+
 /// Estilo compartido de los ejes: en color de texto normal, NUNCA del
 /// color de la serie.
 TextStyle _estiloEje(BuildContext context) =>
@@ -518,27 +643,77 @@ TextStyle _estiloEje(BuildContext context) =>
     ) ??
     const TextStyle(fontSize: 10);
 
-/// 12,400 -> "12.4k". Con los miles completos el eje se come el ancho de
-/// la gráfica.
+/// El número de una marca del eje: "1,600" o "14k".
+///
+/// Se abrevia SOLO a partir de las cinco cifras, que es cuando los miles
+/// completos empiezan a comerse el ancho de la gráfica. Antes se
+/// abreviaba desde 1.000 y el eje de puntos —que se mueve entre 100 y
+/// 2.000— terminaba diciendo "1.6k", que es más difícil de leer que el
+/// número entero y encima con un decimal inventado.
 String _corto(num v) {
-  if (v < 1000) return '${v.round()}';
+  if (v < 10000) return milesConComa(v.round());
   final miles = v / 1000;
-  return '${miles.toStringAsFixed(miles >= 10 ? 0 : 1)}k';
+  // Sin decimal cuando no hace falta: la escala ya se redondea a
+  // números enteros de miles, y "14.0k" es un decimal que no dice nada.
+  final redondo = (miles - miles.roundToDouble()).abs() < 0.05;
+  return '${miles.toStringAsFixed(redondo || miles >= 10 ? 0 : 1)}k';
+}
+
+/// El techo de una escala, redondeado a un número que se pueda leer.
+///
+/// POR QUÉ NO ES `máximo × 1.15`. Ese era el techo de antes y dejaba
+/// ejes como "14k / 7.1k / 0": números que nadie escribiría a mano y que
+/// obligan a leer el eje en vez de mirarlo. Acá el techo se redondea
+/// hacia arriba al siguiente escalón lindo —de la familia 1, 2 y 5 por
+/// una potencia de diez—, así que el eje siempre cae en cifras enteras y
+/// la mitad también.
+///
+/// El 5% de aire es para que el mejor día no toque el borde de arriba.
+double techoLindo(double maximo) {
+  if (maximo <= 0) return 1;
+
+  final conAire = maximo * 1.05;
+  final escalon = _escalonLindo(conAire);
+  return (conAire / escalon).ceil() * escalon;
+}
+
+/// El escalón de la familia 1-2-5 con el que se redondea la escala.
+double _escalonLindo(double maximo) {
+  // Se apunta a OCHO tramos aunque el eje muestre dos números. No es
+  // contradictorio: cuanto más fino el escalón, más pegado al dato queda
+  // el techo. Con escalones gruesos, 1.500 puntos redondeaban a 2.000 y
+  // la barra más alta llegaba a tres cuartos de la gráfica, así que el
+  // dibujo se veía vacío arriba. Con ocho, redondea a 1.600.
+  final crudo = maximo / 8;
+  final magnitud = math.pow(10, (math.log(crudo) / math.ln10).floor()).toDouble();
+  final resto = crudo / magnitud;
+  final factor = switch (resto) {
+    <= 1 => 1.0,
+    <= 2 => 2.0,
+    <= 5 => 5.0,
+    _ => 10.0,
+  };
+  return magnitud * factor;
 }
 
 /// Delega en el formateador único de `numero_animado.dart`: antes esta
 /// era una tercera copia del mismo separador de miles.
 String _milesGrafica(int v) => milesConComa(v);
 
-/// Cuadrícula tenue, compartida por las dos gráficas: orienta sin
-/// competir con los datos.
-FlGridData _grilla(double intervalo) => FlGridData(
-  show: true,
-  drawVerticalLine: false,
-  horizontalInterval: intervalo,
-  getDrawingHorizontalLine: (_) =>
-      const FlLine(color: AppColors.cardBorder, strokeWidth: 1),
-);
+/// Cuánto aire queda a cada lado de la línea, en unidades del eje X.
+///
+/// Sin esto, el primer y el último punto caen JUSTO sobre el borde del
+/// área de dibujo: medio círculo del lunes quedaba cortado contra el
+/// borde de la tarjeta, y la etiqueta del domingo se metía debajo de la
+/// columna del eje de la derecha, encimada con el "0".
+///
+/// MEDIA COLUMNA, ni más ni menos. Es exactamente lo que deja
+/// `BarChartAlignment.spaceAround` en las barras de abajo, así que las
+/// dos gráficas reparten sus marcas en los mismos lugares y el lunes de
+/// una cae justo sobre el lunes de la otra. Con 0,35 quedaban corridas
+/// seis píxeles, que es poco para notarlo de una y suficiente para que
+/// la pantalla se vea desalineada.
+const double _aireEjeX = 0.5;
 
 /// Etiquetas del eje X, comunes a las dos gráficas.
 Widget _etiquetaX(
@@ -546,6 +721,14 @@ Widget _etiquetaX(
   List<PuntoPeriodo> serie,
   double valor,
 ) {
+  // SOLO en los valores enteros, que son los que tienen dato. Con el
+  // aire de los costados, fl_chart pide además una etiqueta en cada
+  // extremo del rango (-0.35 y 6.35): redondeadas caían sobre el primer
+  // y el último tramo, y los dibujaban dos veces.
+  if ((valor - valor.roundToDouble()).abs() > 0.001) {
+    return const SizedBox.shrink();
+  }
+
   final i = valor.round();
   if (i < 0 || i >= serie.length) return const SizedBox.shrink();
   return Padding(
@@ -554,11 +737,48 @@ Widget _etiquetaX(
   );
 }
 
+/// Cómo se llama el eje, debajo de sus etiquetas.
+///
+/// POR QUÉ HAY QUE NOMBRARLO (revisión de Daniel, 21 de septiembre de
+/// 2026). "L M M J V S D" se entiende solo, pero en Mes el eje decía
+/// "3 · 10 · 17 · 24" y esos números no son nada hasta que alguien
+/// aclara que son las semanas del mes. Y el eje de arriba mostraba
+/// "140 / 70 / 0" sin decir de qué: podían ser puntos, pasos o minutos.
+///
+/// Va en minúsculas y apagado: es la letra chica del dibujo, no un
+/// título. El título de lo que se está midiendo ya está arriba de la
+/// gráfica.
+Widget _nombreDeEje(BuildContext context, String texto) => Padding(
+  padding: const EdgeInsets.only(top: 2),
+  child: Text(
+    texto,
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: AppColors.textSecondary,
+      fontSize: 10,
+      letterSpacing: 0.3,
+      height: 1,
+    ),
+  ),
+);
+
 /// Línea de pasos del período, estilo Strava.
 ///
 /// UNA sola serie y UN solo eje, así que no lleva leyenda: el subtítulo
 /// de arriba ya dice qué es. Los puntos no llevan su número encima; el
 /// valor aparece al tocar o arrastrar.
+///
+/// SIN EJE Y LATERAL. Toda la escala se dice en un rótulo arriba a la
+/// derecha —"14k pasos", que es hasta dónde llega el dibujo— y el 0 es
+/// la base, que se ve. Tres razones:
+///
+///   · Un eje a la derecha le comía 58 px de ancho a ESTA gráfica y no
+///     a la de barras, así que las dos quedaban con anchos distintos:
+///     una arriba de la otra, sus dos ejes de días no coincidían y el
+///     lunes de una caía sobre el martes de la otra.
+///   · La etiqueta del domingo se metía debajo de esa columna y quedaba
+///     encimada con el "0".
+///   · Es la misma forma que ya usan las barras: el valor arriba, el
+///     dibujo abajo, nada a los costados.
 ///
 /// Al llegar una tanda de datos la línea SUBE desde la base, con la misma
 /// duración y la misma curva que el número grande de arriba (ver
@@ -567,9 +787,21 @@ Widget _etiquetaX(
 /// línea crece contra una referencia fija en vez de que se estire la
 /// pantalla entera.
 class GraficaLineaPasos extends StatelessWidget {
-  const GraficaLineaPasos({super.key, required this.serie});
+  const GraficaLineaPasos({
+    super.key,
+    required this.serie,
+    required this.nombreEjeX,
+    this.crecerAlMontar = false,
+  });
 
   final List<PuntoPeriodo> serie;
+
+  /// Qué son las marcas de abajo: "días", "semanas del mes", "meses".
+  final String nombreEjeX;
+
+  /// True cuando esta gráfica entra por un cambio de período: sube desde
+  /// la base en vez de aparecer dibujada.
+  final bool crecerAlMontar;
 
   static const double alto = 150;
 
@@ -582,123 +814,155 @@ class GraficaLineaPasos extends StatelessWidget {
         .map((p) => p.pasos)
         .reduce((a, b) => a > b ? a : b)
         .toDouble();
-    // Un poco de aire arriba para que el mejor día no toque el techo.
-    final tope = maximo <= 0 ? 1000.0 : maximo * 1.15;
+    final tope = techoLindo(maximo);
 
     return SizedBox(
       height: alto,
-      child: CrecerAlRefrescar(
-        builder: (context, avance, animando) => LineChart(
-          LineChartData(
-            minY: 0,
-            maxY: tope,
-            minX: 0,
-            maxX: (serie.length - 1).toDouble(),
-            gridData: _grilla(tope / 2),
-            borderData: FlBorderData(show: false),
-            titlesData: FlTitlesData(
-              topTitles: const AxisTitles(),
-              leftTitles: const AxisTitles(),
-              // La guía de cuántos pasos son, a la derecha.
-              rightTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 42,
-                  interval: tope / 2,
-                  getTitlesWidget: (v, meta) => Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(_corto(v), style: _estiloEje(context)),
-                  ),
-                ),
-              ),
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 24,
-                  interval: 1,
-                  getTitlesWidget: (v, meta) => _etiquetaX(context, serie, v),
-                ),
-              ),
+      child: Column(
+        children: [
+          // El techo de la escala, arriba a la derecha: dice hasta dónde
+          // llega el dibujo y en qué unidad, sin ocupar ancho.
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${_corto(tope)} pasos',
+              style: _estiloEje(context),
             ),
-            lineTouchData: LineTouchData(
-              // Área de toque generosa: apuntarle a una marca de 8px con el
-              // dedo es imposible.
-              touchSpotThreshold: 26,
-              getTouchedSpotIndicator: (barra, indices) => [
-                for (final _ in indices)
-                  TouchedSpotIndicatorData(
-                    const FlLine(color: AppColors.accent, strokeWidth: 1),
-                    FlDotData(
-                      getDotPainter: (s, p, b, i) => FlDotCirclePainter(
-                        radius: 6,
-                        color: AppColors.accent,
-                        strokeWidth: 2,
-                        strokeColor: AppColors.card,
-                      ),
-                    ),
-                  ),
-              ],
-              touchTooltipData: LineTouchTooltipData(
-                getTooltipColor: (_) => AppColors.textPrimary,
-                tooltipBorderRadius: BorderRadius.circular(8),
-                getTooltipItems: (spots) => [
-                  for (final s in spots)
-                    LineTooltipItem(
-                      '${_milesGrafica(s.y.round())} pasos\n'
-                      '${serie[s.x.round()].puntos} pts',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            lineBarsData: [
-              LineChartBarData(
-                spots: [
-                  for (var i = 0; i < serie.length; i++)
-                    if (serie[i].hayDatos)
-                      FlSpot(i.toDouble(), serie[i].pasos * avance),
-                ],
-                isCurved: true,
-                curveSmoothness: 0.22,
-                // 2px, como pide la guía.
-                barWidth: 2,
-                color: AppColors.accent,
-                dotData: FlDotData(
-                  getDotPainter: (s, p, b, i) => FlDotCirclePainter(
-                    radius: 4,
-                    color: AppColors.accent,
-                    strokeWidth: 0,
-                    strokeColor: Colors.transparent,
-                  ),
-                ),
-                belowBarData: BarAreaData(
-                  show: true,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.accent.withValues(alpha: 0.18),
-                      AppColors.accent.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ),
-          // Mientras crece manda el avance, no fl_chart: su animación de
-          // cambio interpolaría entre dos cuadros que YA son parte de la
-          // interpolación de arriba, y la línea llegaría tarde y con
-          // rebote. Fuera del crecimiento vuelve a estar prendida, que es
-          // la que le da la transición al cambiar de período.
-          duration: animando
-              ? Duration.zero
-              : const Duration(milliseconds: 320),
-          curve: Curves.easeOutCubic,
-        ),
+          const SizedBox(height: 2),
+          Expanded(
+            child: CrecerAlRefrescar(
+              crecerAlMontar: crecerAlMontar,
+              duracionAlMontar: duracionCambioDePeriodo,
+              builder: (context, avance, animando) => LineChart(
+                LineChartData(
+                  minY: 0,
+                  maxY: tope,
+                  // El rango va un poco más allá del primer y del
+                  // último punto: es lo que los despega de los bordes
+                  // (ver [_aireEjeX]).
+                  minX: -_aireEjeX,
+                  maxX: (serie.length - 1) + _aireEjeX,
+                  // Candado: la línea no puede salirse de su caja por
+                  // arriba ni por abajo. Es lo que dejó a la gráfica
+                  // pintando encima de la tarjeta de puntos cuando un
+                  // valor quedaba fuera de escala a mitad de una
+                  // animación. Arriba y abajo nada más: recortar a los
+                  // costados cortaría por la mitad a los puntos de las
+                  // puntas.
+                  clipData: const FlClipData.vertical(),
+                  // Sin grilla: no hay números al costado a los que
+                  // llevar la vista, así que serían rayas por decorar.
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(),
+                    // Nada a los costados: el ancho del dibujo tiene que
+                    // ser el mismo que el de las barras de abajo, o los
+                    // dos ejes de días no coinciden.
+                    leftTitles: const AxisTitles(),
+                    rightTitles: const AxisTitles(),
+                    bottomTitles: AxisTitles(
+                      axisNameSize: 16,
+                      axisNameWidget: _nombreDeEje(context, nombreEjeX),
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 22,
+                        interval: 1,
+                        getTitlesWidget: (v, meta) =>
+                            _etiquetaX(context, serie, v),
+                      ),
+                    ),
+                  ),
+                  lineTouchData: LineTouchData(
+                    // Área de toque generosa: apuntarle a una marca de
+                    // 8px con el dedo es imposible.
+                    touchSpotThreshold: 26,
+                    getTouchedSpotIndicator: (barra, indices) => [
+                      for (final _ in indices)
+                        TouchedSpotIndicatorData(
+                          const FlLine(
+                            color: AppColors.accent,
+                            strokeWidth: 1,
+                          ),
+                          FlDotData(
+                            getDotPainter: (s, p, b, i) => FlDotCirclePainter(
+                              radius: 6,
+                              color: AppColors.accent,
+                              strokeWidth: 2,
+                              strokeColor: AppColors.card,
+                            ),
+                          ),
+                        ),
+                    ],
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (_) => AppColors.textPrimary,
+                      tooltipBorderRadius: BorderRadius.circular(8),
+                      getTooltipItems: (spots) => [
+                        for (final s in spots)
+                          LineTooltipItem(
+                            '${_milesGrafica(s.y.round())} pasos\n'
+                            '${serie[s.x.round()].puntos} pts',
+                            const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: [
+                        for (var i = 0; i < serie.length; i++)
+                          if (serie[i].hayDatos)
+                            FlSpot(i.toDouble(), serie[i].pasos * avance),
+                      ],
+                      isCurved: true,
+                      curveSmoothness: 0.22,
+                      // 2px, como pide la guía.
+                      barWidth: 2,
+                      color: AppColors.accent,
+                      dotData: FlDotData(
+                        getDotPainter: (s, p, b, i) => FlDotCirclePainter(
+                          radius: 4,
+                          color: AppColors.accent,
+                          strokeWidth: 0,
+                          strokeColor: Colors.transparent,
+                        ),
+                      ),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.accent.withValues(alpha: 0.18),
+                            AppColors.accent.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Mientras crece manda el avance, no fl_chart: su
+                // animación de cambio interpolaría entre dos cuadros que
+                // YA son parte de la interpolación de arriba, y la línea
+                // llegaría tarde y con rebote. Fuera del crecimiento
+                // vuelve a estar prendida, para los refrescos: ahí la
+                // serie tiene la misma forma con otros valores, que es lo
+                // único que tiene sentido interpolar. El cambio de
+                // período NO pasa por acá — lo resuelve
+                // `_CambioDePeriodo` reemplazando la gráfica entera.
+                duration: animando
+                    ? Duration.zero
+                    : const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -706,18 +970,45 @@ class GraficaLineaPasos extends StatelessWidget {
 
 /// Barras de puntos del período.
 ///
-/// Las de contexto en gris y solo la actual en naranja. El color NO se
-/// reasigna al cambiar de período: cada cosa conserva el suyo siempre.
+/// Las de contexto en azul lavado y solo la del tramo en curso en azul
+/// de marca. El color NO se reasigna al cambiar de período: cada cosa
+/// conserva el suyo siempre.
+///
+/// SIN EJE Y y SIN NADA a los costados: cada barra lleva su número
+/// exacto encima, y la fila de números ocupa exactamente el mismo ancho
+/// que la gráfica. El eje decía "140 / 70 / 0" al lado de unas barras
+/// que ya tenían escrito su valor arriba: tres números de más para leer
+/// el mismo dato con menos precisión.
+///
+/// POR QUÉ NO QUEDA NINGÚN HUECO A LA IZQUIERDA. Quedó uno de 34 px
+/// —el que ocupaba el eje— y con él la fila de números salió corrida
+/// media columna respecto de sus barras: el "50" del lunes caía sobre el
+/// martes. `fl_chart` solo reserva el lado cuando de verdad dibuja algo
+/// ahí, así que la única forma de que las dos filas coincidan es que
+/// ninguna de las dos reserve nada. Qué son esos números lo dice el
+/// título de la gráfica ("Puntos por día"), no un rótulo suelto.
+///
+/// Esto vale mientras las barras sean pocas —siete días, cinco o seis
+/// semanas—, que es lo único que dibuja esta gráfica: el año no tiene
+/// barras, tiene mapa de calor.
 class GraficaBarrasPuntos extends StatelessWidget {
-  const GraficaBarrasPuntos({super.key, required this.serie});
+  const GraficaBarrasPuntos({
+    super.key,
+    required this.serie,
+    required this.nombreEjeX,
+    this.crecerAlMontar = false,
+  });
 
   final List<PuntoPeriodo> serie;
 
-  static const double alto = 180;
+  /// Qué son las marcas de abajo: "días", "semanas del mes", "meses".
+  final String nombreEjeX;
 
-  /// Mismo valor que el `reservedSize` del eje Y. Se comparte para que la
-  /// fila de números de arriba caiga sobre las barras.
-  static const double _anchoEjeY = 34;
+  /// True cuando estas barras entran por un cambio de período: suben
+  /// desde la base en vez de aparecer dibujadas.
+  final bool crecerAlMontar;
+
+  static const double alto = 180;
 
   @override
   Widget build(BuildContext context) {
@@ -725,7 +1016,7 @@ class GraficaBarrasPuntos extends StatelessWidget {
         .map((p) => p.puntos)
         .fold(0, (a, b) => a > b ? a : b)
         .toDouble();
-    final tope = maximo <= 0 ? 100.0 : maximo * 1.12;
+    final tope = techoLindo(maximo);
     final actual = serie.lastIndexWhere((p) => p.hayDatos);
 
     return SizedBox(
@@ -736,66 +1027,68 @@ class GraficaBarrasPuntos extends StatelessWidget {
           // normal, nunca del color de la serie, y solo la actual va en
           // negrita.
           //
-          // El padding izquierdo es el mismo `reservedSize` del eje, para
-          // que cada número caiga sobre su barra.
-          Padding(
-            padding: const EdgeInsets.only(left: _anchoEjeY),
-            child: Row(
-              children: [
-                // Un Expanded por barra, con el número centrado.
-                //
-                // Antes esto era `spaceAround` con los textos sueltos, y
-                // los días sin datos son cadenas vacías de ancho cero: al
-                // repartir el espacio sobrante entre elementos de ancho
-                // distinto, los números se corrían de sus barras. Con
-                // Expanded cada uno ocupa exactamente la misma franja que
-                // su barra, que es como las reparte fl_chart.
-                for (var i = 0; i < serie.length; i++)
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        serie[i].hayDatos ? '${serie[i].puntos}' : '',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: i == actual
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                          fontWeight: i == actual
-                              ? FontWeight.w800
-                              : FontWeight.w500,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+          // A la izquierda, en la franja que ocuparía el eje, la unidad:
+          // dicha una vez alcanza para nombrar toda la fila, y así no
+          // hace falta escribir "pts" en cada barra.
+          Row(
+            children: [
+              // Un Expanded por barra, con el número centrado.
+              //
+              // Antes esto era `spaceAround` con los textos sueltos, y
+              // los días sin datos son cadenas vacías de ancho cero: al
+              // repartir el espacio sobrante entre elementos de ancho
+              // distinto, los números se corrían de sus barras. Con
+              // Expanded cada uno ocupa exactamente la misma franja que
+              // su barra, que es como las reparte fl_chart.
+              for (var i = 0; i < serie.length; i++)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      serie[i].hayDatos ? '${serie[i].puntos}' : '',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: i == actual
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                        fontWeight: i == actual
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Expanded(
             child: CrecerAlRefrescar(
+              crecerAlMontar: crecerAlMontar,
+              duracionAlMontar: duracionCambioDePeriodo,
               builder: (context, avance, animando) => BarChart(
                 BarChartData(
                   minY: 0,
                   maxY: tope,
-                  gridData: _grilla(tope / 2),
+                  // Sin grilla, igual que la línea: cada barra ya tiene
+                  // su número arriba, así que una raya a media altura no
+                  // ayuda a leer nada.
+                  gridData: const FlGridData(show: false),
                   borderData: FlBorderData(show: false),
                   alignment: BarChartAlignment.spaceAround,
                   titlesData: FlTitlesData(
                     topTitles: const AxisTitles(),
                     rightTitles: const AxisTitles(),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 34,
-                        interval: tope / 2,
-                        getTitlesWidget: (v, meta) =>
-                            Text(_corto(v), style: _estiloEje(context)),
-                      ),
-                    ),
+                    // Sin eje Y y sin hueco reservado: cada barra ya
+                    // tiene su número exacto arriba, y la fila de esos
+                    // números tampoco reserva nada, así que las dos
+                    // reparten el mismo ancho y cada número cae sobre su
+                    // barra.
+                    leftTitles: const AxisTitles(),
                     bottomTitles: AxisTitles(
+                      axisNameSize: 16,
+                      axisNameWidget: _nombreDeEje(context, nombreEjeX),
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 24,
+                        reservedSize: 22,
                         getTitlesWidget: (v, meta) =>
                             _etiquetaX(context, serie, v),
                       ),
@@ -842,7 +1135,8 @@ class GraficaBarrasPuntos extends StatelessWidget {
                 ),
                 // Igual que en la línea: mientras crecen las barras manda
                 // el avance, y la animación de cambio de fl_chart queda
-                // para el cambio de período.
+                // para los refrescos. El cambio de período reemplaza la
+                // gráfica entera (ver `_CambioDePeriodo`).
                 duration: animando
                     ? Duration.zero
                     : const Duration(milliseconds: 320),
