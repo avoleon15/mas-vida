@@ -14,7 +14,7 @@ class Ledger(models.Model):
     )
 
     puntos_intensidad = models.PositiveIntegerField(
-        null=True
+        null=True,
         blank=TimeoutError
     )
 
