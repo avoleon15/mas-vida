@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
 
     "rest_framework",
+    "corsheaders",
      "Apps.coins", "Apps.goals", "Apps.policies","Apps.rewards","Apps.activities","Apps.poincs",'Apps.users.apps.UsersConfig'
 ]
 
@@ -50,6 +51,9 @@ REST_FRAMEWORK = {
 }
 
 MIDDLEWARE = [
+    # Tiene que ir antes de CommonMiddleware para poder contestar el
+    # preflight OPTIONS que manda el navegador.
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -57,6 +61,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+# Deja que la app de Flutter corriendo en Chrome (flutter run -d chrome)
+# llame a la API. Solo localhost, en cualquier puerto: Flutter web elige
+# uno distinto cada vez. La app de iOS no pasa por CORS.
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
 ]
 
 ROOT_URLCONF = 'config.urls'
