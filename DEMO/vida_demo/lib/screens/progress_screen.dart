@@ -36,7 +36,7 @@ import '../widgets/tarjeta_puntos.dart';
 // Y con ellas se fue la racha (21 de septiembre de 2026), que se ve en
 // Hoy y en Social. Lo que queda es UNA idea por pantalla: cuánto hiciste
 // en el período que elegiste. Todo lo que hay debajo del selector —el
-// número, las dos gráficas y tu actividad— cambia cuando cambia el
+// número, la gráfica de pasos y tu actividad— cambia cuando cambia el
 // filtro. Nada más se queda quieto ahí ocupando lugar.
 // ============================================================
 
@@ -128,9 +128,21 @@ class _ProgressScreenState extends State<ProgressScreen> {
                               dias: switch (_periodo) {
                                 Periodo.semana =>
                                   Datos.i.historial.semanaEnCurso,
-                                Periodo.mes => Datos.i.historial.mesEnCurso,
+                                // NO es el mes calendario: son los días
+                                // de las semanas del mes (las que tienen
+                                // su lunes adentro), para que esta lista
+                                // cuente y numere las mismas semanas que
+                                // la gráfica de arriba.
+                                Periodo.mes =>
+                                  Datos.i.historial.diasDeLasSemanasDelMes,
                                 Periodo.anio => Datos.i.historial.anioEnCurso,
                               },
+                              // Los meses salen del resumen anual y no
+                              // de los días: lo que la app guarda día
+                              // por día son las últimas semanas, así que
+                              // contando esos días el año empezaría en
+                              // julio.
+                              puntosPorMes: Datos.i.resumen.actividadPorMes,
                             ),
                             const SizedBox(height: 16),
                           ],

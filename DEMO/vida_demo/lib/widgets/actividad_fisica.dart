@@ -27,8 +27,8 @@ class RitmoCardiacoHoy extends StatelessWidget {
         Text(
           'Ritmo cardíaco de hoy',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
+            color: AppColors.accent,
+            fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: AppSpacing.dentro),
@@ -59,53 +59,57 @@ class RitmoCardiacoHoy extends StatelessWidget {
 // ============================================================
 // TU ACTIVIDAD: lo que hiciste en el período que se está mirando.
 //
-// Reemplaza a "Entrenamientos de los últimos 7 días", que era una lista
-// de texto fija a la semana: existía igual en Mes y en Año pero seguía
-// contando siete días, así que cambiar el filtro no cambiaba nada abajo.
+// CADA FILTRO MUESTRA OTRA COSA (revisión de Daniel, 21 de septiembre
+// de 2026). No alcanza con cambiar los números: mirar "mi actividad" de
+// una semana y de un año son dos preguntas distintas, y la lista de
+// entrenamientos uno por uno —que es la respuesta de la semana— en un
+// año sería un rollo de cien filas que nadie lee.
 //
-// Dos cosas y en este orden:
+//   SEMANA → cada ENTRENAMIENTO, con los puntos que pagó. Es el único
+//            tramo donde una sesión suelta todavía se recuerda.
+//   MES    → cada SEMANA del mes, con sus pasos y sus puntos. La semana
+//            es la unidad en la que se mueve el rango, así que es la
+//            que dice si el mes viene bien o mal.
+//   AÑO    → cada MES, con sus puntos. Es lo que construye el nivel de
+//            cashback, que se define por los puntos del año.
 //
-//   1. TRES CIFRAS del período, y CADA FILTRO TIENE LAS SUYAS. Las
-//      mismas tres en los tres tramos serían tres veces la misma
-//      pantalla: lo que se quiere saber de una semana (si esta semana
-//      voy bien) no es lo que se quiere saber de un año (si mantuve el
-//      ritmo). La primera cifra sí se repite —los pasos del tramo—,
-//      porque es el ancla que dice de qué tamaño es el período.
-//   2. Los ENTRENAMIENTOS, cada uno con los puntos que pagó.
+// Arriba de la lista, siempre, DOS CIFRAS del tramo, y también cambian.
 //
 // LO QUE NO VA ACÁ:
 //
 //   · El total de PUNTOS del período: ya está arriba, en grande, en la
-//     tarjeta de Puntos. Lo que sí faltaba era de dónde sale cada uno, y
-//     eso lo dice cada entrenamiento con su chip.
-//   · EL MEJOR DÍA (lo sacó Daniel el 21 de septiembre de 2026). Estaba
-//     al lado del total y no llevaba a ninguna parte: enterarse de que
-//     el mejor día fueron 12.400 pasos no dice qué hacer hoy, y en un
-//     tramo largo es un récord viejo que solo se puede empeorar.
+//     tarjeta de Puntos totales. Acá va repartido, que es lo que el
+//     total no puede decir.
+//   · EL MEJOR DÍA (lo sacó Daniel). Estaba al lado del total y no
+//     llevaba a ninguna parte: enterarse de que el mejor día fueron
+//     12.400 pasos no dice qué hacer hoy, y en un tramo largo es un
+//     récord viejo que solo se puede empeorar.
 // ============================================================
 
 /// El período que se está mirando. Lo manda la pantalla de Progreso, que
 /// es la dueña del selector.
 enum TramoActividad {
-  semana('esta semana', 'Esta semana no registraste entrenamientos.'),
-  mes('este mes', 'Este mes todavía no registraste entrenamientos.'),
-  anio('este año', 'Este año todavía no registraste entrenamientos.');
+  semana('esta semana', 'Esta semana todavía no hay entrenamientos.'),
+  mes('este mes', 'Este mes todavía no hay semanas con actividad.'),
+  anio('este año', 'Este año todavía no hay meses con actividad.');
 
   const TramoActividad(this.cuando, this.vacio);
 
   /// Cómo se nombra el tramo dentro de una frase: "pasos esta semana".
   final String cuando;
 
-  /// Qué se dice cuando no hubo ni un entrenamiento.
+  /// Qué se dice cuando no hay ni una fila que mostrar.
   final String vacio;
 }
 
-/// La actividad del período: pasos, mejor día y entrenamientos.
+/// La actividad del período: dos cifras y el detalle que le toca al
+/// tramo.
 class ActividadDelPeriodo extends StatelessWidget {
   const ActividadDelPeriodo({
     super.key,
     required this.dias,
     required this.tramo,
+    this.puntosPorMes = const [],
   });
 
   /// Los días del período, en orden. Los recorta la pantalla usando los
@@ -115,16 +119,23 @@ class ActividadDelPeriodo extends StatelessWidget {
 
   final TramoActividad tramo;
 
+  /// Puntos de cada mes del año, de enero a diciembre.
+  ///
+  /// Solo se usa en el tramo AÑO, y sale del resumen anual y no de
+  /// [dias] porque lo que la app guarda día por día son las últimas
+  /// semanas: contando esos días, el año empezaría en julio.
+  final List<int> puntosPorMes;
+
   static const _meses = [
     'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', //
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
   ];
 
-  /// Cuántos entrenamientos se listan como mucho.
+  /// Cuántas filas se listan como mucho.
   ///
-  /// En Año podrían ser cien: la sección quedaría más larga que el resto
-  /// de la pantalla junta. Se muestran los últimos y se dice cuántos
-  /// hubo en total, que es lo que hace que el corte no parezca un error.
+  /// La sección no puede quedar más larga que el resto de la pantalla
+  /// junta. Se muestran las últimas y se dice cuántas quedaron afuera,
+  /// que es lo que hace que el corte no parezca un error.
   static const _tope = 6;
 
   /// Los días con sesión, del más reciente al más viejo.
@@ -149,28 +160,35 @@ class ActividadDelPeriodo extends StatelessWidget {
   int get _promedioDiario =>
       _diasConDato == 0 ? 0 : (_pasos / _diasConDato).round();
 
-  /// Promedio de pasos por mes empezado. En Año, un total de seis
-  /// dígitos no dice nada solo; el promedio mensual sí se compara contra
-  /// el mes que uno tiene en la cabeza.
+  /// Cuántos meses del año llevan actividad.
+  int get _mesesConActividad => puntosPorMes.where((p) => p > 0).length;
+
+  /// El mes que se está mirando, tomado del ÚLTIMO día con dato.
+  ///
+  /// Del dato y no del reloj del teléfono: el mes que la pantalla está
+  /// mostrando es el de los días que le llegaron, y cambiar la fecha del
+  /// iPhone no puede cambiarle el denominador a una cifra.
+  DateTime get _mesMirado => dias.isEmpty ? DateTime.now() : dias.last.fecha;
+
+  /// Cuántos días tiene ese mes.
+  ///
+  /// Se calcula, nunca se escribe: septiembre tiene 30, octubre 31 y
+  /// febrero 28 o 29. El día CERO del mes siguiente es el último del
+  /// actual, que es la forma de preguntarlo sin tabla ni año bisiesto
+  /// escrito a mano.
+  int get _diasDelMes => DateTime(_mesMirado.year, _mesMirado.month + 1, 0).day;
+
+  /// Promedio de puntos por mes con actividad.
+  ///
+  /// El total de puntos del año ya está arriba; lo que no estaba en
+  /// ningún lado es a qué ritmo mensual se está yendo.
   int get _promedioMensual {
-    final meses = dias.map((d) => '${d.fecha.year}-${d.fecha.month}').toSet();
-    if (meses.isEmpty) return 0;
-    return (_pasos / meses.length).round();
+    final meses = _mesesConActividad;
+    if (meses == 0) return 0;
+    return (puntosPorMes.fold(0, (t, p) => t + p) / meses).round();
   }
 
   /// Las DOS cifras de este tramo.
-  ///
-  /// Dos y no tres (poda de Daniel, 21 de septiembre de 2026). Eran tres
-  /// y la tercera nunca llevaba a ninguna parte: "3 de 3 días que
-  /// sumaron puntos" en una semana que va por el miércoles se lee como
-  /// un pleno que en realidad todavía no existe, y contar los
-  /// entrenamientos del año arriba de la lista que los muestra es
-  /// contarlos dos veces.
-  ///
-  /// La primera es la misma en los tres —los pasos del período, el ancla
-  /// que dice de qué tamaño es el tramo— y la segunda cambia: en una
-  /// semana importa el ritmo del día a día, en un mes cuántos días se
-  /// movió, y en un año si sostuvo el ritmo mes a mes.
   List<({String valor, String etiqueta})> get _cifras => switch (tramo) {
     TramoActividad.semana => [
       (valor: _milesPasos(_pasos), etiqueta: 'pasos esta semana'),
@@ -179,15 +197,81 @@ class ActividadDelPeriodo extends StatelessWidget {
     TramoActividad.mes => [
       (valor: _milesPasos(_pasos), etiqueta: 'pasos este mes'),
       (
-        valor: '$_diasConPuntos',
-        etiqueta: _diasConPuntos == 1 ? 'día activo' : 'días activos',
+        // "20 de 30" y no "20" solo. Un número suelto no tiene contra
+        // qué medirse: veinte días activos son casi el mes entero o dos
+        // tercios de él según cuánto dure, y eso es lo que el usuario
+        // quiere saber. El mes se NOMBRA para que quede claro que la
+        // cuenta arranca de cero el 1: el mes que viene son días nuevos
+        // y un denominador nuevo.
+        valor: '$_diasConPuntos de $_diasDelMes',
+        etiqueta: 'días activos de ${_meses[_mesMirado.month - 1]}',
       ),
     ],
     TramoActividad.anio => [
-      (valor: _milesPasos(_pasos), etiqueta: 'pasos este año'),
-      (valor: _milesPasos(_promedioMensual), etiqueta: 'promedio por mes'),
+      (valor: '$_mesesConActividad', etiqueta: 'meses con actividad'),
+      (
+        // "promedio de" con todas las letras: "puntos por mes" al lado
+        // de un 1.405 se leía como si cada mes hubiera pagado eso, y lo
+        // que dice es a qué ritmo mensual viene el año.
+        valor: _milesPasos(_promedioMensual),
+        etiqueta: 'promedio de puntos por mes',
+      ),
     ],
   };
+
+  /// Las semanas del mes, de la más reciente a la más vieja.
+  ///
+  /// Se agrupa por el LUNES de cada día, igual que la gráfica de arriba,
+  /// así que las dos cuentan las mismas semanas y las numeran igual.
+  List<_Tramo> get _semanasDelMes {
+    final porSemana = <DateTime, List<DiaActividad>>{};
+    for (final d in dias) {
+      final lunes = DateTime(
+        d.fecha.year,
+        d.fecha.month,
+        d.fecha.day,
+      ).subtract(Duration(days: d.fecha.weekday - 1));
+      porSemana.putIfAbsent(lunes, () => []).add(d);
+    }
+
+    final lunes = porSemana.keys.toList()..sort();
+    final tramos = <_Tramo>[];
+    for (var i = lunes.length - 1; i >= 0; i--) {
+      final deLaSemana = porSemana[lunes[i]]!;
+      final pasos = deLaSemana.fold(0, (t, d) => t + (d.pasos ?? 0));
+      final activos = deLaSemana.where((d) => d.puntosDia > 0).length;
+      tramos.add(
+        _Tramo(
+          marca: '${i + 1}',
+          titulo: 'Semana ${i + 1}',
+          detalle: activos == 0
+              ? '${_milesPasos(pasos)} pasos'
+              : '${_milesPasos(pasos)} pasos · $activos '
+                    '${activos == 1 ? 'día activo' : 'días activos'}',
+          puntos: deLaSemana.fold(0, (t, d) => t + d.puntosDia),
+        ),
+      );
+    }
+    return tramos;
+  }
+
+  /// Los meses del año con actividad, del más reciente al más viejo.
+  List<_Tramo> get _mesesDelAnio => [
+    for (var i = puntosPorMes.length - 1; i >= 0; i--)
+      if (puntosPorMes[i] > 0)
+        _Tramo(
+          // La inicial en el medallón y el nombre al lado: la misma
+          // palabra en dos tamaños, que es lo que deja recorrer la
+          // lista sin leerla entera.
+          marca: _enMayuscula(_meses[i]).substring(0, 1),
+          titulo: _enMayuscula(_meses[i]),
+          detalle: '',
+          puntos: puntosPorMes[i],
+        ),
+  ];
+
+  static String _enMayuscula(String palabra) =>
+      palabra[0].toUpperCase() + palabra.substring(1);
 
   static String _fechaCorta(DateTime f) => '${f.day} de ${_meses[f.month - 1]}';
 
@@ -217,29 +301,67 @@ class ActividadDelPeriodo extends StatelessWidget {
     _ => Icons.favorite_rounded,
   };
 
+  /// Las filas del tramo, ya recortadas, y cuántas quedaron afuera.
+  (List<Widget>, int) get _filas {
+    switch (tramo) {
+      case TramoActividad.semana:
+        final todas = _conSesion;
+        final visibles = todas.take(_tope).toList();
+        return (
+          [
+            for (final d in visibles)
+              _Entrenamiento(
+                icono: _icono(d.sesion!.tipoActividad),
+                titulo: _tipo(d.sesion!.tipoActividad),
+                cuando: _fechaCorta(d.fecha),
+                sesion: d.sesion!,
+              ),
+          ],
+          todas.length - visibles.length,
+        );
+
+      case TramoActividad.mes:
+        final todas = _semanasDelMes;
+        final visibles = todas.take(_tope).toList();
+        return (
+          [for (final t in visibles) _FilaTramo(tramo: t)],
+          todas.length - visibles.length,
+        );
+
+      case TramoActividad.anio:
+        final todas = _mesesDelAnio;
+        final visibles = todas.take(_tope).toList();
+        return (
+          [for (final t in visibles) _FilaTramo(tramo: t)],
+          todas.length - visibles.length,
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final conSesion = _conSesion;
-    final mostrados = conSesion.take(_tope).toList();
     final cifras = _cifras;
+    final (filas, afuera) = _filas;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // En azul de marca, como los títulos de las gráficas: sin la
+        // tarjeta que agrupaba la sección, el título es lo único que
+        // dice dónde empieza.
         Text(
           'Tu actividad',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
+            color: AppColors.accent,
+            fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: AppSpacing.dentro),
         _Tarjeta(
           children: [
-            // Las dos cifras del período, lado a lado. La primera es el
-            // total de pasos y va en azul de marca; la segunda, en
-            // apoyo: es lo que EXPLICA ese total, no otro total con el
-            // que competir.
+            // Las dos cifras del período, lado a lado. La primera va en
+            // azul de marca; la segunda, en apoyo: es lo que EXPLICA ese
+            // total, no otro total con el que competir.
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -255,7 +377,7 @@ class ActividadDelPeriodo extends StatelessWidget {
                 ],
               ],
             ),
-            if (mostrados.isEmpty) ...[
+            if (filas.isEmpty) ...[
               const _Separador(),
               Text(
                 tramo.vacio,
@@ -264,24 +386,16 @@ class ActividadDelPeriodo extends StatelessWidget {
                 ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
               ),
             ] else
-              for (var i = 0; i < mostrados.length; i++) ...[
-                const _Separador(),
-                _Entrenamiento(
-                  icono: _icono(mostrados[i].sesion!.tipoActividad),
-                  titulo: _tipo(mostrados[i].sesion!.tipoActividad),
-                  cuando: _fechaCorta(mostrados[i].fecha),
-                  sesion: mostrados[i].sesion!,
-                ),
-              ],
-            // Cuántos quedaron afuera. Sin esto, el corte en seis se lee
+              for (final fila in filas) ...[const _Separador(), fila],
+            // Cuántas quedaron afuera. Sin esto, el corte en seis se lee
             // como que no hubo más.
-            if (conSesion.length > mostrados.length) ...[
+            if (afuera > 0) ...[
               const SizedBox(height: 14),
               Text(
-                'Y ${conSesion.length - mostrados.length} más ${tramo.cuando}.',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+                'Y $afuera más ${tramo.cuando}.',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ],
@@ -289,6 +403,106 @@ class ActividadDelPeriodo extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Una fila que no es un entrenamiento: una semana del mes o un mes del
+/// año.
+class _Tramo {
+  const _Tramo({
+    required this.marca,
+    required this.titulo,
+    required this.detalle,
+    required this.puntos,
+  });
+
+  /// Lo que va adentro del medallón: el número de la semana o la inicial
+  /// del mes.
+  final String marca;
+
+  final String titulo;
+
+  /// Vacío cuando no hay nada que agregar, y entonces no se dibuja ese
+  /// renglón: mejor una fila de una línea que una con un hueco.
+  final String detalle;
+
+  final int puntos;
+}
+
+/// Una semana del mes o un mes del año, con lo que pagó.
+///
+/// Misma forma que la fila de un entrenamiento —medallón, título,
+/// detalle, chip— para que las tres vistas de "Tu actividad" se sientan
+/// la misma sección y no tres pantallas distintas. Lo que cambia es qué
+/// va adentro del medallón: un ícono para un entrenamiento, un número o
+/// una letra para un tramo de tiempo.
+class _FilaTramo extends StatelessWidget {
+  const _FilaTramo({required this.tramo});
+
+  final _Tramo tramo;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      _Medallon(
+        child: Text(
+          tramo.marca,
+          style: AppTheme.display(
+            17,
+          ).copyWith(color: AppColors.accent, height: 1),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              tramo.titulo,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+              ),
+            ),
+            if (tramo.detalle.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                tramo.detalle,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+            ],
+          ],
+        ),
+      ),
+      const SizedBox(width: 10),
+      _ChipPuntos(puntos: tramo.puntos),
+    ],
+  );
+}
+
+/// El círculo pálido que abre cada fila.
+class _Medallon extends StatelessWidget {
+  const _Medallon({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 40,
+    height: 40,
+    alignment: Alignment.center,
+    // azulBruma y no azulNiebla: desde que la sección dejó de vivir en
+    // una tarjeta blanca, el medallón se apoya sobre el fondo de la
+    // pantalla, y contra ese fondo el tono más pálido no se veía.
+    decoration: const BoxDecoration(
+      color: AppColors.azulBruma,
+      shape: BoxShape.circle,
+    ),
+    child: child,
+  );
 }
 
 /// Miles con coma, delegando en el formateador único de la app.
@@ -383,16 +597,7 @@ class _Entrenamiento extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: AppColors.azulNiebla,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icono, size: 21, color: AppColors.accent),
-        ),
+        _Medallon(child: Icon(icono, size: 21, color: AppColors.accent)),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -438,8 +643,11 @@ class _ChipPuntos extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: suma ? AppColors.azulBruma : AppColors.background,
-        borderRadius: BorderRadius.circular(999),
+        // El apagado va en cardBorder: `background` es EL FONDO DE LA
+        // PANTALLA, así que desde que la lista no está sobre una tarjeta
+        // blanca, un chip de ese color era un chip invisible.
+        color: suma ? AppColors.azulBruma : AppColors.cardBorder,
+        borderRadius: BorderRadius.circular(AppRadios.pildora),
       ),
       child: Text(
         // Sin puntos NO se escribe "+0 pts": un cero con signo de más se
@@ -461,20 +669,26 @@ class _ChipPuntos extends StatelessWidget {
 // Piezas compartidas
 // ============================================================
 
+/// El contenedor de una lista: NO es una tarjeta.
+///
+/// Era una caja blanca con borde, idéntica a las otras dos de Progreso
+/// (decisión de Daniel, 21 de septiembre de 2026). Una lista de
+/// entrenamientos, de semanas o de lecturas del reloj es una LISTA, y en
+/// iOS una lista se separa con una línea de un pelo y aire, no metiendo
+/// todo adentro de una caja con contorno.
+///
+/// Lo que queda es el contenido apoyado sobre el fondo de la pantalla,
+/// alineado con el título de arriba y con el resto de los bloques. Sin
+/// el padding de 20 px, además, las filas arrancan en el mismo margen
+/// que todo lo demás.
 class _Tarjeta extends StatelessWidget {
   const _Tarjeta({required this.children});
 
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => SizedBox(
     width: double.infinity,
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: AppColors.card,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.cardBorder),
-    ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
@@ -510,12 +724,17 @@ class _Fila extends StatelessWidget {
   );
 }
 
+/// La línea de un pelo que separa dos filas.
+///
+/// Medio píxel, en el azul de los bordes diluido: es lo que reemplaza al
+/// borde de la tarjeta. Una línea que se nota se lee como una división;
+/// una que apenas se insinúa solo ordena, que es lo que hace falta acá.
 class _Separador extends StatelessWidget {
   const _Separador();
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 12),
-    child: Divider(height: 1, color: AppColors.cardBorder),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    child: Divider(height: 0.5, thickness: 0.5, color: AppColors.separador),
   );
 }

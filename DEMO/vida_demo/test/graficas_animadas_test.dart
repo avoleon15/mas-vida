@@ -7,7 +7,7 @@ import 'package:vida_demo/widgets/numero_animado.dart';
 import 'package:vida_demo/widgets/tarjeta_puntos.dart';
 
 // ============================================================
-// LAS GRÁFICAS DE PROGRESO CRECEN CON LA TANDA DE DATOS.
+// LA GRÁFICA DE PROGRESO CRECE CON LA TANDA DE DATOS.
 //
 // Es la misma regla que la de los números: la animación pertenece a la
 // TANDA DE DATOS, no al widget. Se reproduce al abrir la app y en cada
@@ -39,7 +39,6 @@ Widget _pantalla({bool animaciones = true}) => MaterialApp(
             body: Column(
               children: const [
                 GraficaLineaPasos(serie: _serie, nombreEjeX: 'días'),
-                GraficaBarrasPuntos(serie: _serie, nombreEjeX: 'días'),
               ],
             ),
           ),
@@ -59,28 +58,13 @@ List<double> _alturasLinea(WidgetTester t) => t
     .map((s) => s.y)
     .toList();
 
-/// El alto de cada barra en el cuadro que se está viendo.
-List<double> _alturasBarras(WidgetTester t) => t
-    .widget<BarChart>(find.byType(BarChart))
-    .data
-    .barGroups
-    .map((g) => g.barRods.first.toY)
-    .toList();
-
 void main() {
   setUp(reiniciarCompuertaAnimacion);
 
-  testWidgets('al abrir la app las dos gráficas crecen desde la base', (
-    t,
-  ) async {
+  testWidgets('al abrir la app la gráfica crece desde la base', (t) async {
     await t.pumpWidget(_pantalla());
 
     expect(_alturasLinea(t), everyElement(0.0), reason: 'la línea arranca en 0');
-    expect(
-      _alturasBarras(t),
-      everyElement(0.0),
-      reason: 'las barras arrancan en 0',
-    );
 
     await t.pump(const Duration(milliseconds: 400));
     for (final y in _alturasLinea(t)) {
@@ -90,10 +74,9 @@ void main() {
 
     await t.pumpAndSettle();
     expect(_alturasLinea(t), [12000.0, 9000.0, 8000.0]);
-    expect(_alturasBarras(t), [50.0, 125.0, 25.0]);
   });
 
-  testWidgets('refrescar las vuelve a animar, aunque el dato no cambie', (
+  testWidgets('refrescar la vuelve a animar, aunque el dato no cambie', (
     t,
   ) async {
     await t.pumpWidget(_pantalla());
@@ -105,14 +88,12 @@ void main() {
     await t.pump();
 
     expect(_alturasLinea(t), everyElement(0.0));
-    expect(_alturasBarras(t), everyElement(0.0));
 
     await t.pumpAndSettle();
     expect(_alturasLinea(t), [12000.0, 9000.0, 8000.0]);
-    expect(_alturasBarras(t), [50.0, 125.0, 25.0]);
   });
 
-  testWidgets('cambiar de pantalla NO las vuelve a animar', (t) async {
+  testWidgets('cambiar de pantalla NO la vuelve a animar', (t) async {
     await t.pumpWidget(_pantalla());
     await t.pumpAndSettle();
 
@@ -121,9 +102,9 @@ void main() {
     await t.pumpWidget(_pantalla());
 
     expect(
-      _alturasBarras(t),
-      [50.0, 125.0, 25.0],
-      reason: 'al volver a la pantalla las gráficas ya están dibujadas',
+      _alturasLinea(t),
+      [12000.0, 9000.0, 8000.0],
+      reason: 'al volver a la pantalla la gráfica ya está dibujada',
     );
   });
 
@@ -135,13 +116,11 @@ void main() {
     await t.pump();
 
     expect(_alturasLinea(t), [12000.0, 9000.0, 8000.0]);
-    expect(_alturasBarras(t), [50.0, 125.0, 25.0]);
   });
 
-  testWidgets('con animaciones apagadas aparecen ya dibujadas', (t) async {
+  testWidgets('con animaciones apagadas aparece ya dibujada', (t) async {
     await t.pumpWidget(_pantalla(animaciones: false));
     // Un solo pump: es lo que hacen los tests de la app.
     expect(_alturasLinea(t), [12000.0, 9000.0, 8000.0]);
-    expect(_alturasBarras(t), [50.0, 125.0, 25.0]);
   });
 }

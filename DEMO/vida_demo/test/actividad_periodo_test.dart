@@ -65,20 +65,30 @@ void main() {
       expect(find.textContaining('pasos este mes'), findsOneWidget);
       expect(find.textContaining('pasos esta semana'), findsNothing);
 
-      final pasos = historial.mesEnCurso.fold<int>(
+      // NO es el mes calendario: son los días de las SEMANAS del mes
+      // (las que tienen su lunes adentro). Agosto de 2026 arranca
+      // sábado, y el 1 y el 2 se cuentan en la semana de julio.
+      final pasos = historial.diasDeLasSemanasDelMes.fold<int>(
         0,
         (s, d) => s + (d.pasos ?? 0),
       );
       expect(find.text(_miles(pasos)), findsWidgets);
     });
 
-    testWidgets('en Año también está', (t) async {
+    testWidgets('en Año cuenta los meses, no los días', (t) async {
       await montar(t);
       await t.tap(find.text('Año'));
       await t.pump();
 
       expect(find.text('Tu actividad'), findsOneWidget);
-      expect(find.textContaining('pasos este año'), findsOneWidget);
+      // Los meses salen del resumen anual: lo que la app guarda día por
+      // día son las últimas semanas, así que contando esos días el año
+      // empezaría en julio.
+      final conActividad = Datos.i.resumen.actividadPorMes
+          .where((p) => p > 0)
+          .length;
+      expect(find.text('meses con actividad'), findsOneWidget);
+      expect(find.text('$conActividad'), findsWidgets);
     });
 
     testWidgets('el mejor día ya no está', (t) async {
@@ -99,17 +109,48 @@ void main() {
       await t.tap(find.text('Mes'));
       await t.pump();
 
-      // MES: cuántos días se movió. Ver lo mismo en los tres filtros
-      // sería tres veces la misma pantalla.
+      // MES: cuántos días se movió, SOBRE los que tiene el mes. Ver lo
+      // mismo en los tres filtros sería tres veces la misma pantalla.
       expect(find.text('promedio por día'), findsNothing);
-      expect(find.textContaining('días activos'), findsOneWidget);
+      // Exacto y no `textContaining`: cada semana de la lista dice
+      // tambien "X pasos · N dias activos" en su renglon de detalle.
+      expect(find.textContaining('días activos de'), findsOneWidget);
 
       await t.tap(find.text('Año'));
       await t.pump();
 
       // AÑO: si sostuvo el ritmo mes a mes.
       expect(find.textContaining('días activos'), findsNothing);
-      expect(find.text('promedio por mes'), findsOneWidget);
+      // "promedio de" con todas las letras: "puntos por mes" al lado de
+      // un 1.405 se leía como si cada mes hubiera pagado eso.
+      expect(find.text('promedio de puntos por mes'), findsOneWidget);
+      expect(find.text('puntos por mes'), findsNothing);
+    });
+
+    testWidgets('el mes se mide contra los días que tiene ESE mes', (t) async {
+      await montar(t);
+      await t.tap(find.text('Mes'));
+      await t.pump();
+
+      // El denominador se calcula, nunca se escribe: septiembre tiene
+      // 30, octubre 31 y febrero 28 o 29. El mes que viene la cifra
+      // tiene que arrancar de cero y cambiar de denominador sola.
+      final dias = Datos.i.historial.diasDeLasSemanasDelMes;
+      final mes = dias.last.fecha;
+      final cuantos = DateTime(mes.year, mes.month + 1, 0).day;
+      final activos = dias.where((d) => d.puntosDia > 0).length;
+
+      expect(find.text('$activos de $cuantos'), findsOneWidget);
+      // Y se dice de QUÉ mes: un "20 de 30" suelto no deja ver que la
+      // cuenta arranca de cero el día 1.
+      const meses = [
+        'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', //
+        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+      ];
+      expect(
+        find.text('días activos de ${meses[mes.month - 1]}'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('son DOS cifras y ni una más', (t) async {
@@ -139,10 +180,44 @@ void main() {
 
       // No se recalculan los 7.000 pasos acá: se pregunta si el
       // servidor acreditó algo ese día.
-      final activos = historial.mesEnCurso
+      final activos = historial.diasDeLasSemanasDelMes
           .where((d) => d.puntosDia > 0)
           .length;
-      expect(find.text('$activos'), findsWidgets);
+      expect(find.textContaining('$activos de '), findsOneWidget);
+    });
+  });
+
+  group('La lista cambia con el filtro', () {
+    testWidgets('Semana lista entrenamientos', (t) async {
+      await montar(t);
+
+      // Es el único tramo donde una sesión suelta todavía se recuerda.
+      expect(find.text('Correr'), findsWidgets);
+      expect(find.textContaining('Semana 1'), findsNothing);
+    });
+
+    testWidgets('Mes lista las semanas del mes', (t) async {
+      await montar(t);
+      await t.tap(find.text('Mes'));
+      await t.pump();
+
+      // La semana es la unidad en la que se mueve el rango, así que es
+      // la que dice si el mes viene bien o mal.
+      expect(find.text('Semana 1'), findsOneWidget);
+      expect(find.text('Semana 2'), findsOneWidget);
+      // Y ya no la lista de sesiones una por una.
+      expect(find.text('Correr'), findsNothing);
+    });
+
+    testWidgets('Año lista los meses', (t) async {
+      await montar(t);
+      await t.tap(find.text('Año'));
+      await t.pump();
+
+      // Los puntos del año son los que construyen el nivel de cashback.
+      expect(find.text('Agosto'), findsOneWidget);
+      expect(find.text('Correr'), findsNothing);
+      expect(find.textContaining('Semana 1'), findsNothing);
     });
   });
 
@@ -215,16 +290,49 @@ void main() {
       expect(find.textContaining('pasos'), findsWidgets);
     });
 
+    testWidgets('Semana y Mes llevan las dos gráficas', (t) async {
+      // El número grande dice CUÁNTOS puntos, y la gráfica de puntos de
+      // qué días salieron: si la semana fue pareja o fue un solo día
+      // bueno. Son dos lecturas, no la misma dos veces.
+      await montar(t);
+      expect(find.byType(LineChart), findsOneWidget);
+      expect(find.byType(BarChart), findsOneWidget);
+      expect(find.text('Puntos por día'), findsOneWidget);
+
+      await t.tap(find.text('Mes'));
+      await t.pump();
+      expect(find.byType(BarChart), findsOneWidget);
+      expect(find.text('Puntos por semana'), findsOneWidget);
+    });
+
+    testWidgets('el rótulo de la línea es la suma de lo que dibuja', (t) async {
+      // "Pasos acumulados" tiene que cuadrar con los días que la app
+      // tiene cargados, no con un techo redondeado.
+      await montar(t);
+
+      final pasos = historial.semanaEnCurso.fold<int>(
+        0,
+        (s, d) => s + (d.pasos ?? 0),
+      );
+      expect(find.text('${_miles(pasos)} pasos acumulados'), findsOneWidget);
+
+      await t.tap(find.text('Mes'));
+      await t.pump();
+
+      final delMes = historial.diasDeLasSemanasDelMes.fold<int>(
+        0,
+        (s, d) => s + (d.pasos ?? 0),
+      );
+      expect(find.text('${_miles(delMes)} pasos acumulados'), findsOneWidget);
+    });
+
     testWidgets('en Año la gráfica es el mapa de calor y nada más', (t) async {
       await montar(t);
       await t.tap(find.text('Año'));
       await t.pump();
 
-      // Se probaron los puntos mes a mes en columnas y no aportaban:
-      // doce barras casi iguales no dicen nada que el mapa de calor no
-      // diga mejor, y ese muestra el año día por día.
-      expect(find.text('Puntos por mes'), findsNothing);
       expect(find.byType(BarChart), findsNothing);
+      expect(find.byType(LineChart), findsNothing);
       expect(find.byType(CalendarioActividad), findsOneWidget);
     });
   });
@@ -239,5 +347,7 @@ void main() {
   });
 }
 
-String _miles(int v) =>
-    v.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+String _miles(int v) => v.toString().replaceAllMapped(
+  RegExp(r'(\d)(?=(\d{3})+$)'),
+  (m) => '${m[1]},',
+);

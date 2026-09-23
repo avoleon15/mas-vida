@@ -59,22 +59,31 @@ class _CalendarioActividadState extends State<CalendarioActividad> {
       DateTime(d.fecha.year, d.fecha.month, d.fecha.day): d,
   };
 
-  /// El AÑO COMPLETO, del 1 de enero al 31 de diciembre.
+  /// Del 1 de enero HASTA HOY, y ni un día más.
   ///
-  /// Se muestran los doce meses aunque el usuario haya empezado a
-  /// registrar en julio: los meses sin datos quedan con las casillas
-  /// vacías, que ya se distinguen de un día con cero pasos. Antes esto
-  /// arrancaba en el primer día del historial, y la vista de Año empezaba
-  /// en un mes cualquiera.
+  /// EL AÑO QUE FALTA NO SE DIBUJA (decisión de Daniel, 22 de septiembre
+  /// de 2026). Antes la cuadrícula llegaba al 31 de diciembre, así que en
+  /// septiembre había tres meses y medio de casillas vacías a la derecha
+  /// —más de una cuarta parte del dibujo— esperando a existir. Un mapa de
+  /// calor cuenta lo que pasó; el futuro en blanco se lee como huecos sin
+  /// llenar y hace que el año propio se vea a medio hacer. Cada día que
+  /// pasa aparece su casilla y se va llenando, que es como funciona el
+  /// mismo mapa en Claude Code.
+  ///
+  /// Los meses ANTERIORES al primer dato sí se dibujan, vacíos: esos
+  /// días existieron aunque la app no estuviera instalada, y son los que
+  /// le dan al año su forma.
   ///
   /// Arranca en el lunes de la semana que contiene al 1 de enero, para
   /// que las columnas queden alineadas por día de la semana.
   List<DateTime> get _fechas {
     if (widget.dias.isEmpty) return const [];
-    final anio = widget.dias.last.fecha.year;
-    final enero = DateTime(anio, 1, 1);
+    final hoy = widget.dias.last.fecha;
+    final enero = DateTime(hoy.year, 1, 1);
     final inicio = enero.subtract(Duration(days: enero.weekday - 1));
-    final fin = DateTime(anio, 12, 31);
+    // El último día con dato es HOY: la fecha sale del dato y nunca del
+    // reloj del teléfono, que es la misma regla que usa todo lo demás.
+    final fin = DateTime(hoy.year, hoy.month, hoy.day);
     return [
       for (var d = inicio; !d.isAfter(fin); d = d.add(const Duration(days: 1)))
         d,

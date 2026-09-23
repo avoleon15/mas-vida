@@ -221,7 +221,11 @@ void main() {
       // y las ponia sola. Al cambiar a Archivo hubo que escribirlas.
       expect(find.text('PROGRESO'), findsOneWidget);
       expect(find.text('Progreso'), findsOneWidget);
-      expect(find.text('Puntos'), findsOneWidget);
+      // El rotulo de la tarjeta heroe dice DE QUE PERIODO es el numero,
+      // y bajo debajo de el. Antes decia "Puntos totales" arriba: un
+      // rotulo que no cambiaba con el selector y que ademas obligaba a
+      // leer una etiqueta antes de llegar al dato.
+      expect(find.text('PUNTOS DE LA SEMANA'), findsOneWidget);
       // "Recompensas por constancia" se mudo a la hoja de monedas que se
       // abre desde el chip de Hoy: ya no vive en esta pantalla.
       expect(find.text('Recompensas por constancia'), findsNothing);
