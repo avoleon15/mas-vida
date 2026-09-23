@@ -1,420 +1,275 @@
 # +Vida — Contexto del Proyecto
 
 Este archivo se carga automáticamente en cada sesión de Claude Code dentro de
-este proyecto. Contiene las reglas de negocio, sistema de diseño, y estado
+este proyecto. Contiene las reglas de negocio, el sistema de diseño y el estado
 del proyecto que SIEMPRE deben respetarse al escribir o modificar código.
 
 Si algo que se pide en el chat contradice una regla dura de este documento,
 señalalo antes de proceder — no asumas que se quiere romper la regla sin
 confirmarlo primero.
 
+**Última actualización: 22 de septiembre de 2026.** Reemplaza por completo la
+versión anterior. Si en el código encontrás algo de la lista "Modelo viejo — migrar"
+(al final), es de antes y hay que corregirlo.
+
+Fuente de verdad detallada (en el proyecto de Claude del equipo, no en este
+repo): `contrato-tecnico-vivo.md`, `reglas-puntaje-vivo.md`,
+`arquitectura-cuentas-vivo.md`, `modelo-de-negocio-vivo.md`,
+`esquema-base-datos-vivo.md`. Si este archivo y esos documentos no coinciden,
+mandan esos documentos.
+
 ## Qué es +Vida
 
-App iOS (construida en Flutter) que lee pasos/actividad de Apple Health, los
-convierte en puntos, y esos puntos dan cashback sobre la póliza de gastos
-médicos del usuario + premios canjeables con comercios aliados. Referente:
-Discovery Vitality, adaptado a Guatemala. Es a la vez entrega de tesis (UFM)
-y producto comercial real.
+App iOS (Flutter + capa nativa Swift para HealthKit) que lee pasos, ritmo
+cardíaco y workouts de Apple Health, los convierte en puntos, y esos puntos dan
+**cashback** sobre la póliza de gastos médicos del usuario, más premios
+canjeables con comercios aliados. Referente de diseño: Discovery Vitality,
+adaptado a Guatemala — pero **ningún número de Vitality aplica**; las reglas
+numéricas son las de este archivo. Es a la vez entrega de tesis (UFM) y
+producto comercial real. Empresa: Assures.
 
 **Modelo de negocio:** B2B2C — el usuario final (asegurado) usa el producto,
-pero el cliente que paga es la aseguradora.
+la aseguradora paga. **Gratis para jugar, pago para los beneficios:**
+cualquiera usa la app sin póliza; todo lo que implica dinero o premio requiere
+póliza vinculada y verificada.
 
-**3 vías de ingreso:**
-1. Cuota por usuario cobrada a la aseguradora
-2. Membresía freemium: la versión premium multiplica los PASOS contados (no
-   los puntos). El multiplicador debe aplicarse DESPUÉS de las validaciones
-   anti-fraude, nunca antes.
-3. Alianzas: comercios pagan por aparecer con cupones en Premios
+**3 vías de ingreso** (montos = cifras de trabajo, nada cerrado):
+1. Cuota por asegurado cobrada a la aseguradora (mensual, incluye el reporte).
+2. Cuota mensual a comercios aliados por publicar premios/cupones en la tienda,
+   más extras opcionales: patrocinar La Liga, patrocinar una semana, y
+   posicionamiento pagado en la búsqueda de premios.
+3. Plan Empresarial — post-piloto, no se construye ahora.
 
-## Idioma — regla dura
+**No existe ninguna membresía freemium ni multiplicador de pasos/puntos
+pagado.** Si aparece en código viejo, se borra.
+
+## Idioma y tono — regla dura
 
 Toda la app en **español latinoamericano**, tono natural y humano (nunca
-traducción literal ni robótica). Es para el mercado guatemalteco. Excepción:
-los niveles de cashback se nombran por número ("Nivel 3"), nunca con los
-nombres en inglés Bronze/Silver/Gold/Platinum, que el contrato v1 prohíbe
-expresamente por ser de Vitality.
+traducción literal ni robótica). Mercado guatemalteco.
+
+**Regla regulatoria dura:** el cashback SIEMPRE se devuelve como dinero
+DESPUÉS del pago de la prima. NUNCA se descuenta directamente (Superintendencia
+de Bancos de Guatemala). Siempre "cashback", nunca "descuento en tu prima" ni
+"ahorro en tu póliza".
 
 ## Las 2 monedas — regla dura, nunca mezclar
 
-1. **PUNTOS** — nunca se gastan. Determinan categoría anual y % de cashback.
+1. **PUNTOS** — nunca se gastan. Determinan el nivel anual y el % de cashback.
    Nunca aparecen en Premios.
-2. **MONEDAS** (antes "medallas" — si ves ese término en código viejo,
-   migralo) — se gastan en Premios, caducan a los 6 meses. Nunca aparecen
-   en Mi Plan.
+2. **MONEDAS** — se gastan en Premios. Nunca aparecen en Mi Plan.
+   - Se ganan por completar el objetivo semanal y por quedar top 3 en La Liga.
+   - **Tope: 100 monedas acumuladas.** Si una ganancia pasa de 100, el
+     excedente se pierde.
+   - **Aviso al llegar a 80:** modal (un botón "OK"), tono lúdico. Se dispara
+     con `saldo_resultante >= 80`, no `== 80`.
+   - Caducan a los **90 días** sin gastar.
+   - Un cupón ya canjeado caduca aparte, a los **60 días** de canjeado.
+   - Sin póliza verificada se ganan igual, pero **no se pueden canjear**
+     (catálogo visible, botón de compra bloqueado con candado).
 
-Los **duelos** (Social) NO dan ninguna moneda ni premio por ahora — son
-puramente competitivos/sociales.
+## Niveles anuales de cashback — numéricos, nunca con nombre
 
-Existe además una **liga de duelos cosmética** (Bronce → Plata → Oro →
-Diamante, en español) separada de las categorías de cashback — solo estado
-social, sin beneficio real.
-
-## Niveles anuales de cashback — regla dura, numéricos
-
-Fuente de verdad: `contrato-v1-corregido.md`, congelado.
-
-**El naming Bronze/Silver/Gold/Platinum está PROHIBIDO en el proyecto.** Es de
-Vitality, no de +Vida. El nivel es un entero de 0 a 4 y en la UI se dice
-"Nivel 3", nunca un nombre en inglés. (Esto reemplaza a la regla anterior de
-este documento, que pedía lo contrario.)
-
-| Nivel | Puntos anuales | % Cashback |
+| Nivel | Puntos anuales | Cashback |
 |---|---|---|
-| 0 | 0 – 2,499 | 0% |
-| 1 | 2,500 – 4,999 | 5% |
-| 2 | 5,000 – 9,999 | 7,5% |
-| 3 | 10,000 – 14,999 | 10% |
-| 4 | 15,000+ | 20% |
+| Nivel 0 | 0 – 2.500 | 0% |
+| Nivel 1 | 2.500 – 5.000 | 5% |
+| Nivel 2 | 5.000 – 10.000 | 7,5% |
+| Nivel 3 | 10.000 – 15.000 | 10% |
+| Nivel 4 | 15.000+ | 20% |
 
-Tabla **confirmada** (Daniel, 1 de septiembre de 2026). Reemplaza a la versión
-anterior de este documento, que dejaba los niveles 0, 1 y 2 sin definir. Vive
-en `niveles`, dentro de `lib/reglas_puntos.dart`: ese es el único lugar donde
-se escriben estos números.
+**Nunca** Bronze/Silver/Gold/Platinum ni ningún otro nombre. **Tope anual:
+12.000 pts** por actividad — Nivel 4 queda fuera de alcance en el piloto. Es
+consecuencia aceptada, no un bug: no "arreglarla" subiendo el tope. Cashback
+máximo real del piloto: 10%.
 
-**Techo anual de actividad física: 12.000 puntos.** Topa los puntos por pasos
-e intensidad, y NO es un techo de los puntos del año: **los chequeos médicos
-dan puntos aparte, que se suman POR ENCIMA de ese techo.**
-
-Consecuencia: **el nivel 4 (15.000+) SÍ es alcanzable**, pero solo si el
-afiliado además se hace los chequeos — con pura actividad física no llega.
-Esto reemplaza a la versión anterior de este documento, que decía que el nivel
-4 quedaba fuera de alcance en el piloto.
-
-Los 15.000 son el **piso** del nivel 4, no un techo. Nunca poner un tope duro
-ahí.
-
-[PENDIENTE: cuántos puntos da un chequeo médico. **No inventarlo**, y no
-nombrar ninguna cifra de chequeos en la UI hasta que esté definido.]
-
-La **liga de duelos cosmética** (Bronce → Plata → Oro → Diamante, en español)
-sigue siendo algo aparte de los niveles de cashback — solo estado social.
-
-**Regla regulatoria dura:** el cashback SIEMPRE se devuelve como dinero
-DESPUÉS del pago de la prima. NUNCA se descuenta directamente (regulación de
-la Superintendencia de Bancos de Guatemala). Siempre "cashback", nunca
-"descuento en tu prima" ni "ahorro en tu póliza".
+El nivel anual (0–4) **no es** el objetivo semanal — nunca comparten nombre de
+campo ni la palabra "nivel".
 
 ## Cálculo de puntos diarios
 
-Fuente de verdad: el plan de proyecto del equipo (`TASKS.xlsx`, criterios de
-aceptación de L6, L7, L8 y A15). Estas reglas **reemplazan** a las de la
-versión anterior de este documento — si encontrás en el código escalones de
-7,500 / 10,000 / 15,000 pasos, un techo diario de 500 pts, o FCmáx = 220 −
-edad, son del modelo viejo y hay que migrarlos.
+Lo calcula **siempre el servidor** (Django). El teléfono manda datos crudos de
+HealthKit, nunca puntos, edad, FCM ni conclusiones.
 
-**Por pasos** — función escalonada con piso en 7,000 (contrato v1):
-- Menos de 7,000 pasos = 0 pts
-- 7,000 – 9,999 = 25 pts
-- 10,000 – 14,999 = 50 pts
-- 15,000+ = 100 pts
+**Por pasos** — escalones, piso 7.000:
 
-Los pasos por encima de 15,000 NO dan puntos adicionales. Cuentan tanto los del
-teléfono como los de un reloj vinculado, pero la deduplicación y la precedencia
-entre fuentes se resuelven ANTES de aplicar la tabla — nunca se suman crudo.
-
-Los umbrales de pasos son **iguales para todas las edades**. Ya no existe una
-tabla de pasos separada para adultos mayores: el ajuste por edad vive ahora en
-la matriz de intensidad, no acá.
-
-**Por intensidad (ritmo cardíaco)** — matriz de duración × % de FCmáx:
-- **FCmáx = 219 − edad.** El cálculo lo hace SIEMPRE el servidor a partir de
-  la edad que viene en la póliza. El teléfono NUNCA manda la FCmáx ni la edad.
-- Ancla conocida de la matriz: **42 min al 74% de FCmáx = 100 pts.**
-- **Bonus 60+:** un usuario de 60 años o más recibe **×1.25** sobre los puntos
-  de intensidad (esa misma sesión le da 125 pts a un usuario de 62 años).
-- [PENDIENTE: la matriz completa de duración × % de FCmáx. El Excel fija un
-  solo punto de la matriz. Luis la define en la tarea L7 — hasta entonces **no
-  inventar escalones** ni reusar la tabla vieja de 60%/70% de este documento,
-  que ya no aplica.]
-
-**Techo diario absoluto: 200 pts**, igual para todas las edades, sumando ambas
-vías. Un día que genere más puntos brutos acredita 200 y marca el registro con
-`tope_diario_aplicado`. Llegar a exactamente 200 NO cuenta como recorte.
-Ningún dato de ejemplo debe superar 200 pts en un solo día.
-
-**Techo anual: 12.000 pts**, con su propia bandera `tope_anual_aplicado`.
-
-Nota verificada: con la única celda definida de la matriz de intensidad (100
-pts) más el escalón máximo de pasos (100 pts), un usuario menor de 60 llega
-como mucho a 200 pts brutos — es decir, `tope_diario_aplicado` **no puede dar
-true** para él. Solo se activa con el bonus 60+ (100 + 125 = 225). Hasta que la
-matriz defina una celda mayor a 100, ese es el único camino.
-
-Notas sobre la edad:
-- La edad DEBE venir de los datos de la póliza que provee la aseguradora,
-  NUNCA autodeclarada por el usuario (autodeclararla es un vector de fraude
-  obvio).
-- El bonus 60+ y la FCmáx REQUIEREN validación médica/actuarial antes de salir
-  a piloto. No son definitivos.
-- En la UI, cualquier mención al ajuste por edad debe tener tono cálido, nunca
-  clínico ni condescendiente.
-
-**Retos semanales — por nivel de dificultad progresiva, no por meta de puntos**
-(confirmado en el contrato v1). Todos arrancan en nivel de reto 1. Completar la
-meta de la semana SUBE un nivel; no completarla BAJA uno. El ciclo va de lunes
-00:00 a domingo 23:59 en hora de Guatemala. Cumplir el reto acuña MONEDAS.
-
-[PENDIENTE: la tabla de dificultad por nivel de reto. El contrato dice explícito
-que no hay número documentado todavía; lo define Luis en el motor de reglas.
-El tope de 100 monedas por semana que decía la versión anterior de este
-documento tampoco calza con el techo mensual de 8 monedas que usa Home —
-hay que reconciliarlos.]
-
-[PENDIENTE: reconciliar los retos semanales con la "meta semanal adaptativa"
-(arrancaba en 300 pts, oscilaba 200-800) y con las recompensas por constancia
-de más abajo. Son dos modelos distintos de la misma mecánica y el Excel solo
-describe el de retos. No mezclar los dos en la UI hasta que se decida.]
-
-## Recompensas por constancia (streaks)
-
-Al alcanzar hitos de semanas consecutivas cumpliendo la meta semanal, el
-usuario recibe MONEDAS extra (nunca puntos — los puntos no se otorgan por
-rachas):
-
-| Semanas seguidas | Monedas |
+| Pasos del día | Puntos |
 |---|---|
-| 4 | +5 |
-| 8 | +10 |
-| 12 | +20 |
-| 24 | +40 |
-| 52 | +100 |
+| menos de 7.000 | 0 |
+| 7.000 – 10.000 | 25 |
+| 10.000 – 15.000 | 50 |
+| 15.000+ | 100 |
 
-La racha se muestra en Home (saludo), Progress (historial de 8 semanas +
-progreso al próximo hito) y Social (alerta de racha en riesgo).
+**Por intensidad (ritmo cardíaco)** — FCM = **219 − edad**, sesión continua:
 
-## Anti-fraude
+| Duración continua | Intensidad | Puntos |
+|---|---|---|
+| 30 min | 60% FCM | 50 |
+| 30 min | 70% FCM | 100 |
+| 60 min | 60% FCM | 100 |
+| 90 min | 60% FCM | 150 |
 
-- HealthKit registra qué app escribió cada muestra — guardar ese campo
-  (`fuente_bundle`, `fuente_nombre`, `fuente_version` en cada muestra)
-- Lista blanca de fuentes confiables (Apple, Garmin, Whoop). Una fuente que no
-  esté en la lista blanca NO acredita puntos
-- Una sola actividad cuenta por día (la de mayor puntaje)
-- **Ventana de datos rezagados: 3 días.** Un dato de hace 2 días entra; uno de
-  hace 5 no. (Antes este documento decía 6 días — el Excel lo baja a 3.)
-- Una cuenta por persona
-- Deduplicación: SIEMPRE consultar el total agregado, nunca sumar muestras
-  crudas (ej. Apple Watch + Whoop a la vez)
-- **Plausibilidad:** 60,000 pasos en un día se marcan para revisión
-- La edad para el bonus 60+ y la FCmáx viene de la póliza, nunca del usuario
+Se compara por rango, no por valor exacto. Varias sesiones el mismo día: se
+acredita el escalón **más alto**, no se suman.
 
-## Sistema de diseño (lib/theme.dart)
+**Bono 60+:** **+25 pts fijos** sobre pasos y **+25 pts fijos** sobre
+intensidad — independientes, acumulables el mismo día. **Nunca multiplicador.**
 
-Tema CLARO. La app debe transmitir paz, tranquilidad y ambiente sano.
-(Nota: el proyecto arrancó con tema oscuro; si encontrás restos de negro
-`#000000` o gris `#1A1A1A` en el código, son del tema viejo y hay que
-migrarlos.)
+**Tope diario: 200 pts** (pasos + intensidad + bonos), igual para todas las
+edades.
 
-**Paleta de marca: azul `#012096`, naranja `#F58700` y blanco.** El reparto
-es por TAMAÑO de superficie:
-- **blanco** → lo grande (fondos, tarjetas, superficies)
-- **azul** → lo mediano (botones, barras de progreso, íconos de sección)
-- **naranja** → lo chico (marcas de estado, chips, checks, detalles que
-  tienen que saltar a la vista)
+**Edad:** la fecha de nacimiento se pide en el registro (autoreportada) y se usa
+de inmediato. Cuando el usuario vincula su póliza, la aseguradora la confirma.
+Si no coincide, no hay retroactividad de puntos. En la UI, cualquier mención al
+ajuste por edad va con tono cálido, nunca clínico ni condescendiente.
 
-El naranja **nunca** rellena una superficie grande: a ese tamaño compite con
-todo. Su trabajo es señalar, no vestir.
+## Objetivo semanal (antes "retos semanales")
 
-**Toda superficie se pinta con la escala de azules** (confirmado por Daniel,
-4 de septiembre de 2026). Es un solo azul en cinco luminosidades, no cinco
-colores: lo que cambia es qué tan claro, nunca el matiz. Cuanto más grande
-la superficie, más pálido el tono.
+- **Una sola meta por semana, en pasos acumulados.**
+- Todos arrancan en **objetivo 1**. Cumplir → sube al siguiente. No cumplir →
+  **se congela** (misma meta). **Nunca baja.** Techo real ~13.
+- Ciclo **lunes 00:00 a domingo 23:59**, hora de Guatemala. El objetivo nuevo
+  se fija a las 00:00 del lunes; no hay estado de "evaluando".
+- **Seasons trimestrales** en fechas fijas (1 ene, 1 abr, 1 jul, 1 oct): todos
+  vuelven a objetivo 1 ese día exacto, sin esperar al lunes. Se guarda el
+  objetivo máximo de cada season.
+- Nunca usar "nivel", "rango" ni "reto" para esto. No hay rachas diarias.
+- Endpoint: `GET /api/v1/retos/estado`.
 
-| Token | Para qué |
-|---|---|
-| `azulNiebla` `#F2F4FB` | fondo de una tarjeta entera |
-| `azulBruma` `#E4E9F8` | relleno de un estado activo o seleccionado |
-| `azulSuave` `#B9C4E8` | bordes y separadores con color |
-| `azulMedio` `#5468BC` | íconos y texto de apoyo |
-| `accent` `#012096` | botones, números grandes, lo que decide |
+## Social — La Liga, Tus Ligas y Duelos
 
-**El naranja queda reservado a cuatro cosas, y a ninguna más:**
+Las tres viven en la pestaña **Social**.
 
-1. **Monedas** — el ícono, el chip de saldo y los premios del podio. Es el
-   único lugar donde el naranja significa algo por sí solo.
-2. **La llama de la racha** — el ícono, nunca el fondo que lo rodea.
-3. **Alertas reales** — datos sin verificar, el teléfono de emergencias.
-4. **El check de una etapa completada** — el ícono suelto sobre azul.
+| | La Liga | Tus Ligas | Duelos |
+|---|---|---|---|
+| Quién la arma | El sistema, automático | El usuario (crea o se une) | El usuario |
+| Con quién | Gente random de tu franja de edad | Amigos, familia, colegas | 1 contra 1 |
+| Ciclo | Mensual (día 1 al último del mes) | Mensual | — |
+| Compite por | Pasos del mes | Pasos del mes | Más pasos |
+| Premio | **Sí** — monedas al top 3 | **No** | **No** |
+| Requiere póliza | Sí | Sí | Sí |
 
-Todo lo demás que hoy esté en naranja es del modelo viejo y hay que
-migrarlo. Seleccionar algo es **siempre** azul: si dos pantallas marcan la
-selección con colores distintos, la app se lee como dos apps.
+**La Liga:** franjas de edad de 10 años (20–29, 30–39…), máximo 30 personas
+por grupo, asignación aleatoria re-sorteada cada mes. Nunca se muestran los
+puntos de otros miembros. Los **Duelos** tienen categorías cosméticas
+Bronce/Plata/Oro/Diamante (en español), solo estado social — nada que ver con
+el nivel de cashback.
 
-(Esto reemplaza a la paleta anterior de este documento — azul `#4A90D9` y
-verde `#5FAE85`. Si encontrás esos dos hex o el verde de salud en el código,
-son del tema viejo.)
+Un ciclo ya cerrado (La Liga, objetivo semanal) es **inmutable** — un dato
+tardío entra al historial pero no lo reabre.
 
-- **background:** casi blanco con tinte azul mínimo `#F5F6FA`
-- **card:** blanco puro `#FFFFFF` con borde sutil `#E3E6F0`
-  (necesario para que las tarjetas no se pierdan contra el fondo claro)
-- **accent (azul de marca):** `#012096` — botones principales, links,
-  elementos interactivos
-- **accentSecondary (naranja de marca):** `#F58700` — estados de éxito,
-  checks completados, marcadores y detalles chicos
-- **textPrimary:** azul muy oscuro `#101833` (NO negro puro, se ve muy
-  duro sobre fondo claro)
-- **textSecondary:** gris medio `#6B7280`
-- **Tipografía:** SF Pro (o la más parecida disponible)
+## Cuentas
 
-Reglas visuales:
-- **Nunca bordes punteados** en botones, tabs, o nav — corregir siempre a
-  sólido o sin borde
-- **Sin glows brillantes** — sobre fondo claro se ven mal. Usar sombras
-  suaves grises/verdes en su lugar
-- **Colores por nivel de cashback:** progresión del azul de marca (nivel 1
-  = azul más claro → nivel 4 = `#012096`), vía
-  `AppColors.colorForNivel(int)`. Lo que separa un nivel del siguiente es
-  la LUMINOSIDAD, no el matiz: se leen como escalones aunque no se
-  distingan bien los colores
-- **Barras de progreso:** fondo vacío en `#E3E6F0`, relleno en azul
-- **Header** (`lib/widgets/app_header.dart`, reutilizado en TODAS las
-  pantallas): "+VIDA" pegado a la esquina superior IZQUIERDA, foto de
-  perfil pegada a la DERECHA
-- **Barra inferior** (`lib/widgets/bottom_nav_bar.dart`, reutilizada en
-  TODAS las pantallas): 5 ítems fijos en este orden: Hoy, Progreso,
-  Social, Premios, Mi Plan. El ítem activo necesita fondo de píldora sutil
-  (azul de marca muy pálido) — sobre fondo claro ya no basta el contraste
-  solo
+- **Cuenta base (gratis):** email + contraseña + fecha de nacimiento. Juega
+  completo: pasos, puntos, intensidad, objetivo semanal, ganar monedas.
+- **Póliza vinculada y verificada:** segundo paso, aparte del registro. Da
+  acceso a cashback, canje de monedas, La Liga, Tus Ligas y Duelos.
+- "Pendiente de verificación" se trata **exactamente igual** que "sin póliza"
+  — no hay un tercer estado visual.
+- Sin póliza, **Mi Plan** muestra un estado vacío con CTA para vincular póliza
+  y un **cotizador express**.
 
-## Cómo se construye la UI — regla dura
+## Anti-fraude y datos
 
-**+Vida es una app iOS y tiene que sentirse nativa de iOS.** No es una
-preferencia estética: es el criterio que gana cuando dos opciones se
-contradicen.
-
-Nada se escribe a mano si ya existe un componente que lo resuelva. El
-orden de preferencia es **estricto** — se baja al siguiente escalón solo
-cuando el anterior no tiene nada que sirva:
-
-1. **`package:flutter/cupertino.dart`** — SIEMPRE primero para cualquier
-   cosa con la que el usuario interactúe: botones, selectores segmentados,
-   switches, pickers, alertas, hojas modales, barras de navegación.
-   `CupertinoButton`, `CupertinoSlidingSegmentedControl`,
-   `CupertinoAlertDialog`, `CupertinoPicker`, `CupertinoSwitch`.
-   Estos traen gratis el atenuado, el rebote y la sensación que un usuario
-   de iPhone ya conoce. Una imitación hecha con `GestureDetector` +
-   `AnimatedScale` NUNCA es preferible a un control de Cupertino.
-2. **`shadcn_ui`** — para lo estructural que Cupertino no cubre: tarjetas,
-   badges, menús flotantes, popovers, acordeones, campos de formulario.
-3. **`getwidget`** — para piezas sueltas que las dos anteriores no traen:
-   avatares, barras de progreso animadas, indicadores.
-4. **`fl_chart`** — TODA gráfica. No se dibujan gráficas con
-   `CustomPainter`: la librería ya trae animación al cambiar de datos,
-   tooltips táctiles y ejes configurables.
-5. **`CustomPainter` propio** — solo cuando ninguna de las anteriores lo
-   resuelve. Hoy el único caso legítimo es el anillo de pasos de Home, que
-   es un dibujo específico del producto.
-
-**Todas se atan a los tokens de `lib/theme.dart`.** Ninguna librería
-entra con su paleta por defecto: shadcn tiene sus grises, GetWidget su
-azul, y si se dejan como vienen la app se ve hecha de tres apps
-distintas. El `ShadThemeData` de +Vida vive en `theme.dart` y se arma
-desde `AppColors`.
-
-**`TemaVida` es obligatorio.** Los componentes de `shadcn_ui` fallan si no
-encuentran un `ShadTheme` arriba en el árbol, así que toda pantalla que se
-monte —la app real o un test— tiene que pasar por
-`TemaVida(child: ...)`. Ponerlo solo en el `builder` del `MaterialApp` NO
-alcanza: los tests montan pantallas sueltas y revientan.
-
-Cuando lo nativo de iOS y el look de shadcn se contradigan, **gana iOS**.
-shadcn y GetWidget son de estética web/Material: se usan por lo que
-resuelven, no por cómo se ven de fábrica.
-
-## Pantallas — estado y contenido
-
-**Home** (`lib/screens/home_screen.dart`) — construida
-- Header + saludo dinámico + racha activa (con aviso si está a 1 semana de
-  un hito de monedas)
-- Anillo de pasos (color según categoría, gradiente, marcadores 25%), meta
-  diaria, tiempo restante del día
-- Tarjeta de puntos totales (SIN botón de canje)
-- "Tu Cashback": monto acumulado, camino de categorías, link a Mi Plan
-- "Objetivos de la semana": las semanas del mes, cada una plegable, con
-  sus 3 objetivos (progreso/monedas/check) y el rango. Las metas mensuales
-  ya NO existen
-
-**Progress** (`lib/screens/progress_screen.dart`) — construida
-- Selector Semana/Mes/Año con contenido real por pestaña
-- Meta del período + comparación vs. período anterior
-- Gráfico de actividad (nunca 30+ barras finitas sin etiqueta)
-- Racha con historial de 8 semanas (cada casilla refleja si se cumplió) +
-  progreso al próximo hito de monedas
-- Sección "Recompensas por constancia": los 5 hitos con check en los
-  alcanzados
-- "Nivel Actual", Monedas del período, Ritmo Cardíaco (obligatorio si se
-  pide permiso `.heartRate`)
-- CTA "Ver mis récords" (pantalla de Récords Personales — pendiente)
-
-**Social** (`lib/screens/social_screen.dart`) — construida, dos pestañas
-- Amigos: alerta de racha en riesgo, Duelo (activo/invitación), superación
-  del propio baseline (nunca comparación directa), historial W/L, lista de
-  conexiones y contadores de amigos / solicitudes recibidas / enviadas,
-  con aceptar, rechazar, cancelar y eliminar
-- **De otra persona SOLO se muestra la racha.** El nivel y las monedas
-  quedaron prohibidos (decisión de Daniel, 4 de septiembre de 2026): el
-  nivel se deriva del % de cashback sobre la prima, y las monedas son
-  saldo. Juntos dejan estimar cuánta plata mueve alguien, y eso es
-  exposición patrimonial — más en Guatemala. Esto reemplaza a la versión
-  anterior de este documento, que pedía mostrar racha, categoría y
-  monedas.
-- De alguien que todavía NO aceptó la solicitud solo se ven nombre,
-  usuario y amigos en común. Ni siquiera la racha.
-- Ranking: selector de grupos, posición propia, cuánto falta para subir,
-  lista completa
-
-**Premios** — construida
-- Catálogo (filtros, saldo de monedas, costo en monedas)
-- Detalle (condiciones, vencimiento, canje)
-- Canje exitoso (QR, resumen de monedas descontadas)
-
-**Mi Plan** — diseñada, confirmar si está construida en Flutter
-- Cashback acumulado, proyección de fin de año, calendario de cálculo,
-  nota regulatoria, tabla de categorías
-- Sección "Detalles de tu Póliza" (datos que la aseguradora expone al
-  asegurado, agrupados en 2-3 tarjetas por tema): número de póliza,
-  titular y dependientes, tipo de plan, suma asegurada, deducible,
-  coaseguro, vigencia, renovación, prima y forma de pago, red de
-  hospitales/cobertura, estado de la póliza
-
-**Perfil y Configuración + Consentimiento aseguradora** — diseñadas en
-Stitch, pendiente pasar a Flutter
+- Cada muestra guarda la fuente (`fuente_bundle`, `fuente_nombre`,
+  `fuente_version`) y el dispositivo (`dispositivo_nombre`,
+  `dispositivo_modelo`, `dispositivo_fabricante`, nullable).
+- **No hay lista blanca de marcas.** Todas las apps de terceros (Garmin, Whoop,
+  Zepp, Fitbit…) tienen el mismo nivel de confianza.
+- **Precedencia:** si hay un reloj con datos ese día, **gana el reloj** (pasos
+  e intensidad) y el teléfono se descarta. Sin reloj, gana el teléfono. Dos
+  relojes: el de más pasos. **Nunca se suman fuentes.**
+- "¿Es reloj?" se decide con `tipo_dispositivo`, derivado en el servidor —
+  nunca con `fuente_nombre`. `desconocido` se trata como teléfono (nunca se
+  excluye).
+- La precedencia se **re-evalúa en cada sync** de esa fecha: los relojes de
+  terceros necesitan internet para escribir a Apple Health y pueden llegar tarde.
+- **Ventana de datos rezagados: 14 días.** Más viejo → `422`
+  `{"error": "fuera_de_ventana"}`.
+- Idempotencia por `(usuario, external_id)`.
+- Ledger de puntos **append-only**: nunca `UPDATE`, cada acreditación o
+  corrección es una fila nueva con la versión de regla que la generó.
+- `TIME_ZONE = 'America/Guatemala'`.
+- **HealthKit nunca dice si el usuario negó el permiso de lectura** — solo se
+  infiere consultando. `ritmo_cardiaco: false` casi siempre es "no tiene reloj".
+- **Cero SDKs de terceros sobre datos de salud** (ej. Firebase) — Apple lo trata
+  como filtración y remueve la app. Nunca loguear el payload de salud completo.
 
 ## Datos que se comparten con la aseguradora
 
-Límite duro: nada de HealthKit crudo a terceros. Solo datos agregados, con
-consentimiento explícito del usuario en pantalla propia y revocable.
+[PENDIENTE — conflicto sin resolver, no construir nada nuevo sobre esto]
+La regla original era: solo agregados de cohorte, nada a nivel de persona. El
+reporte mensual definido con Diego (18 sep) manda por persona pasos,
+ritmo cardíaco promedio y workouts diarios. Las dos cosas chocan, y el texto
+de consentimiento de la app (D11) también. Hasta que Alvaro lo resuelva: **no
+exponer datos individuales** en ningún endpoint nuevo y **no copiar** el texto
+de consentimiento viejo si se toca esa pantalla.
 
-Lo que SÍ se comparte (agregado, nivel de cohorte):
-- % de asegurados en cada categoría y tendencia de actividad del pool
-- Tasa de adherencia: % con rachas activas, % que sube vs. baja de categoría
-- Segmentación por edad/categoría para proyección de siniestralidad
+Para septiembre el reporte es solo un Excel manual. Landing, login y dashboard
+para la aseguradora son post-piloto y viven fuera de la app de Flutter.
 
-Lo que NUNCA se comparte:
-- Pasos diarios individuales, ritmo cardíaco crudo, ubicación, ni nada a
-  nivel de persona identificable más allá de categoría/cashback (que ya es
-  parte del contrato con el asegurado)
+## Pantallas — lo que el código tiene que respetar
 
-Esto NO es una pantalla de la app del asegurado — sería un dashboard B2B
-separado o un reporte periódico. [PENDIENTE: definir si se construye como
-producto o queda solo como material de pitch comercial]
+- **Home / Progress:** "objetivo semanal", nunca "reto" ni "nivel". Datos por
+  período desde `GET /api/v1/dashboard/resumen?desde=&hasta=`. FC por workout
+  (promedio y máximo), nunca un promedio de 24 h. Un workout con
+  `tipo_actividad` vacío se muestra como "No registrado", no se oculta.
+- **Social:** La Liga, Tus Ligas y Duelos (ver arriba). Sin puntos de otros
+  miembros en La Liga.
+- **Premios:** saldo y costo en monedas; sin póliza, catálogo visible y compra
+  bloqueada con candado + CTA a vincular póliza.
+- **Mi Plan:** con póliza: cashback, nivel, proyección, nota regulatoria,
+  detalle de póliza. Sin póliza: estado vacío + CTA + cotizador express.
+- **Registro / login / recuperar contraseña:** no existen todavía. El registro
+  pide fecha de nacimiento. Token en almacenamiento seguro.
 
-## Decisiones técnicas cerradas
+## Arquitectura técnica — decisiones cerradas
 
-- Frontend: **Flutter** (decisión final, no solo demo)
-- Backend: Python / **Django** (confirmado por el código en `mas-vida_backend/`
-  y el `compose.yaml` de la rama dev)
-- Fuente de datos: Apple HealthKit únicamente
-- Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación)
-- Distribución piloto: TestFlight
-- [COMPLETAR: quién del equipo tiene Mac para builds de iOS]
+- **Frontend:** Flutter (decisión final).
+- **Capa nativa:** Swift, solo para HealthKit.
+- **MethodChannel:** 2 métodos, nada más — `solicitarPermisos` y
+  `sincronizar`. Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás
+  va por HTTP directo contra la API.
+- **Backend:** Django + PostgreSQL (decisión final).
+- **Sync:** `POST /api/v1/sync`, el día completo cada vez. La cola de
+  reintentos corre del lado nativo — Flutter no implementa reintentos propios.
+- **Autenticación:** `TokenAuthentication` de DRF, la identidad sale del token,
+  nunca del body. Todavía no está implementada.
+- **Fuente de datos:** Apple HealthKit únicamente (Apple Watch, Garmin, Whoop,
+  etc. escriben ahí). Se leen pasos, ritmo cardíaco y workouts. Sin elevación.
+  Sin sueño en v1.
+- **Distribución del piloto:** TestFlight, cuenta Apple Developer de
+  organización (Assures).
+- **Builds de iOS:** Daniel no tiene Mac — los `.ipa` salen de CI con runner
+  macOS en GitHub Actions.
 
 ## Decisiones pendientes
 
-- El "twist propio" del proyecto
-- La matriz completa de intensidad (duración × % de FCmáx) — tarea L7
-- Validación médica/actuarial del bonus 60+ y de FCmáx = 219 − edad
-- Redefinir la tabla de categorías anuales de cashback contra el techo diario
-  de 200 pts y el umbral de 2,500 puntos que menciona el Excel
-- Reconciliar retos semanales vs. meta semanal adaptativa vs. recompensas por
-  constancia
-- Si el dashboard para la aseguradora se construye o queda como pitch
+- Tabla de metas de pasos por objetivo semanal (objetivo 1, 2, 3…) — Luis (L11).
+- Compartir datos por persona con la aseguradora vs. solo agregados (ver arriba).
+- Plausibilidad fisiológica: descartar muestras fuera de rango vs. solo
+  marcarlas para revisión.
+- Cómo se registra en el ledger un cambio de puntos cuando un reloj sincroniza
+  tarde.
+- **Recompensas por constancia** (monedas extra por semanas seguidas cumpliendo
+  la meta: 4/8/12/24/52 semanas) — venía de la versión anterior de este archivo
+  y no aparece en ningún documento vigente. Sin confirmar si sigue existiendo.
+  **No construir nada nuevo sobre esto** hasta que Alvaro lo confirme.
+- Tus Ligas: cupo de miembros y cómo se invita.
+- Validación médica/actuarial del bono 60+ y de FCM = 219 − edad.
+
+## Modelo viejo — migrar si aparece en el código
+
+- Membresía freemium / multiplicador de pasos.
+- Categorías Bronze/Silver/Gold/Platinum y tabla 5.000/10.000/20.000/30.000.
+- Escalones de pasos 7.500 / 12.000 / 20.000, o puntos 5/10/20.
+- FCM = 220 − edad, techo diario de 500 pts, o una sola celda de intensidad
+  (42 min al 74%).
+- Bono 60+ ×1.25, o bono solo sobre intensidad.
+- Retos que bajan de nivel, 3 sub-metas por semana, reinicio mensual, "metas
+  mensuales".
+- Monedas que caducan a 6 meses; tope de 100 monedas por semana.
+- Lista blanca de fuentes; "gana la fuente con más pasos" entre todas.
+- Ventana de datos rezagados de 3 o 6 días.
+- "Liga local" por zona como liga aparte con opt-in.
+- Término "medallas" (ahora son monedas).
