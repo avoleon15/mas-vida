@@ -8,6 +8,21 @@ class Ledger(models.Model):
 
     puntos = models.IntegerField()
 
+    puntos_pasos = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
+    puntos_intensidad = models.PositiveIntegerField(
+        null=True,
+        blank=TimeoutError
+    )
+
+    Topediario_aplicado = models.BooleanField(
+        null=True,
+        blank=True
+    )
+
 
     tipo = models.CharField(
         max_length=50
