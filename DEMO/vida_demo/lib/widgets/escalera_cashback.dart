@@ -1,7 +1,33 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
+import 'avatar_usuario.dart';
+
+/// Qué tan grande va la foto del usuario adentro de un escalón de
+/// [alturaEscalon] píxeles.
+///
+/// Vive afuera del `build` para poder fijar en un test lo que importa: la
+/// foto entra ENTERA en el escalón más bajo de la escalera —con su aro y
+/// con su flechita— que es el que menos lugar tiene. Si no entrara, el
+/// nivel 0 —donde arranca cualquiera que abre la app por primera vez—
+/// mostraría una foto recortada.
+///
+/// El techo de 30 no es capricho: el escalón más alto mide 116 px pero
+/// sigue siendo angosto (un quinto del ancho de la tarjeta), así que lo
+/// que limita la foto es el ancho, no el alto. Ahí la foto no tiene que
+/// llenar el escalón: es una marca de posición, y una marca chica se lee
+/// como que está PARADA en la barra, no como que es la barra.
+double diametroFotoEnEscalon(double alturaEscalon) =>
+    (alturaEscalon - 18).clamp(22.0, 30.0);
+
+/// Cuánto sobresale la flechita por debajo del aro de la foto.
+const double _altoFlecha = 6;
+
+/// Ancho de la base de la flechita, donde se pega al aro.
+const double _anchoFlecha = 12;
 
 /// Escalera de niveles de cashback: un escalón por nivel, cada uno más
 /// alto que el anterior, y un solo renglón de detalle abajo que cambia
@@ -144,8 +170,9 @@ class _Escalon extends StatelessWidget {
     // Cada escalón es más alto que el anterior: la escalera se lee como
     // progresión sin necesitar ninguna etiqueta que lo explique.
     //
-    // El piso de 44 no es estético: es lo que hace que "ESTÁS AQUÍ" entre
-    // en dos renglones adentro del escalón más bajo.
+    // El piso de 44 no es estético: es lo que hace que la foto del
+    // usuario entre entera adentro del escalón más bajo, que es donde
+    // arranca cualquiera que abre la app por primera vez.
     final altura = 44.0 + posicion * 18.0;
     // Verdes del sistema para el logro. El azul queda para la selección,
     // que es una acción del usuario.
@@ -202,28 +229,25 @@ class _Escalon extends StatelessWidget {
               children: [
                 // Brillo: solo en los escalones que el usuario ya ganó.
                 if (lleno) _BarridoBrillo(brillo: brillo, alto: altura),
+                // La FOTO del usuario parada en su escalón, en vez del
+                // cartel "ESTÁS AQUÍ" que había antes.
+                //
+                // Un cartel hay que leerlo; una cara se reconoce sola, y
+                // es la misma que el usuario ya tiene arriba a la derecha
+                // en todas las pantallas. Lo que antes era una etiqueta
+                // pasa a ser él parado en la escalera.
+                //
+                // El aro es lo que la separa de la barra: sobre el azul
+                // lleno va blanco, y sobre el escalón vacío del nivel 0
+                // —que es gris clarito— el blanco desaparecería, así que
+                // ahí va el azul de marca.
                 if (esActual)
                   Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      // El escalón más bajo mide 44px: con el texto del
-                      // sistema en grande, "ESTÁS AQUÍ" no entra. En vez
-                      // de desbordar, se achica hasta caber.
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'ESTÁS\nAQUÍ',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            // Sobre el escalón sin rellenar (nivel 0) el
-                            // blanco no se vería.
-                            color: lleno ? Colors.white : AppColors.textPrimary,
-                            fontSize: 9,
-                            height: 1.2,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                    child: Semantics(
+                      label: 'Estás en el nivel ${nivel.numero}',
+                      child: _FotoParadaEnElEscalon(
+                        diametro: diametroFotoEnEscalon(altura),
+                        color: lleno ? Colors.white : AppColors.accent,
                       ),
                     ),
                   ),
@@ -240,6 +264,65 @@ class _Escalon extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// La foto del usuario con una flechita abajo, parada en su escalón.
+///
+/// El aro solo despega la foto de la barra; lo que dice DÓNDE está parado
+/// es la punta. Sin ella la foto flota en el medio del escalón y se lee
+/// como un adorno de la barra; con ella apunta a un lugar, que es
+/// exactamente lo que hacía el cartel "ESTÁS AQUÍ" que reemplazó.
+///
+/// La punta se dibuja como la mitad de abajo de un cuadrado girado 45°, no
+/// con un `CustomPainter`: es un recorte de una caja, y CLAUDE.md deja el
+/// pincel propio para cuando ninguna otra cosa alcanza.
+class _FotoParadaEnElEscalon extends StatelessWidget {
+  const _FotoParadaEnElEscalon({required this.diametro, required this.color});
+
+  final double diametro;
+
+  /// Color del aro y de la flecha: los dos tienen que ser el MISMO, o la
+  /// punta se lee como una pieza suelta pegada abajo.
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AvatarUsuario(diametro: diametro, borde: color, grosorBorde: 2),
+        // Medio píxel de solape: el aro es redondo y la base de la flecha
+        // es recta, así que pegados al ras queda una hendidura blanca.
+        Transform.translate(
+          offset: const Offset(0, -0.5),
+          child: ClipRect(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              // Solo la mitad de abajo del rombo: eso es un triángulo que
+              // apunta hacia el escalón.
+              heightFactor: 0.5,
+              child: SizedBox(
+                width: _anchoFlecha,
+                height: _altoFlecha * 2,
+                child: Center(
+                  child: Transform.rotate(
+                    angle: math.pi / 4,
+                    // Un cuadrado de lado d/√2 girado mide d de diagonal:
+                    // así la punta cae justo en el borde de la caja.
+                    child: Container(
+                      width: _anchoFlecha / math.sqrt2,
+                      height: _anchoFlecha / math.sqrt2,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -5,7 +5,7 @@
   "techo_anual": 12000,
   "tope_anual_aplicado": false,
   "nivel": 3,
-  "_nota_nivel": "Nivel 3 = 10.000–15.000 pts → 10% de cashback. El contrato v1 documenta que con el techo anual de 12.000 el nivel 4 (15.000+) queda fuera de alcance en el piloto.",
+  "_nota_nivel": "Nivel 3 = 10.000–11.999 pts → 10% de cashback. Con 11.240 pts faltan 760 para el nivel 4, cuyo piso son 12.000 (corregido el 17 de septiembre de 2026; antes este mock decia 15.000+ y que el nivel 4 quedaba fuera de alcance). La tabla que manda es `niveles` en lib/reglas_puntos.dart.",
   "cashback": {
     "porcentaje": 10,
     "proyectado_q": 1800,
@@ -84,6 +84,7 @@
     "_nota_sin_reinicio_mensual": "El rango YA NO se reinicia al empezar mes nuevo. Estas 10 semanas van del 6 de septiembre al 8 de noviembre: cruzan dos veces de mes, asi que con el reinicio nadie habria pasado del rango 4 y la escalera de 10 era inalcanzable. El programa se recorre entero.",
     "_todo_dificultad": "TODO: la tabla de dificultad por rango NO esta definida en ninguna fuente; la define Luis en la tarea L7. Las metas de abajo son ILUSTRATIVAS y viven solo aca, en el mock. En el motor (reglas_rango.dart) metaPorRango sigue VACIO a proposito: lo que no se puede inventar es la regla, no el dato de prueba. La UI muestra la meta que le manda el servidor; cuando no viene ninguna, no inventa un numero.",
     "_todo_objetivos": "TODO: cuales son los 3 objetivos es PROVISIONAL. Entran como datos, asi que cambiarlos no toca el motor de reglas.",
+    "_nota_patrocinio": "Solo ALGUNAS semanas traen patrocinio (aca la 1, la 3, la 6 y la 8). La 3 es la EN CURSO a proposito: es la que sale en el titulo de la pantalla y en la card animada de arriba, asi que sin ella ese bloque no se puede ver en la demo. Que la mayoria no tenga marca es el caso normal y el camino tiene que verse igual de terminado sin ella. Cumplir una semana patrocinada paga el cupon de esa marca ADEMAS de las MONEDAS del rango. logo y fondo se copian del catalogo de Premios; acento va aparte porque el fondo de Montanos es negro. PLACEHOLDER: Montanos y Ookii son de ejemplo, Diego las sustituye. Cuando exista el endpoint de Luis esto llega de la API.",
     "_nota_semanas": "El programa son 10 semanas, una por escalon de la escalera. Aun asi la app no asume esa cantidad: renderiza las que vengan. Las semanas 4 a 10 estan en futura y con todo en cero a proposito: no hay historial real para ellas y no se inventa progreso.",
     "_nota_nombre": "nivel_actual, igual que en retos_semanales y por el mismo motivo: es la misma escalera y el JSON usa el nombre del contrato. El modelo Dart la expone como rangoActual, y ahora va de 0 a 10.",
     "nivel_actual": 2,
@@ -92,6 +93,18 @@
         "numero": 1,
         "cierra": "2026-09-06T23:59:59-06:00",
         "estado": "cerrada",
+        "patrocinio": {
+          "id": "ookii",
+          "marca": "Ookii",
+          "logo": "assets/img/premios/restaurantes/ookii.webp",
+          "fotos": [
+            "assets/img/premios/restaurantes/ookii.webp",
+            "assets/img/premios/restaurantes/ookii.webp",
+            "assets/img/premios/restaurantes/ookii.webp"
+          ],
+          "acento": "#2F7A6E",
+          "cupon": "2x1 en sushi de Ookii"
+        },
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -154,6 +167,19 @@
         "numero": 3,
         "cierra": "2026-09-20T23:59:59-06:00",
         "estado": "en_curso",
+        "patrocinio": {
+          "id": "montanos",
+          "marca": "Montanos",
+          "logo": "assets/img/premios/restaurantes/montanos.webp",
+          "fotos": [
+            "assets/img/premios/restaurantes/montanos.webp",
+            "assets/img/premios/restaurantes/montanos.webp",
+            "assets/img/premios/restaurantes/montanos.webp"
+          ],
+          "fondo": "#000000",
+          "acento": "#8C5A3C",
+          "cupon": "Entrada gratis en Montanos"
+        },
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -247,6 +273,18 @@
         "numero": 6,
         "cierra": "2026-10-11T23:59:59-06:00",
         "estado": "futura",
+        "patrocinio": {
+          "id": "ookii",
+          "marca": "Ookii",
+          "logo": "assets/img/premios/restaurantes/ookii.webp",
+          "fotos": [
+            "assets/img/premios/restaurantes/ookii.webp",
+            "assets/img/premios/restaurantes/ookii.webp",
+            "assets/img/premios/restaurantes/ookii.webp"
+          ],
+          "acento": "#2F7A6E",
+          "cupon": "Postre gratis en Ookii"
+        },
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -309,6 +347,19 @@
         "numero": 8,
         "cierra": "2026-10-25T23:59:59-06:00",
         "estado": "futura",
+        "patrocinio": {
+          "id": "montanos",
+          "marca": "Montanos",
+          "logo": "assets/img/premios/restaurantes/montanos.webp",
+          "fotos": [
+            "assets/img/premios/restaurantes/montanos.webp",
+            "assets/img/premios/restaurantes/montanos.webp",
+            "assets/img/premios/restaurantes/montanos.webp"
+          ],
+          "fondo": "#000000",
+          "acento": "#8C5A3C",
+          "cupon": "Postre gratis en Montanos"
+        },
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -401,42 +452,44 @@
     ],
     "_todo_xp": "Una semana perfecta paga 100 XP y 100 XP llenan un rango: 10 rangos, 10 semanas, un rango por semana. Reparto 40/35/25 entre los tres objetivos (definido por Daniel). Lo que no se puede romper es que los tres sumen 100: si no, subir de rango se vuelve imposible.",
     "_nota_coherencia": "La cuenta del mock cierra: semana 1 y 2 cumplidas enteras suben del rango 0 al 2 y pagan 5 + 10 = 15 monedas, que es lo que muestra la barra. La semana 3 va en curso con 40 de 100 XP. Si se editan estas semanas hay que reajustar nivel_actual o la pantalla miente.",
-    "_nota_meta": "meta es cuanto pide ese objetivo en el rango con el que se ENTRA a esa semana, y avance es progreso/meta. Los dos tienen que quedar consistentes: si se edita uno hay que recalcular el otro, o la pantalla dice \"faltan 42 min\" al lado de un porcentaje que no cuadra."
+    "_nota_meta": "meta es cuanto pide ese objetivo en el rango con el que se ENTRA a esa semana, y avance es progreso/meta. Los dos tienen que quedar consistentes: si se edita uno hay que recalcular el otro, o la pantalla dice \"faltan 42 min\" al lado de un porcentaje que no cuadra.",
+    "_nota_fotos": "PENDIENTE: Diego consigue 3 fotos por aliado. Hasta entonces cada patrocinio repite TRES VECES la unica foto que hay en el catalogo de Premios, asi que el cintillo de la semana en curso rota entre tres fotos iguales y el movimiento no se nota. La lista vive aca y NO se arma en el widget: cuando lleguen las fotos reales solo cambia este JSON (y despues, el endpoint de Luis)."
   },
   "monedas": {
     "saldo": 150,
     "ganadas_este_mes": 15,
     "_nota_valor": "TODO: falta cuánto vale una moneda en quetzales. Depende de las alianzas comerciales y no debe mostrarse en ninguna pantalla hasta que exista.",
+    "_nota_caducidad": "Las monedas caducan a los 90 DIAS de acunadas (revision de UI del 9 de septiembre de 2026; antes eran 6 meses). En cada lote 'caducan' es 'acunadas' + 90 dias y 'dias_para_caducar' se cuenta contra el 8 de septiembre de 2026, que es el hoy de este mock. Si se edita un lote hay que rehacer las dos cosas o la pantalla dice un plazo que no cuadra con la fecha.",
     "lotes": [
       {
         "cantidad": 10,
-        "acunadas": "2026-03-20",
+        "acunadas": "2026-06-22",
         "caducan": "2026-09-20",
         "dias_para_caducar": 12
       },
       {
         "cantidad": 60,
-        "acunadas": "2026-05-15",
-        "caducan": "2026-11-15",
-        "dias_para_caducar": 68
+        "acunadas": "2026-07-15",
+        "caducan": "2026-10-13",
+        "dias_para_caducar": 35
       },
       {
         "cantidad": 65,
-        "acunadas": "2026-07-02",
-        "caducan": "2027-01-02",
-        "dias_para_caducar": 116
+        "acunadas": "2026-08-02",
+        "caducan": "2026-10-31",
+        "dias_para_caducar": 53
       },
       {
         "cantidad": 5,
         "acunadas": "2026-09-06",
-        "caducan": "2027-03-06",
-        "dias_para_caducar": 179
+        "caducan": "2026-12-05",
+        "dias_para_caducar": 88
       },
       {
         "cantidad": 10,
         "acunadas": "2026-09-13",
-        "caducan": "2027-03-13",
-        "dias_para_caducar": 186
+        "caducan": "2026-12-12",
+        "dias_para_caducar": 95
       }
     ],
     "_nota_saldo": "El saldo es la suma de los lotes. Los dos ultimos son los ascensos de ESTE programa (5 por subir al rango 1, 10 por subir al 2) y tienen que cuadrar con las semanas: si se editan las semanas hay que rehacerlos o la hoja de monedas deja de cuadrar con el historial. Los tres primeros son de antes y no salen de estas 10 semanas: el saldo de la billetera arrastra lo viejo y descuenta lo gastado en Premios, que es justo lo que ganadas_este_mes no hace.",

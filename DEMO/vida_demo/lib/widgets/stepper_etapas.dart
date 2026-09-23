@@ -111,8 +111,13 @@ class _StepperEtapasState extends State<StepperEtapas> {
             ultima: i == _cantidad - 1,
             pasos: widget.pasos,
             // Mismo metal que el aro de ese tramo, para que el carrusel y
-            // el anillo se lean como una sola cosa.
-            color: colorDelAroActual(desde),
+            // el anillo se lean como una sola cosa: etapa 1 bronce, etapa
+            // 2 plata, etapa 3 oro, SIEMPRE — el metal dice qué etapa es,
+            // no en qué estado está (pedido de Daniel, 21 de septiembre
+            // de 2026). Antes la etapa completada se pasaba al azul de
+            // marca, así que la etapa 1 cumplida no tenía nada que ver
+            // con el tramo de bronce del anillo de arriba.
+            metal: AppColors.metal(i),
             alcanzada: widget.pasos >= hasta,
             activa: i == _etapaActual && widget.pasos < techoAros,
           );
@@ -152,7 +157,7 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.hasta,
     required this.ultima,
     required this.pasos,
-    required this.color,
+    required this.metal,
     required this.alcanzada,
     required this.activa,
   });
@@ -162,7 +167,11 @@ class _TarjetaEtapa extends StatelessWidget {
   final int hasta;
   final bool ultima;
   final int pasos;
-  final Color color;
+
+  /// El metal de esta etapa: el `aro` es el del anillo y la `tinta` la
+  /// versión que se puede leer como texto y como relleno chico.
+  final ({Color aro, Color tinta}) metal;
+
   final bool alcanzada;
   final bool activa;
 
@@ -176,23 +185,31 @@ class _TarjetaEtapa extends StatelessWidget {
     return ((pasos - desde) / largo).clamp(0.0, 1.0);
   }
 
-  /// Color que manda en la tarjeta. La etapa completada va en el AZUL de
-  /// marca, y la etapa en curso en el metal de su aro, para que se lea
-  /// junto con el anillo.
+  /// Color que manda en la tarjeta: el metal de la etapa, pase lo que
+  /// pase. Va en la versión TINTA y no en la del aro porque acá el color
+  /// tiene que funcionar de texto y de relleno con blanco encima — el
+  /// oro del anillo con una check blanca adentro no se lee.
   ///
   /// Lo único naranja que queda es el check: el naranja marca, no viste.
-  Color get _acento => alcanzada ? AppColors.accent : color;
+  Color get _acento => metal.tinta;
 
   @override
   Widget build(BuildContext context) {
     // Tres estados que se distinguen por cuatro cosas a la vez (ícono,
     // fondo, borde y texto), no solo por color: así también funcionan en
     // blanco y negro y con daltonismo.
-    final fondo = alcanzada
-        // Tinte de fondo, no relleno pleno: a esta escala el relleno
-        // pleno tapaba el texto de puntos.
-        ? AppColors.azulBruma
-        : activa
+    //
+    // LA SUPERFICIE NO SE PINTA (revisión de Daniel, 21 de septiembre de
+    // 2026). Se probó con el fondo entero del lavado del metal y tres
+    // tarjetas de color seguidas ensucian la pantalla: es la misma razón
+    // por la que el naranja no rellena superficies grandes y por la que
+    // no hay tarjetas oscuras (ver CLAUDE.md).
+    //
+    // El metal se dice en lo CHICO, que es donde un color señala en vez
+    // de vestir: el borde, el círculo del número y la pastilla de los
+    // puntos. Tres marcas del mismo material alcanzan para saber de qué
+    // etapa es la tarjeta sin tener que pintarla.
+    final fondo = activa || alcanzada
         ? AppColors.card
         : AppColors.cardBorder.withValues(alpha: 0.3);
 
@@ -202,11 +219,13 @@ class _TarjetaEtapa extends StatelessWidget {
         color: fondo,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: alcanzada
-              ? AppColors.azulSuave
-              : activa
-              ? color
-              : AppColors.cardBorder,
+          // EL BORDE ES EL METAL. Ahora que el fondo quedó blanco, es la
+          // marca más grande que tiene la tarjeta para decir de qué
+          // etapa es, así que va en la tinta plena y no en un alpha: un
+          // contorno lavado no se distingue de los otros dos.
+          //
+          // La bloqueada es la única que no lo lleva: todavía no es tuya.
+          color: activa || alcanzada ? metal.tinta : AppColors.cardBorder,
           // El borde grueso es la marca de "acá estás".
           width: activa ? 2.5 : 1.5,
         ),
@@ -214,7 +233,7 @@ class _TarjetaEtapa extends StatelessWidget {
             ? [
                 // Sombra suave del metal, nunca un glow (ver CLAUDE.md).
                 BoxShadow(
-                  color: color.withValues(alpha: 0.2),
+                  color: metal.tinta.withValues(alpha: 0.2),
                   blurRadius: 14,
                   offset: const Offset(0, 5),
                 ),
@@ -308,9 +327,10 @@ class _TarjetaEtapa extends StatelessWidget {
                           value: _avance,
                           minHeight: 5,
                           backgroundColor: AppColors.cardBorder,
-                          // Naranja, no el metal del aro: el metal es gris
-                          // en la primera etapa y ahí la barra no se leía
-                          // como progreso.
+                          // Azul de marca, no el metal: una barra de
+                          // progreso es azul en toda la app (CLAUDE.md), y
+                          // en plata el relleno ni se distinguía del
+                          // canal vacío.
                           valueColor: const AlwaysStoppedAnimation(
                             AppColors.accent,
                           ),
@@ -343,13 +363,18 @@ class _TarjetaEtapa extends StatelessWidget {
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
-                          alcanzada ? 'Completada' : 'Todavía no llegás acá',
+                          // "Bloqueado" y no "Todavía no llegás acá"
+                          // (revisión de Daniel, 21 de septiembre de
+                          // 2026): una palabra al lado del candado dice
+                          // lo mismo que una oración, y las tres etapas
+                          // se leen de un vistazo en vez de leerse.
+                          alcanzada ? 'Completada' : 'Bloqueado',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: alcanzada
-                                    ? AppColors.accent
+                                    ? metal.tinta
                                     : AppColors.textSecondary,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -402,7 +427,11 @@ class _Chip extends StatelessWidget {
       child: Text(
         texto,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: AppColors.textPrimary,
+          // Texto del metal sobre un lavado del mismo metal. Es la
+          // tercera marca de la tarjeta, después del borde y del
+          // círculo: una pastilla es lo bastante chica como para
+          // llevar color sin que la pantalla se ensucie.
+          color: color,
           fontWeight: FontWeight.w800,
         ),
       ),

@@ -3,22 +3,33 @@ import 'package:flutter/material.dart';
 // ============================================================
 // LA CURVA DEL CAMINO.
 //
-// Estas tres funciones son lo único que sabe trazar la curva que une los
+// Estas tres funciones son lo único que sabe trazar la cinta que une los
 // nodos del camino de las semanas.
 //
 // Acá NO hay widgets ni colores de marca: son solo curva, pincel y
 // crecimiento. Quién es azul y quién es pálido lo decide la pantalla.
 // ============================================================
 
-/// Una curva suave entre dos puntos.
+/// Un arco suave entre dos puntos.
 ///
-/// Los puntos de control salen perpendiculares al vector entre las dos
-/// anclas, uno para cada lado: así serpentea sola, sin números mágicos
-/// que haya que reajustar cuando cambia el tamaño de la caja. Es lo que
-/// hace que el camino no sea una línea recta.
+/// Los dos puntos de control salen del MISMO lado del tramo, así que el
+/// trazo se comba entero hacia ese lado en vez de cruzar de uno al otro.
+/// Eso es lo que deja encadenar tramos —uno combado hacia arriba, el
+/// siguiente hacia abajo— y que el camino se lea como una onda larga y
+/// no como un zigzag.
 ///
-/// [amplitud] es cuánto se curva, como fracción del largo del tramo.
-Path curvaTallo(Offset a, Offset b, {double amplitud = 0.17}) {
+/// [amplitud] es cuánto se comba, como fracción del largo del tramo, y
+/// su SIGNO dice para qué lado: positivo hacia la perpendicular de
+/// avance, negativo hacia el otro. [reparto] es qué tan cerca de las
+/// puntas caen los controles: cuanto más chico, más pronto arranca la
+/// curva y más de costado sale el trazo del nodo. Eso último importa en
+/// el giro de fila, que tiene que esquivar lo que hay debajo del nodo.
+Path curvaArco(
+  Offset a,
+  Offset b, {
+  double amplitud = 0.12,
+  double reparto = 0.3,
+}) {
   final d = b - a;
   final largo = d.distance;
   final trazo = Path()..moveTo(a.dx, a.dy);
@@ -28,10 +39,10 @@ Path curvaTallo(Offset a, Offset b, {double amplitud = 0.17}) {
   final amp = largo * amplitud;
 
   return trazo..cubicTo(
-    a.dx + d.dx * 0.35 + perpendicular.dx * amp,
-    a.dy + d.dy * 0.35 + perpendicular.dy * amp,
-    a.dx + d.dx * 0.65 - perpendicular.dx * amp,
-    a.dy + d.dy * 0.65 - perpendicular.dy * amp,
+    a.dx + d.dx * reparto + perpendicular.dx * amp,
+    a.dy + d.dy * reparto + perpendicular.dy * amp,
+    a.dx + d.dx * (1 - reparto) + perpendicular.dx * amp,
+    a.dy + d.dy * (1 - reparto) + perpendicular.dy * amp,
     b.dx,
     b.dy,
   );
@@ -42,7 +53,8 @@ Paint pincelCurva(Color color, double grosor) => Paint()
   ..color = color
   ..style = PaintingStyle.stroke
   ..strokeWidth = grosor
-  ..strokeCap = StrokeCap.round;
+  ..strokeCap = StrokeCap.round
+  ..strokeJoin = StrokeJoin.round;
 
 /// Dibuja solo la primera fracción [t] de [trazo], para que crezca.
 ///

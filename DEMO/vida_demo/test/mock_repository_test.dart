@@ -197,7 +197,12 @@ void main() {
           home: TemaVida(child: pantalla),
         ),
       );
-      await tester.pump();
+      // Con tiempo, no un pump pelado: Premios entra con los logos
+      // escalonados (flutter_animate), y esa entrada deja programado un
+      // arranque que el test tiene que dejar correr. Sin esto el árbol
+      // se destruye con un timer vivo y el test falla por eso, no por
+      // la pantalla.
+      await tester.pump(const Duration(milliseconds: 900));
     }
 
     testWidgets('Home', (t) async {
@@ -216,15 +221,26 @@ void main() {
       // y las ponia sola. Al cambiar a Archivo hubo que escribirlas.
       expect(find.text('PROGRESO'), findsOneWidget);
       expect(find.text('Progreso'), findsOneWidget);
-      expect(find.text('Puntos'), findsOneWidget);
+      // El rotulo de la tarjeta heroe dice DE QUE PERIODO es el numero,
+      // y bajo debajo de el. Antes decia "Puntos totales" arriba: un
+      // rotulo que no cambiaba con el selector y que ademas obligaba a
+      // leer una etiqueta antes de llegar al dato.
+      expect(find.text('PUNTOS DE LA SEMANA'), findsOneWidget);
       // "Recompensas por constancia" se mudo a la hoja de monedas que se
       // abre desde el chip de Hoy: ya no vive en esta pantalla.
       expect(find.text('Recompensas por constancia'), findsNothing);
       // "Ritmo cardiaco de hoy" tambien salio: era un dato suelto que no
-      // se conectaba con nada de la pantalla. En su lugar va la racha,
-      // que es lo unico que mide constancia y no esfuerzo de un dia.
+      // se conectaba con nada de la pantalla. Los bpm se ven ahora en el
+      // entrenamiento que los produjo.
       expect(find.text('Ritmo cardíaco de hoy'), findsNothing);
-      expect(find.text('Tu racha'), findsOneWidget);
+      // Y la racha tambien (decision de Daniel, 21 de septiembre de
+      // 2026): vive en Hoy —en el saludo— y en Social. Repetida en una
+      // tercera pantalla, entera y con su historial, empujaba hacia
+      // abajo lo que esta pantalla si tiene que contar, que es el
+      // progreso del periodo que se esta mirando.
+      expect(find.text('Tu racha'), findsNothing);
+      // Lo que quedo en su lugar: la actividad del periodo.
+      expect(find.text('Tu actividad'), findsOneWidget);
     });
 
     testWidgets('Social', (t) async {
@@ -234,7 +250,8 @@ void main() {
 
     testWidgets('Premios', (t) async {
       await montar(t, const PremiosScreen());
-      expect(find.text('Premios'), findsWidgets);
+      // En versales, como el resto de los titulos de pantalla.
+      expect(find.text('PREMIOS'), findsWidgets);
     });
 
     testWidgets('Mi Plan', (t) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'almacen_social.dart';
@@ -115,6 +117,9 @@ Future<bool> refrescarDatos() async {
   try {
     await Datos.cargar();
     datosRecargados.value++;
+    // La tanda nueva puede traer otra semana, con otro cierre: el relevo
+    // se reapunta a ESE cierre y no al de la tanda anterior.
+    programarRelevoDeSemana();
     return true;
   } catch (e, s) {
     debugPrint('No se pudieron refrescar los datos: $e\n$s');
@@ -138,10 +143,106 @@ const Duration _esperaEntreRecargasAutomaticas = Duration(seconds: 30);
 Future<void> refrescarDatosSiHaceFalta() async {
   final ultima = _ultimaRecarga;
   if (ultima != null &&
-      DateTime.now().difference(ultima) < _esperaEntreRecargasAutomaticas) {
+      DateTime.now().difference(ultima) < _esperaEntreRecargasAutomaticas &&
+      // La guarda de 30 s NO aplica cuando la semana ya cerró: ahí lo que
+      // hay en pantalla es de la semana pasada, y verla treinta segundos
+      // más es ver algo que ya no existe.
+      !semanaVencida()) {
     return;
   }
   await refrescarDatos();
+}
+
+// ============================================================
+// EL RELEVO DE SEMANA: LUNES 00:00, HORA DE GUATEMALA.
+//
+// La semana va de lunes 00:00 a domingo 23:59 (hora de Guatemala) y al
+// cerrarse tiene que aparecer la siguiente con SUS objetivos.
+//
+// QUIÉN DECIDE QUÉ SEMANA CORRE: el servidor, siempre. El teléfono no
+// calcula el relevo ni adelanta nada — solo vuelve a PREGUNTAR en el
+// momento justo. Es la misma regla que con la FCmáx y con la caducidad
+// de las monedas: las fechas del negocio no se calculan en el teléfono.
+// Acá además hay un motivo de fraude: si el relevo lo decidiera el
+// teléfono, cambiar la zona horaria en Ajustes abriría una semana nueva
+// antes de tiempo, con tres objetivos nuevos y un rango más para ganar.
+//
+// Por eso lo único que vive acá es CUÁNDO volver a preguntar.
+// ============================================================
+
+/// Cuándo cierra la semana que la app tiene cargada, o null si no hay
+/// ninguna en curso.
+///
+/// Es el instante que mandó el servidor —con su offset de Guatemala—, no
+/// uno derivado del reloj del teléfono.
+DateTime? cierreDeLaSemanaEnCurso() {
+  final semana = Datos.i.resumen.objetivosSemana.enCurso;
+  return semana?.cierra;
+}
+
+/// Si la semana que se está mostrando ya cerró.
+///
+/// La comparación es entre instantes absolutos, así que no importa en qué
+/// huso esté el teléfono: `DateTime` compara microsegundos desde época.
+bool semanaVencida({DateTime? ahora}) {
+  final cierre = cierreDeLaSemanaEnCurso();
+  if (cierre == null) return false;
+  return (ahora ?? DateTime.now()).isAfter(cierre);
+}
+
+/// Cada cuánto se reintenta cuando el cierre ya pasó pero el servidor
+/// todavía manda la semana vieja.
+///
+/// Sin este piso, una tanda de datos atrasada dejaría a la app pidiendo
+/// en bucle: pregunta, le contestan lo mismo, y como sigue vencida
+/// vuelve a preguntar en el acto.
+const Duration _reintentoDeRelevo = Duration(minutes: 5);
+
+/// Un segundo de gracia después del cierre.
+///
+/// El servidor evalúa a las 23:59:59; preguntarle en ese mismo instante
+/// es una carrera que se puede perder y traería la semana vieja.
+const Duration _graciaDeRelevo = Duration(seconds: 1);
+
+/// Cuánto falta para volver a pedir los datos por el cambio de semana.
+///
+/// Separada de la parte que maneja el temporizador para poder probarla:
+/// es una cuenta pura, sin reloj propio ni efectos.
+Duration esperaHastaElRelevo(DateTime cierre, DateTime ahora) {
+  final falta = cierre.difference(ahora) + _graciaDeRelevo;
+  return falta.isNegative ? _reintentoDeRelevo : falta;
+}
+
+Timer? _relevo;
+
+/// Programa el pedido de datos para el instante en que cambia la semana.
+///
+/// Cubre el caso de la app abierta cruzando la medianoche del domingo: a
+/// las 00:00 del lunes la pantalla ya tiene que mostrar la semana nueva
+/// sin que el usuario jale para refrescar. El otro camino —volver de
+/// segundo plano— lo cubre [refrescarDatosSiHaceFalta].
+///
+/// Se reprograma sola después de cada recarga, así que siempre apunta al
+/// cierre de la semana que está en pantalla.
+void programarRelevoDeSemana() {
+  _relevo?.cancel();
+
+  final cierre = cierreDeLaSemanaEnCurso();
+  if (cierre == null) return;
+
+  _relevo = Timer(esperaHastaElRelevo(cierre, DateTime.now()), () async {
+    await refrescarDatos();
+    // Si el servidor todavía no relevó la semana, `refrescarDatos` vuelve
+    // a llamar acá y el piso de reintento evita el bucle.
+  });
+}
+
+/// Solo para tests: apaga el temporizador para que no quede vivo entre
+/// casos.
+@visibleForTesting
+void cancelarRelevoDeSemana() {
+  _relevo?.cancel();
+  _relevo = null;
 }
 
 // Se importa ApiVidaRepository aunque hoy no se use, para que la línea

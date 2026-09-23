@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:getwidget/getwidget.dart';
 import '../datos/fuente_datos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
+import '../widgets/avatar_usuario.dart';
 
 // ============================================================
 // PERFIL Y CONFIGURACIÓN.
@@ -335,16 +335,12 @@ class _Cabecera extends StatelessWidget {
             onTap: onCambiarFoto,
             child: Stack(
               children: [
-                const GFAvatar(
-                  size: 46,
-                  shape: GFAvatarShape.circle,
-                  backgroundColor: AppColors.cardBorder,
-                  child: Icon(
-                    Icons.person,
-                    size: 46,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
+                // 69 y no 46: el GFAvatar que había acá recibía `size`, y
+                // GFAvatar lo multiplica por 1.5 para sacar el diámetro.
+                // `AvatarUsuario` pide el diámetro de verdad, así que el
+                // número tiene que venir ya multiplicado o la foto se
+                // achica a dos tercios.
+                const AvatarUsuario(diametro: 69),
                 // La marca de cámara dice que la foto se puede cambiar sin
                 // necesitar un texto que lo explique.
                 Positioned(

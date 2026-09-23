@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
@@ -32,7 +33,11 @@ void main() {
     expect(find.text('Amigos'), findsWidgets);
     expect(find.text('${social.conexiones.length}'), findsWidgets);
     expect(find.text('Solicitudes'), findsOneWidget);
-    expect(find.text('Enviadas'), findsOneWidget);
+    // Y NO hay pestaña de enviadas (decisión de Daniel, 22 de septiembre
+    // de 2026): ver la lista de lo que mandaste no lleva a ninguna
+    // parte. Que ya la mandaste se dice donde alguien lo preguntaría de
+    // nuevo — al buscar a esa persona para agregarla.
+    expect(find.text('Enviadas'), findsNothing);
   });
 
   testWidgets('aceptar una solicitud la vuelve amistad', (tester) async {
@@ -50,15 +55,40 @@ void main() {
     expect(social.conexiones.any((c) => c.handle == quien.handle), isTrue);
   });
 
-  testWidgets('cancelar una solicitud enviada la saca', (tester) async {
-    final social = Datos.i.social;
-    final antes = social.solicitudesEnviadas.length;
+  testWidgets('a quien ya le mandaste no se le puede mandar de nuevo', (
+    tester,
+  ) async {
+    await _montar(tester);
+    final yaMandada = Datos.i.social.solicitudesEnviadas.first;
 
-    await _montar(tester, pestania: 2);
-    await tester.tap(find.text('Cancelar').first);
+    // Lo mismo que hace Instagram: buscás a alguien y el botón te dice
+    // en qué estás con esa persona. Antes la lista de enviadas vivía en
+    // una pestaña propia y el botón siempre decía "Enviar", así que la
+    // misma solicitud se podía mandar infinitas veces.
+    await tester.tap(find.text('Agregar un amigo'));
     await tester.pumpAndSettle();
 
-    expect(social.solicitudesEnviadas.length, antes - 1);
+    await tester.enterText(
+      find.byType(CupertinoTextField).last,
+      yaMandada.handle,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Solicitud enviada'), findsOneWidget);
+    expect(find.text('Enviar solicitud'), findsNothing);
+  });
+
+  testWidgets('a un amigo tampoco: ya lo es', (tester) async {
+    await _montar(tester);
+    final amigo = Datos.i.social.conexiones.first;
+
+    await tester.tap(find.text('Agregar un amigo'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(CupertinoTextField).last, amigo.handle);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ya son amigos'), findsOneWidget);
   });
 
   testWidgets('una solicitud no expone racha ni nivel', (tester) async {

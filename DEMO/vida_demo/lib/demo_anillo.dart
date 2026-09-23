@@ -116,32 +116,61 @@ class _FilaDeAnillos extends StatelessWidget {
 
 /// Los tres metales como muestras planas, para compararlos sin la forma
 /// del aro de por medio.
+///
+/// Van las DOS versiones de cada uno, porque las dos se usan:
+///
+///   · `aro`   — el trazo del anillo.
+///   · `tinta` — el borde, el círculo del número y la pastilla de los
+///               puntos de la tarjeta de esa etapa en Hoy. Lleva blanco
+///               encima, así que acá se muestra así.
+///
+/// Cada fila se repite en escala de grises justo debajo. Si dos
+/// muestras de la misma fila no se distinguen en grises, no se
+/// distinguen con daltonismo.
+///
+/// La fila que TIENE que pasar esa prueba es la del aro: son tres arcos
+/// del mismo anillo y el color es lo único que los separa. La de la
+/// tinta va siempre dentro de una tarjeta que ya se identifica por su
+/// número y su ícono, así que ahí los grises son información, no un
+/// requisito.
 class _MuestrasDeColor extends StatelessWidget {
   const _MuestrasDeColor();
 
+  static const _filas = <(String, Color Function(int))>[
+    ('Aro · el trazo del anillo', _aro),
+    ('Tinta · borde, círculo y pastilla de la tarjeta', _tinta),
+  ];
+
+  static Color _aro(int i) => AppColors.metal(i).aro;
+  static Color _tinta(int i) => AppColors.metal(i).tinta;
+
+  static const _nombres = ['Bronce', 'Plata', 'Oro'];
+
   @override
   Widget build(BuildContext context) {
-    const metales = <(String, Color)>[
-      ('Bronce #CD7F32', AppColors.aroBronce),
-      ('Plata #C0C0C0', AppColors.aroPlata),
-      ('Oro #FFD700', AppColors.aroOro),
-    ];
+    /// Un hex legible, para poder copiarlo de la pantalla.
+    String hex(Color c) =>
+        '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).toUpperCase().padLeft(6, '0')}';
 
-    Widget tira(bool enGrises) {
+    Widget tira(Color Function(int) de, bool enGrises) {
       final fila = Row(
         children: [
-          for (final (nombre, color) in metales)
+          for (var i = 0; i < 3; i++)
             Expanded(
               child: Container(
-                height: 70,
+                height: 62,
                 margin: const EdgeInsets.only(right: 8),
-                color: color,
+                color: de(i),
                 alignment: Alignment.center,
                 child: Text(
-                  nombre,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  '${_nombres[i]}\n${hex(de(i))}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    // La tinta es oscura y lleva contenido blanco
+                    // encima; las otras dos son claras.
+                    color: de == _tinta ? Colors.white : AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -154,7 +183,23 @@ class _MuestrasDeColor extends StatelessWidget {
     }
 
     return Column(
-      children: [tira(false), const SizedBox(height: 8), tira(true)],
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (titulo, de) in _filas) ...[
+          Text(
+            titulo,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          tira(de, false),
+          const SizedBox(height: 4),
+          tira(de, true),
+          const SizedBox(height: 18),
+        ],
+      ],
     );
   }
 }

@@ -258,6 +258,14 @@ class Historial {
     return dias.where((d) => !d.fecha.isBefore(lunes)).toList();
   }
 
+  /// Días del año calendario en curso.
+  ///
+  /// Hoy el historial no llega a tanto —trae poco más de un mes—, así
+  /// que devuelve todo. Filtra igual: el día que el backend mande dos
+  /// años, "este año" tiene que seguir siendo este año.
+  List<DiaActividad> get anioEnCurso =>
+      dias.where((d) => d.fecha.year == hoy.fecha.year).toList();
+
   /// Días del mes calendario en curso.
   List<DiaActividad> get mesEnCurso {
     final ultimo = hoy.fecha;
@@ -268,6 +276,61 @@ class Historial {
         .toList();
   }
 
+  /// Las semanas del mes en curso, cada una con sus días, de la más
+  /// vieja a la más nueva.
+  ///
+  /// UNA SEMANA ES DEL MES DE SU LUNES, no del mes de cada día suelto
+  /// (decisión de Daniel, 21 de septiembre de 2026). Antes se agrupaban
+  /// por su lunes los días del mes CALENDARIO, y eso partía una semana
+  /// entre dos meses: agosto de 2026 arranca sábado, así que el 1 y el 2
+  /// —que son la cola de la semana del 27 de julio— salían como "semana
+  /// 1 de agosto", una barra de dos días parada al lado de barras de
+  /// siete. Se leía como una semana pésima y ni siquiera era una semana.
+  /// Agosto tiene CUATRO semanas, no cinco.
+  ///
+  /// Es la misma regla que ya manda en todo lo demás: la semana corre de
+  /// lunes 00:00 a domingo 23:59 y la cierra el servidor de una sola
+  /// vez, así que es indivisible — no puede contarse mitad en un mes y
+  /// mitad en el otro.
+  ///
+  /// La ÚLTIMA sí puede ser corta, pero por el motivo bueno: es la
+  /// semana en curso y todavía no terminó.
+  ///
+  /// Consecuencia a tener presente: estas semanas NO suman los puntos
+  /// del mes calendario. Los días anteriores al primer lunes del mes
+  /// quedan afuera, contados en el mes anterior, que es donde cayó su
+  /// semana.
+  ///
+  /// Borde: mientras un mes que no arranca en lunes no llega a su primer
+  /// lunes, no tiene ninguna semana propia. Ahí se devuelve la semana en
+  /// curso sola — una barra sin nada al lado con qué confundirla es
+  /// mejor que un panel vacío.
+  List<List<DiaActividad>> get semanasDelMes {
+    final mes = hoy.fecha;
+    final porLunes = <DateTime, List<DiaActividad>>{};
+    for (final d in mesEnCurso) {
+      final lunes = DateTime(
+        d.fecha.year,
+        d.fecha.month,
+        d.fecha.day,
+      ).subtract(Duration(days: d.fecha.weekday - 1));
+      if (lunes.year != mes.year || lunes.month != mes.month) continue;
+      porLunes.putIfAbsent(lunes, () => []).add(d);
+    }
+    if (porLunes.isEmpty) return [semanaEnCurso];
+    final lunes = porLunes.keys.toList()..sort();
+    return [for (final l in lunes) porLunes[l]!];
+  }
+
+  /// Los días de [semanasDelMes], aplanados y en orden.
+  ///
+  /// Es lo que se le pasa a un widget que agrupa por su cuenta: así
+  /// cuenta las mismas semanas que la gráfica y las numera igual, sin
+  /// tener que repetir la regla.
+  List<DiaActividad> get diasDeLasSemanasDelMes => [
+    for (final semana in semanasDelMes) ...semana,
+  ];
+
   factory Historial.desdeJson(Map<String, dynamic> j) => Historial(
     zonaHoraria: j['zona_horaria'] as String,
     dias: (j['dias'] as List)
@@ -277,7 +340,11 @@ class Historial {
 }
 
 /// Un lote de monedas con su fecha de caducidad. Las monedas caducan a
-/// los 6 meses de acuñadas.
+/// los 90 días de acuñadas.
+///
+/// Quién calcula la fecha: el backend. Acá solo se lee `caducan`, nunca
+/// se suman los 90 días en el teléfono — si el plazo cambia otra vez, la
+/// app no tiene que enterarse.
 class LoteMonedas {
   const LoteMonedas({
     required this.cantidad,
@@ -411,6 +478,7 @@ class SemanaObjetivos {
     required this.cierra,
     required this.estado,
     required this.objetivos,
+    this.patrocinio,
   });
 
   /// Número de semana dentro del mes: 1, 2, 3… Un mes puede tener 5.
@@ -421,6 +489,21 @@ class SemanaObjetivos {
 
   final EstadoSemana estado;
   final List<ObjetivoSemanal> objetivos;
+
+  /// La marca aliada que compró ESTA semana, si alguna la compró.
+  ///
+  /// NO todas las semanas tienen: solo las que una alianza pagó por
+  /// destacar. Null es el caso normal y el camino tiene que verse igual
+  /// de terminado sin logo — nada puede cambiar de tamaño ni de lugar
+  /// según si la semana está vendida.
+  ///
+  /// Cumplir una semana patrocinada paga el cupón de esa marca en vez
+  /// del premio genérico del catálogo. Las MONEDAS del rango se pagan
+  /// igual: el patrocinio cambia el premio, no la mecánica.
+  final Patrocinio? patrocinio;
+
+  /// Si esta semana la compró una marca.
+  bool get tienePatrocinio => patrocinio != null;
 
   /// Cuántos de los tres van cumplidos.
   int get cumplidos => objetivos.where((o) => o.completo).length;
@@ -445,6 +528,9 @@ class SemanaObjetivos {
     objetivos: (j['objetivos'] as List)
         .map((o) => ObjetivoSemanal.desdeJson(o as Map<String, dynamic>))
         .toList(),
+    patrocinio: j['patrocinio'] == null
+        ? null
+        : Patrocinio.desdeJson(j['patrocinio'] as Map<String, dynamic>),
   );
 }
 
@@ -541,18 +627,6 @@ class ObjetivosSemana {
     }
 
     return pasos;
-  }
-
-  /// Cómo se llama la semana que va DESPUÉS de [numeroDeSemana], o null
-  /// si esa es la última del programa.
-  ///
-  /// Sale de la lista y no de `numero + 1`: el backend numera las semanas
-  /// y no hay nada que garantice que sean consecutivas.
-  int? numeroDespuesDe(int numeroDeSemana) {
-    for (var i = 0; i < semanas.length - 1; i++) {
-      if (semanas[i].numero == numeroDeSemana) return semanas[i + 1].numero;
-    }
-    return null;
   }
 
   /// El paso del recorrido que le toca a [numeroDeSemana].
@@ -761,6 +835,7 @@ class Poliza {
     required this.formaPago,
     required this.redCobertura,
     required this.estado,
+    this.primaAnualQ,
   });
 
   final String numero;
@@ -776,6 +851,18 @@ class Poliza {
   final String redCobertura;
   final String estado;
 
+  /// La prima anual como NÚMERO, para poder hacer cuentas con ella.
+  ///
+  /// [primaAnual] es el texto que se muestra ("Q18,000") y no se puede
+  /// multiplicar. Este campo existe para una sola cuenta: cuánto pagaría
+  /// el nivel siguiente, que Mi Plan muestra en su tarjeta de proyección.
+  ///
+  /// Nullable a propósito: si la aseguradora no manda el número, la
+  /// pantalla dice cuántos puntos faltan y se calla el monto, en vez de
+  /// derivarlo dividiendo el cashback por el porcentaje (que reventaría
+  /// en el nivel 0, donde el porcentaje es 0).
+  final int? primaAnualQ;
+
   factory Poliza.desdeJson(Map<String, dynamic> j) => Poliza(
     numero: j['numero'] as String,
     titularYDependientes: j['titular_y_dependientes'] as String,
@@ -786,6 +873,7 @@ class Poliza {
     vigencia: j['vigencia'] as String,
     fechaRenovacion: j['fecha_renovacion'] as String,
     primaAnual: j['prima_anual'] as String,
+    primaAnualQ: j['prima_anual_q'] as int?,
     formaPago: j['forma_pago'] as String,
     redCobertura: j['red_cobertura'] as String,
     estado: j['estado'] as String,
@@ -910,6 +998,7 @@ class Premio {
     required this.vence,
     this.foto,
     this.fondo,
+    this.destacado = false,
   });
 
   final String id;
@@ -938,6 +1027,18 @@ class Premio {
   /// importa Flutter, y el que sabe de colores es el widget.
   final String? fondo;
 
+  /// El comercio compró visibilidad: su tarjeta va ancha en el mosaico.
+  ///
+  /// Es una de las tres vías de ingreso del producto (alianzas), así que
+  /// vale que se vea más grande y no solo más arriba. Falso por defecto:
+  /// **un catálogo sin ningún destacado es el caso normal** y tiene que
+  /// verse entero, sin huecos ni cartel que anuncie la ausencia.
+  ///
+  /// [PENDIENTE: hoy sale del mock. Qué comercio está vendido lo tiene
+  /// que decir el endpoint de patrocinios que debe Luis — el mismo que
+  /// falta para las semanas y los ciclos de liga.]
+  final bool destacado;
+
   factory Premio.desdeJson(Map<String, dynamic> j) => Premio(
     id: j['id'] as String,
     nombre: j['nombre'] as String,
@@ -950,6 +1051,7 @@ class Premio {
     vence: j['vence'] as String,
     foto: j['foto'] as String?,
     fondo: j['fondo'] as String?,
+    destacado: j['destacado'] as bool? ?? false,
   );
 }
 
@@ -984,41 +1086,129 @@ enum Tendencia {
 
 /// Duelo activo. Los duelos NO otorgan monedas ni premios: son
 /// puramente competitivos y sociales.
+/// UN DUELO ES UN RETO CON META (decisión de Daniel, 22 de septiembre
+/// de 2026): los dos van por el mismo número de pasos y el mismo plazo,
+/// y gana el que llegue primero.
+///
+/// Antes eran dos porcentajes de superación sobre el promedio de cada
+/// uno. Era más justo en teoría —cada quien contra su propia historia—
+/// pero la tarjeta no dejaba ver qué estaba en juego: "+18% sobre tu
+/// promedio" no dice cuánto falta ni qué hay que hacer hoy. Con una meta
+/// común los dos números se leen solos.
+///
+/// OJO: esto es una comparación DIRECTA de pasos entre dos personas, que
+/// es lo que la regla vieja de CLAUDE.md evitaba a propósito (alguien
+/// que camina 3.000 al día no le gana nunca a alguien que camina
+/// 12.000). El duelo no paga monedas ni afecta el cashback, así que la
+/// asimetría no cuesta plata, pero el reto lo eligen los dos al armarlo
+/// y ahí es donde hay que dejar elegir una meta alcanzable.
 class Duelo {
   const Duelo({
     required this.activo,
     required this.rivalHandle,
-    required this.tiempoRestante,
-    required this.superacionPropia,
-    required this.superacionRival,
+    required this.diasRestantes,
+    required this.metaPasos,
+    required this.plazo,
+    required this.pasosPropios,
+    required this.pasosRival,
+    this.rivalNombre,
   });
 
   final bool activo;
   final String rivalHandle;
-  final String tiempoRestante;
 
-  /// % sobre el propio promedio de cada quien. Nunca comparación directa
-  /// de pasos entre personas.
-  final double superacionPropia;
-  final double superacionRival;
+  /// El nombre del rival, si el servidor lo mandó.
+  ///
+  /// Nullable y con [rivalDicho] al lado: un duelo contra alguien que
+  /// todavía no es contacto puede llegar solo con el usuario, y en ese
+  /// caso la pantalla muestra el usuario en vez de un renglón vacío.
+  final String? rivalNombre;
+
+  /// Cómo se nombra al rival en pantalla: el nombre si vino, el usuario
+  /// si no.
+  String get rivalDicho => rivalNombre ?? rivalHandle;
+
+  /// Cuántos días le quedan al reto. NÚMERO y no texto: con el número se
+  /// puede además calcular a qué ritmo hay que ir para llegar, que es lo
+  /// único que la tarjeta puede decirle al usuario que haga hoy.
+  final int diasRestantes;
+
+  /// Los pasos que hay que juntar. Es lo que se retaron.
+  final int metaPasos;
+
+  /// En cuánto tiempo ("en una semana"). Viene del servidor porque el
+  /// plazo lo eligen los dos al armar el duelo.
+  final String plazo;
+
+  final int pasosPropios;
+  final int pasosRival;
+
+  /// El plazo, en palabras.
+  String get tiempoDicho => switch (diasRestantes) {
+    <= 0 => 'Cierra hoy',
+    1 => 'Último día',
+    _ => '$diasRestantes días restantes',
+  };
+
+  /// Cuánto le falta a cada uno. Nunca negativo: pasada la meta, falta
+  /// cero.
+  int get faltanPropios => (metaPasos - pasosPropios).clamp(0, metaPasos);
+  int get faltanRival => (metaPasos - pasosRival).clamp(0, metaPasos);
+
+  /// Qué fracción de la meta lleva cada uno, de 0 a 1.
+  double get avancePropio =>
+      metaPasos <= 0 ? 0 : (pasosPropios / metaPasos).clamp(0.0, 1.0);
+  double get avanceRival =>
+      metaPasos <= 0 ? 0 : (pasosRival / metaPasos).clamp(0.0, 1.0);
+
+  /// Cuántos pasos de ventaja le llevás. Negativo si va ganando el otro.
+  int get ventaja => pasosPropios - pasosRival;
+
+  /// A cuántos pasos por día tenés que ir para llegar a la meta.
+  ///
+  /// Null cuando ya llegaste o cuando el reto cierra hoy: en los dos
+  /// casos un promedio diario no le dice nada a nadie.
+  int? get ritmoNecesario {
+    if (faltanPropios <= 0 || diasRestantes <= 0) return null;
+    return (faltanPropios / diasRestantes).ceil();
+  }
 
   factory Duelo.desdeJson(Map<String, dynamic> j) => Duelo(
     activo: j['activo'] as bool,
     rivalHandle: j['rival_handle'] as String,
-    tiempoRestante: j['tiempo_restante'] as String,
-    superacionPropia: (j['superacion_propia'] as num).toDouble(),
-    superacionRival: (j['superacion_rival'] as num).toDouble(),
+    rivalNombre: j['rival_nombre'] as String?,
+    diasRestantes: (j['dias_restantes'] as num).toInt(),
+    metaPasos: (j['meta_pasos'] as num).toInt(),
+    plazo: j['plazo'] as String,
+    pasosPropios: (j['pasos_propios'] as num).toInt(),
+    pasosRival: (j['pasos_rival'] as num).toInt(),
   );
 }
 
 class DueloHistorial {
-  const DueloHistorial({required this.rival, required this.ganado});
+  const DueloHistorial({
+    required this.rival,
+    required this.ganado,
+    this.nombre,
+  });
 
+  /// El usuario del rival ("@mery_run").
   final String rival;
+
+  /// Su nombre, si vino. El historial se lee para reconocer contra
+  /// quién jugaste, y un usuario suelto no siempre alcanza.
+  final String? nombre;
+
   final bool ganado;
 
-  factory DueloHistorial.desdeJson(Map<String, dynamic> j) =>
-      DueloHistorial(rival: j['rival'] as String, ganado: j['ganado'] as bool);
+  /// Cómo se nombra en pantalla: el nombre si vino, el usuario si no.
+  String get dicho => nombre ?? rival;
+
+  factory DueloHistorial.desdeJson(Map<String, dynamic> j) => DueloHistorial(
+    rival: j['rival'] as String,
+    nombre: j['nombre'] as String?,
+    ganado: j['ganado'] as bool,
+  );
 }
 
 /// Una conexión. De otra persona solo se exponen racha, nivel y monedas
@@ -1070,22 +1260,147 @@ class Solicitud {
   );
 }
 
+/// Una marca aliada que paga por aparecer.
+///
+/// Vive acá y no en cada pantalla porque patrocina dos cosas distintas
+/// con la misma forma: un ciclo de la liga (ver [GrupoRanking.patrocinio])
+/// y una semana del programa (ver `SemanaObjetivos.patrocinio`).
+///
+/// SIEMPRE llega del backend. Que hoy salga del mock es circunstancial:
+/// ninguna pantalla escribe el nombre de una marca a mano.
+class Patrocinio {
+  const Patrocinio({
+    required this.id,
+    required this.marca,
+    required this.logo,
+    required this.cupon,
+    List<String> fotos = const [],
+    this.fondo,
+    this.acento,
+    // ignore: prefer_initializing_formals
+  }) : _fotos = fotos;
+
+  /// El id del comercio, el MISMO que usa el catálogo de Premios.
+  ///
+  /// Sirve para poder llevar al usuario al premio de esa marca sin tener
+  /// que adivinarlo por el nombre.
+  final String id;
+
+  /// El nombre de la marca, tal como se muestra.
+  final String marca;
+
+  /// Ruta de la foto del local. Hoy es un asset local del catálogo de
+  /// Premios; con el backend va a ser una URL y solo cambia quién
+  /// resuelve la imagen.
+  final String logo;
+
+  /// Las fotos que rota el cintillo de la semana en curso.
+  ///
+  /// Vienen de los datos y NO se arman en el widget: el día que el
+  /// endpoint traiga tres fotos de verdad, no hay que tocar pantalla
+  /// ninguna.
+  ///
+  /// Si el backend no manda ninguna, queda [logo] sola y el cintillo se
+  /// muestra quieto — que es lo correcto: con una sola foto no hay nada
+  /// que rotar.
+  ///
+  /// [PENDIENTE: Diego consigue 3 fotos por aliado. Hasta entonces el
+  /// mock repite la única que hay en el catálogo de Premios, así que el
+  /// cintillo rota entre tres fotos iguales y el movimiento no se nota.]
+  List<String> get fotos => _fotos.isEmpty ? [logo] : _fotos;
+  final List<String> _fotos;
+
+  /// Qué se lleva quien cumpla: el texto del cupón de ESTA marca, que
+  /// reemplaza al premio genérico del catálogo.
+  final String cupon;
+
+  /// Color DETRÁS de la foto, en hex "#RRGGBB". Es el mismo campo que ya
+  /// trae el catálogo de Premios y existe por una razón concreta: los
+  /// logos blancos sobre fondo transparente desaparecen si se los pone
+  /// sobre blanco. Null quiere decir blanco.
+  final String? fondo;
+
+  /// Color de marca para los detalles: el anillo del nodo y el borde del
+  /// cupón. En hex "#RRGGBB", o null para usar el azul de +Vida.
+  ///
+  /// Va SEPARADO de [fondo] a propósito. `fondo` es el color sobre el que
+  /// se lee el logo —el de Montanos es negro— y un anillo negro sobre una
+  /// pantalla clara no transmite calma, que es lo que pide el sistema de
+  /// diseño. Con dos campos, la marca elige con qué acento aparece sin
+  /// arrastrar el color de su fondo.
+  final String? acento;
+
+  factory Patrocinio.desdeJson(Map<String, dynamic> j) => Patrocinio(
+    // El id es nuevo. Los patrocinios que un cliente viejo tenga
+    // guardados no lo traen, así que se cae al nombre en minúsculas en
+    // vez de reventar.
+    id: (j['id'] ?? (j['marca'] as String).toLowerCase()) as String,
+    marca: j['marca'] as String,
+    logo: j['logo'] as String,
+    cupon: j['cupon'] as String,
+    fotos: ((j['fotos'] as List?) ?? const []).cast<String>().toList(),
+    fondo: j['fondo'] as String?,
+    acento: j['acento'] as String?,
+  );
+
+  Map<String, dynamic> aJson() => {
+    'id': id,
+    'marca': marca,
+    'logo': logo,
+    'cupon': cupon,
+    if (_fotos.isNotEmpty) 'fotos': _fotos,
+    if (fondo != null) 'fondo': fondo,
+    if (acento != null) 'acento': acento,
+  };
+}
+
+/// Cada cuánto cierra un ranking y se reparten los premios.
+///
+/// Son DOS ciclos distintos y no se pueden unificar: la liga local corre
+/// por trimestre y las competencias que arma el usuario con su gente
+/// corren por mes (decisión de Daniel, revisión de UI del 9 de
+/// septiembre de 2026).
+///
+/// Ninguno de los dos es el ciclo SEMANAL de los retos, que es otra
+/// mecánica y vive en `reglas_rango.dart`. Si algún día se tocan, se
+/// tocan ahí, no acá.
+enum CicloRanking {
+  mes('mensual', 'este mes'),
+  trimestre('trimestral', 'este trimestre');
+
+  const CicloRanking(this.adjetivo, this.cuando);
+
+  /// Cómo se llama el ciclo: "mensual", "trimestral".
+  final String adjetivo;
+
+  /// Cómo se dice el período en curso dentro de una frase: "este mes".
+  final String cuando;
+
+  static CicloRanking desde(String? s) =>
+      s == 'trimestre' ? CicloRanking.trimestre : CicloRanking.mes;
+}
+
 class RankingPersona {
   const RankingPersona({
     required this.nombre,
-    required this.puntosSemana,
+    required this.puntosPeriodo,
     required this.tendencia,
     required this.esUsuario,
   });
 
   final String nombre;
 
-  /// Puntos de la semana.
+  /// Puntos acumulados en el ciclo del grupo (ver [GrupoRanking.ciclo]):
+  /// del mes en una competencia personal, del trimestre en la liga local.
+  ///
+  /// Antes eran los de la SEMANA, y era un bug: ningún ranking del
+  /// producto corre por semana. Lo semanal son los retos, que no son
+  /// esto.
   ///
   /// SIEMPRE se usan para ordenar. Si se MUESTRAN o no lo decide el
   /// grupo (ver [GrupoRanking.mostrarPuntos]): entre conocidos se pueden
   /// ver, con desconocidos nunca.
-  final int puntosSemana;
+  final int puntosPeriodo;
 
   final Tendencia tendencia;
   final bool esUsuario;
@@ -1103,8 +1418,13 @@ class RankingPersona {
     final campos = esUsuario && yo != null ? {...yo, ...j} : j;
 
     return RankingPersona(
+      // `puntos_semana` es la clave vieja. Se sigue leyendo porque los
+      // grupos que el usuario ya creó están guardados en su teléfono con
+      // ese nombre (ver `AlmacenSocial`): quitarla le vaciaría los
+      // grupos al actualizar la app. Escribir, se escribe la nueva.
+      puntosPeriodo:
+          (campos['puntos_periodo'] ?? campos['puntos_semana']) as int,
       nombre: campos['nombre'] as String,
-      puntosSemana: campos['puntos_semana'] as int,
       tendencia: Tendencia.desde(campos['tendencia'] as String? ?? 'igual'),
       esUsuario: esUsuario,
     );
@@ -1112,7 +1432,7 @@ class RankingPersona {
 
   Map<String, dynamic> aJson() => {
     'nombre': nombre,
-    'puntos_semana': puntosSemana,
+    'puntos_periodo': puntosPeriodo,
     'tendencia': tendencia.name,
     if (esUsuario) 'es_usuario': true,
   };
@@ -1140,10 +1460,13 @@ class GrupoRanking {
     required this.tipo,
     required bool mostrarPuntos,
     required this.miembros,
+    this.ciclo = CicloRanking.mes,
     this.nivelActividad,
     this.zona,
+    this.arranca,
     this.cierra,
     this.premiosMonedas = const [],
+    this.patrocinio,
     this.creadoPorMi = false,
     String? codigo,
     // ignore: prefer_initializing_formals
@@ -1167,6 +1490,14 @@ class GrupoRanking {
 
   final List<RankingPersona> miembros;
 
+  /// Cada cuánto cierra este ranking.
+  ///
+  /// La liga local corre por TRIMESTRE; las competencias que arma el
+  /// usuario, por MES y sin opción de cambiarlo. El default es mensual
+  /// porque es lo que aplica a todo lo que crea el usuario; la liga trae
+  /// el suyo en el JSON.
+  final CicloRanking ciclo;
+
   /// Solo en ligas de desconocidos: contra qué nivel de actividad se
   /// arma la liga, para que compita gente parecida.
   final String? nivelActividad;
@@ -1177,12 +1508,33 @@ class GrupoRanking {
   /// no comparte ubicación de personas.
   final String? zona;
 
+  /// Cuándo arrancó el ciclo en curso. Con [cierra] arma el rango que se
+  /// le muestra al usuario ("del 1 de julio al 30 de septiembre"), que es
+  /// lo que hace entender que la liga dura un trimestre y no un mes.
+  ///
+  /// Las dos fechas las manda el backend en hora de Guatemala: el ciclo
+  /// va del día 1 del primer mes al último día del último, y el teléfono
+  /// NUNCA las calcula. Alguien de viaje tiene que ver el mismo cierre.
+  final DateTime? arranca;
+
   /// Cuándo cierra y se reparten los premios.
   final DateTime? cierra;
 
   /// MONEDAS que se lleva cada podio, del 1.o al 3.o. Vacío si el grupo
   /// no premia. Nunca puntos: los puntos no se regalan por competir.
   final List<int> premiosMonedas;
+
+  /// La marca que patrocina el ciclo en curso, si alguna lo hace.
+  ///
+  /// Los tres del podio se llevan un cupón de esta marca ADEMÁS de sus
+  /// monedas: el patrocinio suma un premio, no reemplaza el de siempre.
+  ///
+  /// Null es el caso normal, no un error: un ciclo sin marca vendida se
+  /// juega igual y la pantalla no puede cambiar de forma por eso.
+  final Patrocinio? patrocinio;
+
+  /// Si este ciclo lo patrocina una marca.
+  bool get tienePatrocinio => patrocinio != null;
 
   /// Si el usuario lo creó o se unió a él desde la app, en vez de venir
   /// del mock. Solo estos se guardan en el teléfono: los del mock ya
@@ -1247,14 +1599,26 @@ class GrupoRanking {
             (m) => RankingPersona.desdeJson(m as Map<String, dynamic>, yo: yo),
           )
           .toList(),
+      ciclo: CicloRanking.desde(
+        // Un grupo normal trae el ciclo arriba; la liga, adentro de su
+        // bloque. Si no viene ninguno queda mensual, que es lo que dura
+        // todo lo que crea el usuario.
+        (j['ciclo'] ?? liga['ciclo']) as String?,
+      ),
       nivelActividad: liga['nivel_actividad'] as String?,
       zona: liga['zona'] as String?,
+      arranca: liga['arranca'] == null
+          ? null
+          : DateTime.tryParse(liga['arranca'] as String),
       cierra: liga['cierra'] == null
           ? null
           : DateTime.tryParse(liga['cierra'] as String),
       premiosMonedas: ((liga['premios_monedas'] as List?) ?? const [])
           .cast<int>()
           .toList(),
+      patrocinio: liga['patrocinio'] == null
+          ? null
+          : Patrocinio.desdeJson(liga['patrocinio'] as Map<String, dynamic>),
       creadoPorMi: j['creado_por_mi'] as bool? ?? false,
       codigo: j['codigo'] as String?,
     );
@@ -1267,16 +1631,21 @@ class GrupoRanking {
     'nombre': nombre,
     'tipo': tipo.name,
     'mostrar_puntos': _mostrarPuntos,
+    'ciclo': ciclo.name,
     'miembros': miembros.map((m) => m.aJson()).toList(),
     if (nivelActividad != null ||
         zona != null ||
+        arranca != null ||
         cierra != null ||
-        premiosMonedas.isNotEmpty)
+        premiosMonedas.isNotEmpty ||
+        patrocinio != null)
       'liga': {
         if (nivelActividad != null) 'nivel_actividad': nivelActividad,
         if (zona != null) 'zona': zona,
+        if (arranca != null) 'arranca': arranca!.toIso8601String(),
         if (cierra != null) 'cierra': cierra!.toIso8601String(),
         if (premiosMonedas.isNotEmpty) 'premios_monedas': premiosMonedas,
+        if (patrocinio != null) 'patrocinio': patrocinio!.aJson(),
       },
     if (creadoPorMi) 'creado_por_mi': true,
     if (_codigo != null) 'codigo': _codigo,

@@ -6,11 +6,14 @@ import 'package:share_plus/share_plus.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
+import '../widgets/numero_animado.dart' show milesConComa;
 import '../widgets/boton_relieve.dart';
 import '../widgets/contadores_amigos.dart';
 import '../widgets/flujos_social.dart';
+import '../widgets/patrocinio.dart';
 import '../widgets/ranking_widgets.dart';
 import 'amigos_screen.dart';
+import 'retar_screen.dart';
 import 'ranking_grupo_screen.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -28,16 +31,9 @@ String get nombreUsuario => Datos.i.perfil.nombre;
 // Los duelos NO otorgan monedas ni premios: son puramente competitivos.
 bool get hayDueloActivo => Datos.i.social.duelo.activo;
 
-String get duelloRivalHandle => Datos.i.social.duelo.rivalHandle;
-String get duelloTiempoRestante => Datos.i.social.duelo.tiempoRestante;
-
-/// % sobre el propio promedio de cada quien, nunca comparación directa.
-double get duelloSuperacionPropia => Datos.i.social.duelo.superacionPropia;
-double get duelloSuperacionRival => Datos.i.social.duelo.superacionRival;
-// Escala de referencia para las barras de superación (no hay un tope
-// natural como en una barra de progreso normal, así que usamos este
-// techo solo para que las barras se vean proporcionadas entre sí).
-const double _escalaSuperacion = 30;
+/// El duelo en curso. Es un RETO con meta común: los dos van por el
+/// mismo número de pasos y el mismo plazo.
+Duelo get duelo => Datos.i.social.duelo;
 
 /// Historial de duelos. Los duelos no dan monedas ni premios.
 List<DueloHistorial> get _historialDuelos => Datos.i.social.historialDuelos;
@@ -135,136 +131,208 @@ class _SocialScreenState extends State<SocialScreen> {
   // Pestaña Amigos
   // ============================================================
 
+  /// LO PRIMERO SON LOS TRES NÚMEROS (revisión de Daniel, 22 de
+  /// septiembre de 2026), como en un perfil de Instagram: cuántos te
+  /// siguen, cuántas solicitudes están esperando y cuántos duelos tenés
+  /// en juego. Antes la pestaña abría con el bloque de duelos y los
+  /// números vivían al fondo, después del historial.
+  ///
+  /// Y NO HAY LISTA DE AMIGOS. Estaban los tres primeros con un "ver
+  /// todos" al lado, que es la misma lista que abre el contador de
+  /// arriba con un toque: la pantalla terminaba mostrando dos veces lo
+  /// mismo y el duelo —lo único que está pasando AHORA— quedaba
+  /// aplastado entre dos listas de gente. Para ver a alguien se entra a
+  /// Seguidores o a Solicitudes.
   List<Widget> _buildAmigos(BuildContext context) {
     return [
+      ContadoresAmigos(
+        contadores: contadoresDeSocial(),
+        onTocar: _tocarContador,
+      ),
+      const SizedBox(height: 18),
+      // La línea de un pelo separa "quién sos en Social" de "qué está
+      // pasando ahora". Es el único corte de la pestaña.
+      Container(height: 0.5, color: AppColors.separador),
+      const SizedBox(height: 24),
       _buildDuelosSection(context),
-      const SizedBox(height: 16),
+      const SizedBox(height: 26),
       _buildHistorialDuelos(context),
-      const SizedBox(height: 28),
-      _buildConexionesSection(context),
     ];
   }
+
+  /// A dónde lleva cada número de la fila.
+  ///
+  /// El tercero —los duelos activos— NO navega: no es un destino sino un
+  /// marcador de lo que está justo abajo, en esta misma pantalla.
+  /// Mandarlo a otro lado sería abrir una pantalla para mostrar lo que
+  /// ya se está viendo.
+  void _tocarContador(int i) {
+    if (i >= 2) return;
+    _abrirAmigos(pestania: i);
+  }
+
+  // ------------------------------------------------------------
+  // El duelo
+  // ------------------------------------------------------------
 
   Widget _buildDuelosSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Icon(Icons.bolt, color: AppColors.textPrimary),
-            const SizedBox(width: 8),
-            Text(
-              'Duelos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            // Retar a alguien es elegir a un amigo: el botón lleva a la
-            // lista en vez de a una pantalla propia que repetiría lo
-            // mismo.
-            //
-            // TODO: falta la pantalla de armar el duelo (apuesta,
-            // duración, confirmación del rival).
-            BotonRelieve(
-              label: 'Nuevo duelo',
-              icono: Icons.add,
-              compacto: true,
-              onPressed: _abrirAmigos,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
         hayDueloActivo
             ? _buildDueloActivoCard(context)
             : _buildSinDuelo(context),
+        // El botón de retar dejó de ser un botón con relieve arriba a la
+        // derecha, al lado del título (revisión de Daniel, 22 de
+        // septiembre de 2026): ahí competía con el duelo que estaba
+        // pasando y era lo más pesado de la pantalla. Ahora es el último
+        // renglón del bloque —donde termina de leerse lo que hay y
+        // empieza lo que se puede hacer—, en el mismo idioma con el que
+        // iOS cierra una lista: un más, una frase y un galón.
+        const SizedBox(height: 4),
+        _FilaRetar(onPressed: () => abrirRetar(context)),
       ],
     );
   }
 
-  /// Duelo en curso: superación relativa sobre el propio promedio (no
-  /// puntos crudos comparados directo entre dos personas distintas).
+  /// El duelo en curso.
+  ///
+  /// ES LA PIEZA HÉROE DE SOCIAL (decisión de Daniel, 21 de septiembre
+  /// de 2026). Un duelo activo es lo único de esta pantalla que está
+  /// pasando AHORA y tiene reloj corriendo: si se ve igual que el resto,
+  /// no se nota que hay uno.
+  ///
+  /// Se marca LEVANTÁNDOLA, no pintándola. Es la única pieza de la
+  /// pantalla con superficie y sombra —todo lo demás va plano sobre el
+  /// fondo—, y con una sola cosa levantada esa es la que se mira.
+  ///
+  /// LO PRIMERO ES EL RETO (decisión de Daniel, 22 de septiembre de
+  /// 2026): "70,000 pasos en una semana", arriba y en grande. Un duelo
+  /// es eso —un número al que los dos van—, y sin verlo el resto de la
+  /// tarjeta no significa nada.
+  ///
+  /// Después, de cada uno: cuántos pasos lleva, qué parte de la meta es
+  /// y cuántos le faltan. Antes decía "+18% sobre tu promedio" y
+  /// "+12% sobre su promedio", que es información que no se puede usar:
+  /// no dice cuánto falta, ni qué hay que hacer hoy, ni contra qué
+  /// número se está yendo. Al tuyo se le agrega a qué RITMO tenés que ir
+  /// para llegar, que es lo único que la tarjeta puede pedirte hoy.
   Widget _buildDueloActivoCard(BuildContext context) {
+    final d = duelo;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
+        borderRadius: BorderRadius.circular(AppRadios.tarjeta),
+        // Sombra y no borde: el contorno dibujado hacía ver la tarjeta
+        // trazada con lápiz, y es justo la que tiene que despegarse.
+        boxShadow: AppSombras.tarjeta,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                'Duelo vs $duelloRivalHandle',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
+              // Flexible y no suelto: con el texto del sistema en grande
+              // el rótulo y el reloj se pisaban.
+              Flexible(
+                child: Text(
+                  'DUELO ACTIVO',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.subsectionTitle,
                 ),
               ),
-              const Spacer(),
-              Text(
-                duelloTiempoRestante,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              const SizedBox(width: 10),
+              _ChipTiempo(texto: d.tiempoDicho),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // EL RETO, que es de lo que se trata todo lo demás.
+          Text(
+            '${milesConComa(d.metaPasos)} pasos',
+            style: AppTheme.display(30).copyWith(color: AppColors.accent),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${d.plazo}, contra ${d.rivalDicho}',
+                  maxLines: 2,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          _buildBarraSuperacion(
-            context,
-            label: 'Tú',
-            porcentaje: duelloSuperacionPropia,
-            destacado: true,
+          const SizedBox(height: 20),
+          _MarcadorDuelo(
+            nombre: 'Vos',
+            pasos: d.pasosPropios,
+            meta: d.metaPasos,
+            avance: d.avancePropio,
+            faltan: d.faltanPropios,
+            ritmo: d.ritmoNecesario,
+            propia: true,
           ),
-          const SizedBox(height: 12),
-          _buildBarraSuperacion(
-            context,
-            label: duelloRivalHandle,
-            porcentaje: duelloSuperacionRival,
-            destacado: false,
+          const SizedBox(height: 16),
+          _MarcadorDuelo(
+            nombre: _soloElNombre(d.rivalDicho),
+            pasos: d.pasosRival,
+            meta: d.metaPasos,
+            avance: d.avanceRival,
+            faltan: d.faltanRival,
+            ritmo: null,
+            propia: false,
+          ),
+          const SizedBox(height: 16),
+          Container(height: 0.5, color: AppColors.separador),
+          const SizedBox(height: 14),
+          Text(
+            _comoVas(d.ventaja),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            // Cómo se gana, en una oración. Sin esto, dos barras al lado
+            // no dicen qué pasa si ninguno de los dos llega.
+            'Gana el primero que llegue a la meta. Si el domingo no llegó '
+            'ninguno, gana el que haya quedado más cerca.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBarraSuperacion(
-    BuildContext context, {
-    required String label,
-    required double porcentaje,
-    required bool destacado,
-  }) {
-    final pronombre = destacado ? 'tu' : 'su';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$label: +${_formatPercent(porcentaje)}% sobre $pronombre promedio',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: (porcentaje / _escalaSuperacion).clamp(0.05, 1.0),
-            minHeight: 8,
-            backgroundColor: AppColors.azulBruma,
-            valueColor: AlwaysStoppedAnimation(
-              destacado ? AppColors.accent : AppColors.azulSuave,
-            ),
-          ),
-        ),
-      ],
-    );
+  /// Cómo vas, en palabras y antes que los números.
+  ///
+  /// En PASOS, que es la unidad del reto: "vas arriba por 3,500 pasos"
+  /// se entiende sin traducir nada, y además se puede comparar con lo
+  /// que falta.
+  String _comoVas(int ventaja) {
+    if (ventaja == 0) return 'Van empatados';
+    final pasos = milesConComa(ventaja.abs());
+    return ventaja > 0
+        ? 'Vas arriba por $pasos pasos'
+        : 'Te lleva $pasos pasos';
+  }
+
+  /// "Maria Rodriguez" -> "Maria". En una barra al lado de "Vos", el
+  /// apellido no agrega nada y empuja el porcentaje fuera de la fila.
+  String _soloElNombre(String completo) {
+    final partes = completo.trim().split(' ');
+    return partes.isEmpty ? completo : partes.first;
   }
 
   /// Estado sin duelos activos.
@@ -277,11 +345,14 @@ class _SocialScreenState extends State<SocialScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+      padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 20),
+      // Un estado vacío SÍ necesita superficie —es un bloque, no una
+      // lista—, pero va en azulNiebla y sin borde, no en blanco con
+      // contorno. Así se lee como "acá todavía no hay nada" y no como
+      // una tarjeta con contenido.
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
+        color: AppColors.azulNiebla,
+        borderRadius: BorderRadius.circular(AppRadios.tarjeta),
       ),
       child: Column(
         children: [
@@ -296,186 +367,8 @@ class _SocialScreenState extends State<SocialScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            sinAmigos
-                ? 'Agregá a alguien para poder retarlo'
-                : 'Sin duelos activos',
+            sinAmigos ? 'Agregá a alguien para poder retarlo' : 'Sin duelos',
             textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 18),
-          BotonRelieve(
-            label: sinAmigos ? 'Agregar un amigo' : 'Retar a un amigo',
-            icono: sinAmigos ? Icons.person_add_alt_1 : Icons.sports_kabaddi,
-            anchoCompleto: true,
-            onPressed: sinAmigos
-                ? () => mostrarAgregarAmigo(context)
-                : _abrirAmigos,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Fila deslizable con los últimos duelos: gana (W, acento) o pierde
-  /// (L, gris) marcado sobre el avatar del rival.
-  Widget _buildHistorialDuelos(BuildContext context) {
-    // Sin duelos jugados no hay historial que mostrar: el título solo,
-    // encima de una fila vacía, parece un error de carga.
-    if (_historialDuelos.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'HISTORIAL DE DUELOS',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppColors.textSecondary,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 60,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _historialDuelos.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (context, i) =>
-                _buildBurbujaDuelo(context, _historialDuelos[i]),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBurbujaDuelo(BuildContext context, DueloHistorial duelo) {
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.cardBorder,
-            child: Icon(Icons.person, color: AppColors.textSecondary),
-          ),
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: duelo.ganado
-                    ? AppColors.accentSecondary
-                    : AppColors.card,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.background, width: 2),
-              ),
-              child: Text(
-                duelo.ganado ? 'W' : 'L',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: duelo.ganado ? Colors.black : AppColors.textSecondary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Amigos: los tres contadores y un asomo de la lista.
-  ///
-  /// Los contadores están ACÁ y no escondidos dentro de otra pantalla:
-  /// cuántos amigos tenés y cuántas solicitudes te esperan es lo primero
-  /// que se viene a ver, y no puede costar un toque de más.
-  Widget _buildConexionesSection(BuildContext context) {
-    final social = Datos.i.social;
-    final primeros = social.conexiones.take(3).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ContadoresAmigos(onTocar: (i) => _abrirAmigos(pestania: i)),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Text(
-              'Tus amigos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            if (social.conexiones.length > primeros.length)
-              CupertinoButton(
-                onPressed: _abrirAmigos,
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                child: Row(
-                  children: [
-                    Text(
-                      'Ver todos',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.accent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Icon(
-                      CupertinoIcons.chevron_right,
-                      size: 15,
-                      color: AppColors.accent,
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (primeros.isEmpty)
-          _buildSinAmigos(context)
-        else
-          for (var i = 0; i < primeros.length; i++) ...[
-            _buildConexionRow(context, primeros[i]),
-            if (i != primeros.length - 1) const SizedBox(height: 12),
-          ],
-      ],
-    );
-  }
-
-  /// Todavía no tiene a nadie.
-  ///
-  /// Un estado vacío sin salida es una pared: acá el botón de agregar es
-  /// lo único que hay, porque es lo único que se puede hacer.
-  Widget _buildSinAmigos(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: AppColors.accent.withValues(alpha: 0.12),
-            child: const Icon(
-              CupertinoIcons.person_2,
-              color: AppColors.accent,
-              size: 24,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Aún no tenés amigos',
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -483,21 +376,81 @@ class _SocialScreenState extends State<SocialScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Agregá a alguien con su usuario y compará rachas.',
+            'Un duelo es una meta de pasos que se ponen los dos y un '
+            'plazo para llegar. No hay monedas en juego: es solo '
+            'contra el otro.',
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 18),
-          BotonRelieve(
-            label: 'Agregar',
-            icono: CupertinoIcons.person_add,
-            anchoCompleto: true,
-            onPressed: () => mostrarAgregarAmigo(context),
-          ),
+          // El botón solo cuando no hay a quién retar: si hay amigos, el
+          // renglón de abajo ya ofrece exactamente esa acción y dos
+          // botones seguidos diciendo lo mismo se leen como un error.
+          if (sinAmigos) ...[
+            const SizedBox(height: 18),
+            BotonRelieve(
+              label: 'Agregar un amigo',
+              icono: Icons.person_add_alt_1,
+              anchoCompleto: true,
+              onPressed: () => mostrarAgregarAmigo(context),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  // ------------------------------------------------------------
+  // El historial
+  // ------------------------------------------------------------
+
+  /// Los duelos jugados, UNA LISTA CON NOMBRES.
+  ///
+  /// Eran cinco avatares grises en fila, todos con el mismo ícono de
+  /// persona y una W o una L en la esquina (revisión de Daniel, 22 de
+  /// septiembre de 2026): no se podía saber contra quién habías jugado,
+  /// que es lo único que un historial tiene para contar. Ahora es una
+  /// lista con la inicial, el nombre, el usuario y cómo terminó.
+  Widget _buildHistorialDuelos(BuildContext context) {
+    final historial = _historialDuelos;
+    // Sin duelos jugados no hay historial que mostrar: el título solo,
+    // encima de una fila vacía, parece un error de carga.
+    if (historial.isEmpty) return const SizedBox.shrink();
+
+    final ganados = historial.where((d) => d.ganado).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                'HISTORIAL DE DUELOS',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.subsectionTitle,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Spacer(),
+            // El marcador, arriba a la derecha: es lo que un historial
+            // contesta de un vistazo antes de leer fila por fila.
+            Text(
+              'Ganaste $ganados de ${historial.length}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (var i = 0; i < historial.length; i++) ...[
+          if (i > 0) Container(height: 0.5, color: AppColors.separador),
+          _FilaHistorialDuelo(duelo: historial[i]),
+        ],
+      ],
     );
   }
 
@@ -510,228 +463,6 @@ class _SocialScreenState extends State<SocialScreen> {
     );
     // Al volver puede haber amigos nuevos o menos solicitudes.
     if (mounted) setState(() {});
-  }
-
-  Widget _buildConexionRow(BuildContext context, Conexion conexion) {
-    return GestureDetector(
-      onTap: () => _mostrarPerfilConexion(context, conexion),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        child: Row(
-          children: [
-            const CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.cardBorder,
-              child: Icon(Icons.person, color: AppColors.textSecondary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    conexion.nombre,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    conexion.handle,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildRachaBadge(context, conexion.rachaSemanas),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRachaBadge(BuildContext context, int semanas) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.accentSecondary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.local_fire_department,
-            color: AppColors.accentSecondary,
-            size: 14,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '$semanas sem',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.accentSecondary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Perfil reducido de la conexión.
-  ///
-  /// Solo racha. El NIVEL y las MONEDAS se sacaron a propósito: el nivel
-  /// se deriva del cashback, o sea de la prima de la póliza, y las
-  /// monedas son saldo. Las dos juntas dejan estimar cuánta plata mueve
-  /// una persona, y eso no se le muestra a nadie más — menos en
-  /// Guatemala. Esto reemplaza a la regla vieja de CLAUDE.md, que pedía
-  /// mostrar racha, categoría y monedas.
-  void _mostrarPerfilConexion(BuildContext context, Conexion conexion) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (hoja) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 38,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: AppColors.cardBorder,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const CircleAvatar(
-              radius: 32,
-              backgroundColor: AppColors.cardBorder,
-              child: Icon(
-                Icons.person,
-                color: AppColors.textSecondary,
-                size: 30,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              conexion.nombre,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              conexion.handle,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 20),
-            if (conexion.rachaSemanas > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.accentSecondary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.local_fire_department,
-                      size: 17,
-                      color: AppColors.accentSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${conexion.rachaSemanas} semanas de racha',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Text(
-                'Todavía no tiene una racha activa.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-              ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: BotonRelieve(
-                    label: 'Cancelar',
-                    color: AppColors.textSecondary,
-                    anchoCompleto: true,
-                    onPressed: () => Navigator.of(hoja).pop(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: BotonRelieve(
-                    label: 'Eliminar',
-                    // Azul como todo lo demás: lo destructivo lo marca
-                    // la confirmación de iOS, no el color del botón.
-                    anchoCompleto: true,
-                    onPressed: () {
-                      Navigator.of(hoja).pop();
-                      _eliminarConexion(conexion);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _eliminarConexion(Conexion conexion) async {
-    final confirmado = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: Text('¿Eliminar a ${conexion.nombre}?'),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('Van a dejar de verse en tus competencias y duelos.'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmado != true || !mounted) return;
-    setState(() => Datos.i.social.conexiones.remove(conexion));
   }
 
   // ============================================================
@@ -796,9 +527,11 @@ class _SocialScreenState extends State<SocialScreen> {
       if (visibles.isEmpty)
         _buildSinResultados(context)
       else
-        for (final g in visibles) ...[
-          _FilaGrupo(grupo: g, onTap: () => _abrirGrupo(g)),
-          const SizedBox(height: 8),
+        for (var i = 0; i < visibles.length; i++) ...[
+          _FilaGrupo(grupo: visibles[i], onTap: () => _abrirGrupo(visibles[i])),
+          // Igual que la lista de amigos: hairline entre renglones.
+          if (i != visibles.length - 1)
+            Divider(height: 0.5, thickness: 0.5, color: AppColors.separador),
         ],
       const SizedBox(height: 8),
       _FilaCrearGrupo(onPressed: _menuGrupos),
@@ -830,10 +563,13 @@ class _SocialScreenState extends State<SocialScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
+      // Un estado vacío SÍ necesita superficie —es un bloque, no una
+      // lista—, pero va en azulNiebla y sin borde, no en blanco con
+      // contorno. Así se lee como "acá todavía no hay nada" y no como
+      // una tarjeta con contenido.
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
+        color: AppColors.azulNiebla,
+        borderRadius: BorderRadius.circular(AppRadios.tarjeta),
       ),
       child: Column(
         children: [
@@ -884,6 +620,7 @@ class _SocialScreenState extends State<SocialScreen> {
   Widget _buildTarjetaLiga(BuildContext context, GrupoRanking liga) {
     final indice = liga.miembros.indexWhere((p) => p.esUsuario);
     final persona = indice < 0 ? null : liga.miembros[indice];
+    final periodo = periodoDelCiclo(liga);
 
     return Container(
       width: double.infinity,
@@ -964,10 +701,22 @@ class _SocialScreenState extends State<SocialScreen> {
           if (persona != null) ...[
             const SizedBox(height: 4),
             Text(
-              '${persona.puntosSemana} pts esta semana',
+              '${persona.puntosPeriodo} pts ${liga.ciclo.cuando}',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+          // El rango de fechas, completo. Sin esto "este trimestre" es una
+          // palabra: el usuario no sabe si arrancó ayer o hace dos meses,
+          // y la liga se venía leyendo como si cerrara cada semana.
+          if (periodo != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              periodo,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             ),
           ],
           if (liga.premiosMonedas.isNotEmpty) ...[
@@ -980,6 +729,19 @@ class _SocialScreenState extends State<SocialScreen> {
                     const SizedBox(width: 8),
                 ],
               ],
+            ),
+          ],
+          // El patrocinio va DESPUÉS de las monedas y aparte: el cupón de
+          // la marca se suma al premio de siempre, no lo reemplaza. Si
+          // este ciclo no tiene marca vendida, no hay cinta y la tarjeta
+          // se ve igual de terminada.
+          if (liga.patrocinio != null) ...[
+            const SizedBox(height: AppSpacing.entre),
+            CintaPatrocinio(
+              patrocinio: liga.patrocinio!,
+              texto:
+                  'Los 3 primeros se llevan además '
+                  '${liga.patrocinio!.cupon}.',
             ),
           ],
         ],
@@ -1025,10 +787,13 @@ class _SocialScreenState extends State<SocialScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
+      // Un estado vacío SÍ necesita superficie —es un bloque, no una
+      // lista—, pero va en azulNiebla y sin borde, no en blanco con
+      // contorno. Así se lee como "acá todavía no hay nada" y no como
+      // una tarjeta con contenido.
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
+        color: AppColors.azulNiebla,
+        borderRadius: BorderRadius.circular(AppRadios.tarjeta),
       ),
       child: Text(
         'Todavía no hay una liga abierta en tu zona. Te avisamos cuando '
@@ -1129,6 +894,300 @@ class _SocialScreenState extends State<SocialScreen> {
   // ---- Tabla, compartida por las dos vistas ----
 }
 
+// ============================================================
+// LAS PIEZAS DEL DUELO
+// ============================================================
+
+/// El reloj del duelo, como pastilla.
+///
+/// Pastilla y no texto suelto: es el único dato de la tarjeta que se
+/// mueve solo —mañana dice un día menos— y tiene que poder leerse sin
+/// buscarlo. En azul pálido, no en naranja: no es una alerta, es un
+/// plazo normal.
+class _ChipTiempo extends StatelessWidget {
+  const _ChipTiempo({required this.texto});
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppColors.azulNiebla,
+      borderRadius: BorderRadius.circular(AppRadios.pildora),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(CupertinoIcons.clock, size: 12, color: AppColors.azulMedio),
+        const SizedBox(width: 5),
+        Text(
+          texto,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: AppColors.azulMedio,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// La inicial de una persona, en un círculo.
+///
+/// Reemplaza al ícono genérico de persona que llevaban todos los
+/// avatares de esta pantalla: cinco círculos grises con la misma
+/// silueta adentro no distinguen a nadie, y el historial de duelos
+/// existe justamente para reconocer contra quién jugaste.
+///
+/// Sin foto: la de perfil sale de `avatar_usuario.dart` y es la del
+/// usuario, no la de sus contactos. De un contacto el backend todavía
+/// no manda ninguna.
+class _AvatarPersona extends StatelessWidget {
+  const _AvatarPersona({required this.nombre, this.tamano = 40});
+
+  final String nombre;
+  final double tamano;
+
+  /// La primera letra del nombre. Si viene un usuario ("@mery_run") se
+  /// saltea el arroba, que no dice nada.
+  String get _inicial {
+    final limpio = nombre.replaceFirst('@', '').trim();
+    return limpio.isEmpty ? '?' : limpio[0].toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: tamano,
+    height: tamano,
+    alignment: Alignment.center,
+    decoration: const BoxDecoration(
+      color: AppColors.azulBruma,
+      shape: BoxShape.circle,
+    ),
+    child: Text(
+      _inicial,
+      style: AppTheme.display(
+        tamano * 0.42,
+      ).copyWith(color: AppColors.azulMedio),
+    ),
+  );
+}
+
+/// Cómo va uno de los dos contra la meta del reto.
+///
+/// Tres datos y en este orden: cuántos pasos lleva, qué parte de la meta
+/// es eso, y cuánto le falta. Es la información que se puede usar — el
+/// porcentaje solo suena a informe y el total solo no dice si alcanza.
+///
+/// LA TUYA EN AZUL DE MARCA Y LA DEL RIVAL EN AZUL DE APOYO. No es un
+/// color distinto: es el mismo azul con menos luz, igual que los niveles
+/// de cashback y las muescas del rango. Quién va ganando no se dice con
+/// otro color, se dice con cuánto se destaca.
+class _MarcadorDuelo extends StatelessWidget {
+  const _MarcadorDuelo({
+    required this.nombre,
+    required this.pasos,
+    required this.meta,
+    required this.avance,
+    required this.faltan,
+    required this.ritmo,
+    required this.propia,
+  });
+
+  final String nombre;
+  final int pasos;
+  final int meta;
+  final double avance;
+  final int faltan;
+
+  /// A cuántos pasos por día hay que ir para llegar. Solo se muestra el
+  /// tuyo: el ritmo que le falta al rival no es algo que puedas hacer.
+  final int? ritmo;
+
+  final bool propia;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = propia ? AppColors.accent : AppColors.azulMedio;
+    final ritmo = this.ritmo;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Text(
+                nombre,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: propia
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                  fontWeight: propia ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              milesConComa(pasos),
+              style: AppTheme.display(18).copyWith(color: color),
+            ),
+            Text(
+              ' de ${milesConComa(meta)}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadios.pildora),
+          child: LinearProgressIndicator(
+            value: avance,
+            minHeight: 8,
+            backgroundColor: AppColors.azulBruma,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          faltan <= 0
+              ? '¡Llegó a la meta!'
+              : ritmo == null
+              ? '${propia ? 'Te faltan' : 'Le faltan'} '
+                    '${milesConComa(faltan)}'
+              : 'Te faltan ${milesConComa(faltan)} · '
+                    '${milesConComa(ritmo)} por día',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: faltan <= 0 ? AppColors.accent : AppColors.textSecondary,
+            fontWeight: faltan <= 0 ? FontWeight.w800 : FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Un duelo jugado: contra quién y cómo terminó.
+class _FilaHistorialDuelo extends StatelessWidget {
+  const _FilaHistorialDuelo({required this.duelo});
+
+  final DueloHistorial duelo;
+
+  @override
+  Widget build(BuildContext context) {
+    final ganado = duelo.ganado;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          _AvatarPersona(nombre: duelo.dicho, tamano: 38),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  duelo.dicho,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (duelo.nombre != null)
+                  Text(
+                    duelo.rival,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // La palabra entera y no una W: "W" hay que aprenderla, y en
+          // español no la usa nadie. El que ganaste va en azul de marca
+          // y el que perdiste apagado — sin rojo, que la app tiene que
+          // transmitir calma y un duelo perdido no es un error.
+          Text(
+            ganado ? 'Ganaste' : 'Perdiste',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: ganado ? AppColors.accent : AppColors.textSecondary,
+              fontWeight: ganado ? FontWeight.w800 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El renglón que cierra el bloque de duelos: retar a alguien.
+///
+/// Era un `BotonRelieve` arriba a la derecha, al lado del título, y a
+/// ese tamaño y con ese peso competía con el duelo que estaba pasando.
+/// Acá abajo es un renglón de lista de iOS —un más, una frase y un
+/// galón—: se ve que es una acción, no le roba la pantalla a nada y
+/// queda justo donde el ojo termina de leer lo que ya hay.
+class _FilaRetar extends StatelessWidget {
+  const _FilaRetar({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    onPressed: onPressed,
+    padding: EdgeInsets.zero,
+    minimumSize: Size.zero,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: AppColors.azulBruma,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              CupertinoIcons.plus,
+              size: 15,
+              color: AppColors.accent,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Retar a alguien',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const Icon(
+            CupertinoIcons.chevron_right,
+            size: 15,
+            color: AppColors.azulSuave,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Selector de pestaña tipo "segmented control": Amigos / Ranking. Mismo
 /// estilo que el selector de período de la pantalla Progress.
 class _SelectorTab extends StatelessWidget {
@@ -1208,10 +1267,6 @@ class _SelectorTab extends StatelessWidget {
   }
 }
 
-String _formatPercent(double value) {
-  return value % 1 == 0 ? value.toInt().toString() : value.toString();
-}
-
 /// Cómo venís en Social, arriba de todo.
 ///
 /// Sin esto la pestaña abría con una lista de nombres y nada más: no
@@ -1234,19 +1289,13 @@ class _ResumenSocial extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
+      // Azul de marca diluido y SIN BORDE. No compite con la tarjeta
+      // héroe de la otra pestaña porque nunca se ven juntas —son dos
+      // pestañas—, pero tampoco se hace la protagonista: es un resumen.
       decoration: BoxDecoration(
-        // Azul de marca, muy diluido: es una superficie mediana-grande y
-        // el azul no puede taparla entera.
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.card,
-            Color.lerp(AppColors.accent, AppColors.card, 0.9)!,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
+        color: AppColors.azulNiebla,
+        borderRadius: BorderRadius.circular(AppRadios.tarjeta),
+        boxShadow: AppSombras.tarjeta,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1283,7 +1332,7 @@ class _ResumenSocial extends StatelessWidget {
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 16),
-          const Divider(height: 1, color: AppColors.cardBorder),
+          Divider(height: 0.5, thickness: 0.5, color: AppColors.separador),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -1458,17 +1507,17 @@ class _FilaGrupo extends StatelessWidget {
   final GrupoRanking grupo;
   final VoidCallback onTap;
 
-  /// Cuánta gente hay y cuánto le queda a la competencia.
+  /// Cuánta gente hay y cuánto le queda al ciclo.
   ///
-  /// El plazo solo aplica a las competencias que alguien creó con una
-  /// fecha de cierre. La liga local no cierra: se reinicia sola cada
-  /// semana, y decirle "quedan 3 días" sería mentir.
+  /// Ahora aplica también a la liga local: desde que corre por trimestre
+  /// tiene una fecha de cierre real. Antes se la excluía porque se
+  /// reiniciaba sola cada semana y decirle "quedan 3 días" era mentir.
   static String _subtituloGrupo(GrupoRanking g) {
     final n = g.miembros.length;
     final base = '$n ${n == 1 ? "integrante" : "integrantes"}';
 
     final cierra = g.cierra;
-    if (cierra == null || g.tipo != TipoGrupo.conocidos) return base;
+    if (cierra == null) return base;
 
     final dias = cierra.difference(DateTime.now()).inDays;
     if (dias < 0) return '$base · terminó';
@@ -1489,12 +1538,11 @@ class _FilaGrupo extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: Size.zero,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
+        // Igual que la fila de un amigo: sin caja. Una lista de grupos
+        // es una lista, y meter cada renglón en su propia tarjeta hacía
+        // que la pestaña Ranking se viera como un formulario.
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        color: Colors.transparent,
         child: Row(
           children: [
             _AvatarGrupo(grupo: grupo),
@@ -1738,6 +1786,22 @@ class _HojaReglasLiga extends StatelessWidget {
 
   final GrupoRanking liga;
 
+  /// Cada cuánto cierra la liga, con las fechas del ciclo en curso.
+  ///
+  /// Sale de los datos y no de una frase fija: el texto viejo decía
+  /// "cierra el domingo y arranca una nueva el lunes", que era el ciclo
+  /// semanal que la revisión de UI marcó como bug.
+  static String _reglaDelCiclo(GrupoRanking liga) {
+    final base = 'La liga es ${liga.ciclo.adjetivo}';
+    final periodo = periodoDelCiclo(liga);
+    if (periodo == null) return '$base.';
+
+    // "Del 1 de julio…" en minúscula, que va a mitad de la oración.
+    final rango = periodo[0].toLowerCase() + periodo.substring(1);
+    return '$base: el ciclo en curso va $rango, y al cerrar arranca uno '
+        'nuevo.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final estilo = Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1799,11 +1863,20 @@ class _HojaReglasLiga extends StatelessWidget {
                     'no se ganan compitiendo.',
                 estilo: estilo,
               ),
+              // La marca del ciclo, si hay: es un premio más, y quien
+              // pregunta las reglas está preguntando justamente qué gana.
+              if (liga.patrocinio != null)
+                _Regla(
+                  icono: CupertinoIcons.ticket,
+                  texto:
+                      'Este trimestre lo patrocina ${liga.patrocinio!.marca}: '
+                      'los tres primeros se llevan además '
+                      '${liga.patrocinio!.cupon}.',
+                  estilo: estilo,
+                ),
               _Regla(
                 icono: CupertinoIcons.clock,
-                texto: liga.cierra == null
-                    ? 'La liga se reinicia cada semana.'
-                    : 'Cierra el domingo y arranca una nueva el lunes.',
+                texto: _reglaDelCiclo(liga),
                 estilo: estilo,
               ),
               const SizedBox(height: AppSpacing.entre),

@@ -9,7 +9,7 @@ import '../widgets/app_header.dart';
 import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/desglose_puntos_hoy.dart';
-import '../widgets/escalera_cashback.dart';
+import '../widgets/hoja_niveles.dart';
 import '../widgets/chip_monedas.dart';
 import '../widgets/hoja_monedas.dart';
 import '../widgets/moneda_animada.dart';
@@ -31,7 +31,7 @@ int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 
 // ============================================================
 // OBJETIVOS DE LA SEMANA. Acá se pagan MONEDAS — la moneda que se gasta
-// en Premios y caduca a los 6 meses. Nunca puntos: los puntos mueven el
+// en Premios y caduca a los 90 días. Nunca puntos: los puntos mueven el
 // cashback anual y las dos monedas del producto no se mezclan.
 //
 // Reemplazan por completo a las viejas "Metas Mensuales", que ya no
@@ -406,80 +406,71 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.grupo),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Los puntos del año. Es el número que la persona abre
-              // la app para ver, así que es el más grande de la tarjeta.
-              // El cashback sale del nivel, y el nivel sale de acá.
-              Text(
-                'PUNTOS ACUMULADOS ${Datos.i.resumen.anio}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.8,
-                ),
+        // SIN TARJETA Y SIN GRÁFICA (decisión de Daniel, 22 de
+        // septiembre de 2026).
+        //
+        // Acá vivía la escalera de cashback: cinco barras con la foto
+        // del usuario parada en la suya, media pantalla todos los días
+        // para contestar una pregunta que se hace una vez por mes. Hoy
+        // es la pantalla que se abre a diario, y a diario lo que hace
+        // falta saber del cashback son tres cosas: cuántos puntos
+        // llevás, en qué nivel caen y cuánto falta para el que sigue. La
+        // escalera se abre cuando se pregunta por ella, tocando el
+        // medallón del nivel en Mi Plan.
+        //
+        // Sin superficie además: el héroe de Hoy es el anillo de pasos y
+        // CLAUDE.md pide una sola cosa levantada por pantalla. Esta
+        // sección era una tarjeta blanca con borde compitiendo con él.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Los puntos del año. Es el número que la persona abre la
+            // app para ver, así que es el más grande de la sección. El
+            // cashback sale del nivel, y el nivel sale de acá.
+            Text(
+              'PUNTOS ACUMULADOS ${Datos.i.resumen.anio}',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.8,
               ),
-              const SizedBox(height: 2),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        _formatNumber(puntosTotal),
-                        style: AppTheme.display(52),
-                      ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _formatNumber(puntosTotal),
+                      style: AppTheme.display(52),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.entre),
-                  // 3. El nivel y su %, dicho con todas las letras. La
-                  // escalera de abajo lo muestra en gráfico, pero el dato
-                  // tiene que poder leerse sin interpretar el dibujo.
-                  Expanded(child: _PastillaNivel(nivel: nivelActual)),
-                ],
-              ),
+                ),
+                const SizedBox(width: AppSpacing.entre),
+                // 2. El nivel y su %, dicho con todas las letras.
+                Expanded(child: PastillaNivel(nivel: nivelActual)),
+              ],
+            ),
 
-              // 2. Cuánto falta para el siguiente nivel.
-              const SizedBox(height: AppSpacing.dentro),
-              _AvanceAlSiguienteNivel(
-                puntosTotal: puntosTotal,
-                nivelActual: nivelActual,
-              ),
+            // 3. Cuánto falta para el siguiente nivel.
+            const SizedBox(height: AppSpacing.dentro),
+            AvanceAlSiguienteNivel(
+              puntosTotal: puntosTotal,
+              nivelActual: nivelActual,
+            ),
 
-              const SizedBox(height: AppSpacing.grupo),
-              // 3. El nivel y su %. La escalera es interactiva: toda la
-              // explicación de los niveles vive adentro, un renglón a la
-              // vez, en vez de tres párrafos fijos.
-              EscaleraCashback(
-                nivelActual: nivelActual,
-                puntosTotal: puntosTotal,
-                techoActividad: Datos.i.resumen.techoAnual,
-              ),
-
-              const SizedBox(height: AppSpacing.entre),
-              const Divider(height: 1, color: AppColors.cardBorder),
-              const SizedBox(height: AppSpacing.entre),
-
-              // 4 y 5. El monto en quetzales y CUÁNDO se cobra, detrás de
-              // un botón. La nota regulatoria viaja pegada al monto: el
-              // cashback se devuelve como dinero DESPUÉS del pago de la
-              // prima, nunca como descuento (Superintendencia de Bancos).
-              _BotonVerCashback(
-                monto: cashbackProyectado,
-                porcentaje: nivelPorNumero(nivelActual)?.porcentajeCashback,
-              ),
-            ],
-          ),
+            const SizedBox(height: AppSpacing.grupo),
+            // 4. El monto en quetzales y CUÁNDO se cobra, detrás de un
+            // botón. La nota regulatoria viaja pegada al monto: el
+            // cashback se devuelve como dinero DESPUÉS del pago de la
+            // prima, nunca como descuento (Superintendencia de Bancos).
+            _BotonVerCashback(
+              monto: cashbackProyectado,
+              porcentaje: nivelPorNumero(nivelActual)?.porcentajeCashback,
+            ),
+          ],
         ),
       ],
     );
@@ -487,7 +478,7 @@ class HomeScreen extends StatelessWidget {
 
   /// Sección "Objetivos de la semana": el sistema de MONEDAS, aparte del
   /// de puntos/cashback de arriba. Las monedas se gastan en Premios y
-  /// caducan a los 6 meses; los puntos nunca se gastan.
+  /// caducan a los 90 días; los puntos nunca se gastan.
   ///
   /// Son 3 objetivos, los tres de la MISMA semana. Se evalúan una sola
   /// vez, el domingo 23:59 (hora de Guatemala).
@@ -592,83 +583,6 @@ class _StepsRing extends StatelessWidget {
   }
 }
 
-class _AvanceAlSiguienteNivel extends StatelessWidget {
-  const _AvanceAlSiguienteNivel({
-    required this.puntosTotal,
-    required this.nivelActual,
-  });
-
-  final int puntosTotal;
-  final int nivelActual;
-
-  @override
-  Widget build(BuildContext context) {
-    final siguiente = _siguienteNivel();
-    final estiloApoyo = Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary);
-
-    if (siguiente == null) {
-      return Text('Estás en el nivel más alto de cashback', style: estiloApoyo);
-    }
-    if (!siguiente.definido) {
-      return Text(
-        'El nivel ${siguiente.numero} todavía no tiene rango definido',
-        style: estiloApoyo,
-      );
-    }
-
-    final piso = nivelPorNumero(nivelActual)?.puntosMinimos ?? 0;
-    final techo = siguiente.puntosMinimos!;
-    final avance = techo > piso
-        ? ((puntosTotal - piso) / (techo - piso)).clamp(0.0, 1.0)
-        : 1.0;
-    final faltan = techo - puntosTotal;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: avance,
-            minHeight: 7,
-            backgroundColor: AppColors.cardBorder,
-            valueColor: AlwaysStoppedAnimation(
-              AppColors.colorForNivel(siguiente.numero),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: 'Te faltan ${_HomeFormato.miles(faltan)} pts',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              TextSpan(text: ' para el nivel ${siguiente.numero}'),
-            ],
-          ),
-          style: estiloApoyo,
-        ),
-      ],
-    );
-  }
-
-  /// El nivel que sigue al actual en la tabla, o null si ya es el último.
-  Nivel? _siguienteNivel() {
-    for (final n in niveles) {
-      if (n.numero > nivelActual) return n;
-    }
-    return null;
-  }
-}
-
-/// Formatos para los widgets sueltos de esta pantalla.
 class _HomeFormato {
   /// 10.0 -> "10", 7.5 -> "7,5". Coma decimal, como se usa acá.
   static String pct(double v) => v == v.roundToDouble()
@@ -678,41 +592,6 @@ class _HomeFormato {
   /// Delega en el formateador único de `numero_animado.dart`: antes esta
   /// era una segunda copia del mismo separador de miles.
   static String miles(int v) => milesConComa(v);
-}
-
-/// Pastilla con el nivel actual y su porcentaje de cashback.
-class _PastillaNivel extends StatelessWidget {
-  const _PastillaNivel({required this.nivel});
-
-  final int nivel;
-
-  @override
-  Widget build(BuildContext context) {
-    final datos = nivelPorNumero(nivel);
-    final color = AppColors.colorForNivel(nivel);
-    final pct = datos?.porcentajeCashback;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        // Sin porcentaje definido no se inventa uno.
-        pct == null
-            ? 'Nivel $nivel'
-            : 'Nivel $nivel · ${_HomeFormato.pct(pct)}% de cashback',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
 }
 
 /// Botón que abre la hoja con el cashback del usuario.
@@ -970,7 +849,7 @@ class _PresionableState extends State<_Presionable> {
 /// incluye meses anteriores y descuenta lo gastado en Premios—, porque
 /// acá tiene que cuadrar con lo que el usuario puede sumar a ojo.
 ///
-/// Son MONEDAS: se gastan en Premios y caducan a los 6 meses. Nunca
+/// Son MONEDAS: se gastan en Premios y caducan a los 90 días. Nunca
 /// puntos.
 class _SaldoMonedasChip extends StatefulWidget {
   const _SaldoMonedasChip({required this.monedas});
@@ -1036,9 +915,11 @@ class _SaldoMonedasChipState extends State<_SaldoMonedasChip> {
 /// Uno de los tres bloques de Home, con su etiqueta de horizonte
 /// temporal: DIARIO, SEMANAL, ANUAL.
 ///
-/// La etiqueta es chica, en mayúsculas y con tracking amplio: tiene que
-/// ordenar la pantalla sin competir con los números grandes. Es la misma
-/// pauta de "PUNTOS ACUMULADOS 2026" y "PUNTOS HOY".
+/// La etiqueta va en `AppTheme.subsectionTitle`: el mismo azul de marca
+/// y la misma fuente que el título de la pantalla, pero a 12 px. Así un
+/// bloque se lee como pariente del título y no como una nota al margen
+/// —era gris y en Manrope—, sin competirle a los números grandes, que
+/// son lo que tiene que resaltar en Home.
 ///
 /// La etiqueta va suelta sobre el fondo tintado: no hace falta ningún
 /// contenedor, porque el fondo ya separa los bloques de las tarjetas.
@@ -1050,16 +931,7 @@ class _BloqueHorizonte extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final etiqueta = Text(
-      titulo,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: AppColors.textSecondary,
-        fontWeight: FontWeight.w700,
-        // Tracking amplio: es lo que hace que se lea como etiqueta de
-        // sección y no como un título más.
-        letterSpacing: 2.4,
-      ),
-    );
+    final etiqueta = Text(titulo, style: AppTheme.subsectionTitle);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

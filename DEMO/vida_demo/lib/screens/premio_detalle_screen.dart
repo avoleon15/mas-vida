@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/placeholder_imagen.dart';
@@ -101,13 +102,21 @@ class PremioDetalleScreen extends StatelessWidget {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: alcanza
-                          ? () => Navigator.of(context).pushNamed(
-                              '/canje-exitoso',
-                              arguments: {
-                                'premio': premio,
-                                'monedasRestantes': saldoRestante,
-                              },
-                            )
+                          ? () {
+                              // Golpe MEDIO y no liviano: acá se gastan
+                              // monedas y no hay vuelta atrás. El liviano
+                              // es para navegar; lo que compromete algo
+                              // se siente distinto, igual que al crear un
+                              // grupo o aceptar un duelo.
+                              HapticFeedback.mediumImpact();
+                              Navigator.of(context).pushNamed(
+                                '/canje-exitoso',
+                                arguments: {
+                                  'premio': premio,
+                                  'monedasRestantes': saldoRestante,
+                                },
+                              );
+                            }
                           : null,
                       // El color y la forma los pone el tema
                       // (elevatedButtonTheme). Antes acá había un
@@ -139,7 +148,10 @@ class PremioDetalleScreen extends StatelessWidget {
 
   Widget _buildBotonAtras(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).pop(),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        Navigator.of(context).pop();
+      },
       child: Container(
         width: 40,
         height: 40,

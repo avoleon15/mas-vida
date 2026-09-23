@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'datos/fuente_datos.dart';
+import 'navegacion.dart';
 import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
@@ -84,23 +85,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.temaClaro,
       initialRoute: '/',
-      // Rutas nombradas: BottomNavBar navega por nombre de ruta.
+      // El rebote de iOS y el arrastre con mouse, para TODA la app y no
+      // solo para las pantallas que se acuerdan de pedirlo. Ver
+      // `lib/navegacion.dart`.
+      scrollBehavior: const ComportamientoVida(),
+      // Las rutas se arman acá y no con el mapa `routes:` porque cada
+      // una necesita su propia transición: las cinco pestañas cruzan
+      // con un fundido y las pantallas de adentro entran deslizándose.
+      // Con `routes:` todas usarían la misma.
+      //
       // '/premio-detalle' y '/canje-exitoso' reciben los datos del
       // premio como argumento (Navigator.pushNamed(..., arguments:)), no
       // como parte de la ruta.
-      routes: {
-        // La app entra por acá, no por '/home': hasta que los datos no
-        // estén cargados no se puede construir ninguna pantalla.
-        '/': (context) => const _Arranque(),
-        '/home': (context) => const HomeScreen(),
-        '/progress': (context) => const ProgressScreen(),
-        '/records': (context) => const RecordsScreen(),
-        '/perfil': (context) => const PerfilScreen(),
-        '/social': (context) => const SocialScreen(),
-        '/premios': (context) => const PremiosScreen(),
-        '/mi-plan': (context) => const MiPlanScreen(),
-        '/premio-detalle': (context) => const PremioDetalleScreen(),
-        '/canje-exitoso': (context) => const CanjeExitosoScreen(),
+      onGenerateRoute: (ajustes) {
+        final pantalla = _pantallaDe(ajustes.name);
+        if (pantalla == null) return null;
+        return rutasDePestana.contains(ajustes.name)
+            ? rutaDePestana(pantalla, ajustes)
+            : rutaInterna(pantalla, ajustes);
       },
       // En Web envolvemos la app en un marco de iPhone para previsualizarla
       // como celular. En el build real de iOS esto no aplica: ahí `child`
@@ -132,6 +134,40 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         );
       },
     );
+  }
+}
+
+/// Qué pantalla le toca a cada nombre de ruta.
+///
+/// Separado de la transición a propósito: acá se dice QUÉ se muestra y
+/// en `navegacion.dart` CÓMO entra. Un nombre desconocido devuelve null
+/// y el Navigator se encarga.
+Widget? _pantallaDe(String? ruta) {
+  switch (ruta) {
+    // La app entra por acá, no por '/home': hasta que los datos no
+    // estén cargados no se puede construir ninguna pantalla.
+    case '/':
+      return const _Arranque();
+    case '/home':
+      return const HomeScreen();
+    case '/progress':
+      return const ProgressScreen();
+    case '/records':
+      return const RecordsScreen();
+    case '/perfil':
+      return const PerfilScreen();
+    case '/social':
+      return const SocialScreen();
+    case '/premios':
+      return const PremiosScreen();
+    case '/mi-plan':
+      return const MiPlanScreen();
+    case '/premio-detalle':
+      return const PremioDetalleScreen();
+    case '/canje-exitoso':
+      return const CanjeExitosoScreen();
+    default:
+      return null;
   }
 }
 
@@ -173,6 +209,12 @@ class _ArranqueState extends State<_Arranque> {
         // si no, la primera que se ve aparece un instante después que su
         // número.
         await MonedaAnimada.precargar();
+
+        // Queda apuntado el relevo de semana: si la app se queda abierta
+        // cruzando el domingo 23:59, el lunes 00:00 (hora de Guatemala)
+        // vuelve a pedir los datos sola y aparece la semana nueva con sus
+        // objetivos, sin que el usuario tenga que jalar para refrescar.
+        programarRelevoDeSemana();
       }),
       Future.delayed(_minimoEnPantalla),
     ]);

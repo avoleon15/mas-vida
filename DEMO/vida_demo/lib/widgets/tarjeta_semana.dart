@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 import '../datos/modelos.dart';
 import '../reglas_rango.dart';
 import '../theme.dart';
-import 'moneda_animada.dart';
+import 'cintillo_patrocinador.dart';
+import 'patrocinio.dart';
 
 // ============================================================
 // LA TARJETA DE UNA SEMANA.
@@ -18,7 +19,7 @@ import 'moneda_animada.dart';
 // Dos zonas:
 //
 //   arriba  -> el titular, y los tres objetivos con NOMBRE a la vista
-//   al pie  -> dónde va en el programa, y la recompensa
+//   al pie  -> la entrada al camino completo, y nada más
 //
 // QUÉ SE SACÓ Y POR QUÉ:
 //
@@ -28,36 +29,73 @@ import 'moneda_animada.dart';
 //    mismo que al 0% — un objetivo entero, y sin él la semana no cuenta.
 //
 // 2. EL PORCENTAJE. Decía "48 minutos · 55% del objetivo". Un porcentaje
-//    no le dice a nadie qué hacer hoy. Ahora dice "Faltan 42 min", que es
-//    una instrucción.
+//    no le dice a nadie qué hacer hoy. Ahora dice "48 de 90 min", que es
+//    una cantidad concreta.
 //
 // 3. EL ACTION SHEET. Tocar un objetivo abría un CupertinoActionSheet con
 //    su nombre y su avance, más dos botones para salir. Existía solo
 //    porque los nombres no se veían. Ahora se ven, así que no hace falta:
 //    los action sheets son para elegir entre acciones, no para mostrar
 //    un dato que cabe en la tarjeta.
+//
+// 4. LOS DOS PÁRRAFOS DEL PIE (revisión de Daniel, 21 de septiembre de
+//    2026). Abajo de los objetivos había dos bloques de texto: el plazo
+//    en dos oraciones ("Los tres cierran el domingo 20 a las 11:59 p.m.
+//    La semana 4 arranca el lunes 21 a las 12:00 a.m.") y el renglón de
+//    la marca. Cuatro renglones de letra chica para cerrar una tarjeta
+//    cuyo trabajo es decir qué falta hacer esta semana.
+//
+//    El plazo no se perdió: subió al renglón del conteo, alineado a la
+//    derecha, en tres palabras. Sigue dicho UNA sola vez y sigue siendo
+//    uno solo para los tres objetivos, que es la regla que lo puso ahí.
+//    Cuándo arranca la que sigue se fue del todo: es el día siguiente al
+//    cierre, y decirlo obligaba a leer una segunda fecha para no
+//    enterarse de nada nuevo.
+//
+//    En su lugar, el pie es el botón que abre el camino: es la única
+//    acción de la tarjeta, y estaba arriba —flotando entre el
+//    encabezado de la sección y la tarjeta—, donde se leía como un
+//    rótulo y no como algo que se toca.
 // ============================================================
 
-/// Cómo se dice cuánto falta de un objetivo.
+/// Cómo se dice el avance de un objetivo: "48 de 90 min".
 ///
-/// En UNIDADES REALES, nunca en porcentaje: "Faltan 42 min" se puede
-/// hacer hoy, "55% del objetivo" no le dice nada a nadie.
+/// En UNIDADES REALES, nunca en porcentaje: "48 de 90 min" se puede
+/// terminar hoy, "55% del objetivo" no le dice nada a nadie.
+///
+/// POR QUÉ NO DICE "FALTAN" (revisión de Daniel, 10 de septiembre de
+/// 2026). Antes decía "Faltan 42 min" y "Faltan 2 días", y se leía como
+/// una cuenta regresiva: parecía que a un objetivo le quedaban 42 minutos
+/// de plazo y al otro 2 días. Los TRES cierran juntos el domingo 23:59
+/// —eso lo dice [plazoCorto], una sola vez, arriba del todo y al lado
+/// del conteo—, así que la columna de la derecha no puede sonar a
+/// plazo. "Faltan" más una unidad
+/// que además es unidad de tiempo ("días") era la combinación exacta que
+/// lo hacía sonar así.
+///
+/// El formato es el MISMO que el del titular de la tarjeta ("1 de 3
+/// objetivos") a propósito: dos formas distintas de decir un avance en la
+/// misma tarjeta se leen como dos cosas distintas.
 ///
 /// Sin meta devuelve un texto sin número. La tabla de dificultad por
 /// rango todavía no existe en ninguna fuente (la define Luis en L7): el
 /// día que el servidor no mande la meta, esta función NO inventa una
 /// dividiendo el progreso por un porcentaje redondeado.
-String faltanteDicho(ObjetivoSemanal objetivo) {
+String avanceDicho(ObjetivoSemanal objetivo) {
   if (objetivo.completo) return 'Completado';
 
   final meta = objetivo.meta;
   if (meta == null) return 'En curso';
 
-  final falta = meta - objetivo.progreso;
-  if (falta <= 0) return 'Casi';
+  // Llegó al número pero el servidor todavía no lo dio por cumplido. No
+  // se muestra "90 de 90": eso se lee como completado y lo contradiría
+  // el círculo vacío de al lado.
+  if (objetivo.progreso >= meta) return 'Casi';
 
-  final verbo = falta == 1 ? 'Falta' : 'Faltan';
-  return '$verbo ${_conMiles(falta)} ${_unidadCorta(objetivo.unidad, falta)}';
+  // La unidad concuerda con la META, que es el número que la precede:
+  // "1 de 3 días", "0 de 1 día".
+  return '${_conMiles(objetivo.progreso)} de ${_conMiles(meta)} '
+      '${_unidadCorta(objetivo.unidad, meta)}';
 }
 
 /// La unidad, abreviada y concordada con el número.
@@ -101,40 +139,26 @@ DateTime _arranqueDe(SemanaObjetivos semana) =>
 String _diaYNumero(DateTime fecha) =>
     '${_diasDeLaSemana[fecha.weekday - 1]} ${fecha.day}';
 
-/// Cuándo cierran los tres objetivos, y cuándo arranca la semana que
-/// sigue.
+/// El plazo de la semana, en tres palabras.
 ///
-/// Los HORARIOS son fijos y salen del contrato v1: la semana va de lunes
-/// 00:00 a domingo 23:59, hora de Guatemala. En reloj de 12 horas eso es
-/// **domingo 11:59 p.m.** y **lunes 12:00 a.m.** — las dos de noche.
+/// Va al lado del conteo de objetivos, alineado a la derecha, y es lo
+/// único que se dice del calendario en toda la tarjeta.
 ///
-/// Ojo con la p.m.: "domingo a las 11:59 a.m." sería el domingo a media
-/// mañana, y adelantaría el cierre doce horas. El motor evalúa a las
-/// 23:59:59 (ver `domingoDeLaSemana`), así que acá va p.m.
-String plazoDeLaSemana(SemanaObjetivos semana, {int? numeroSiguiente}) {
-  final cierra = _diaYNumero(_cierreDe(semana));
-  final arranca = _diaYNumero(_arranqueDe(semana));
-
-  switch (semana.estado) {
-    case EstadoSemana.cerrada:
-      return 'Cerró el $cierra a las 11:59 p.m.';
-
-    case EstadoSemana.futura:
-      return 'Arranca el $arranca a las 12:00 a.m. y cierra el $cierra a '
-          'las 11:59 p.m.';
-
-    case EstadoSemana.enCurso:
-      final base = 'Los tres cierran el $cierra a las 11:59 p.m.';
-      if (numeroSiguiente == null) return base;
-      // El lunes de la que viene es el día siguiente al domingo que
-      // cierra esta: 00:00 arranca apenas termina el 23:59.
-      final proximo = _diaYNumero(
-        _cierreDe(semana).add(const Duration(days: 1)),
-      );
-      return '$base La semana $numeroSiguiente arranca el $proximo a las '
-          '12:00 a.m.';
-  }
-}
+/// SIN LA HORA. Decía "a las 11:59 p.m." y el cuidado era real —"11:59
+/// a.m." adelantaría el cierre doce horas—, pero esa ambigüedad la
+/// traía la oración larga. "Cierran el domingo 20" no se lee como
+/// mediodía: una semana termina cuando termina el domingo. La hora
+/// exacta la sigue decidiendo el servidor (23:59:59, ver
+/// `domingoDeLaSemana`); acá no hace falta nombrarla.
+///
+/// En MINÚSCULA porque continúa el renglón del conteo, no lo abre.
+String plazoCorto(SemanaObjetivos semana) => switch (semana.estado) {
+  EstadoSemana.cerrada => 'cerró el ${_diaYNumero(_cierreDe(semana))}',
+  EstadoSemana.futura => 'arranca el ${_diaYNumero(_arranqueDe(semana))}',
+  // En plural: el plazo es de los tres objetivos a la vez, y esa es
+  // justamente la confusión que hay que evitar (ver [avanceDicho]).
+  EstadoSemana.enCurso => 'cierran el ${_diaYNumero(_cierreDe(semana))}',
+};
 
 /// Abre una semana en su propia hoja.
 ///
@@ -145,7 +169,6 @@ void mostrarHojaSemana(
   required PasoDelPrograma paso,
   required int rangoActual,
   required int totalSemanas,
-  int? numeroSiguiente,
 }) {
   HapticFeedback.selectionClick();
   showCupertinoModalPopup<void>(
@@ -154,7 +177,6 @@ void mostrarHojaSemana(
       paso: paso,
       rangoActual: rangoActual,
       totalSemanas: totalSemanas,
-      numeroSiguiente: numeroSiguiente,
     ),
   );
 }
@@ -164,16 +186,27 @@ class _HojaSemana extends StatelessWidget {
     required this.paso,
     required this.rangoActual,
     required this.totalSemanas,
-    this.numeroSiguiente,
   });
 
   final PasoDelPrograma paso;
   final int rangoActual;
   final int totalSemanas;
-  final int? numeroSiguiente;
 
   @override
   Widget build(BuildContext context) {
+    // LA MARCA DE LA SEMANA SE VE ACÁ (decisión de Daniel, 21 de
+    // septiembre de 2026).
+    //
+    // La tarjeta con las fotos del local estaba arriba del camino, a
+    // pantalla completa y siempre: la marca de la semana en curso le
+    // pasaba por delante a todo el que entraba a ver el recorrido.
+    // Ahora se ve al ABRIR la semana —la que sea, no solo la que
+    // corre—, que es el momento en que el usuario preguntó por ella.
+    //
+    // Y solo si ESA semana está vendida. Sin marca no se dibuja nada:
+    // ni un hueco, ni un cartel que anuncie la ausencia.
+    final patrocinio = paso.semana.patrocinio;
+
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.card,
@@ -195,11 +228,29 @@ class _HojaSemana extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
+            if (patrocinio != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: CintilloPatrocinador(
+                  semana: paso.semana.numero,
+                  marca: patrocinio.marca,
+                  // La lista sale del repositorio, no de acá: hoy el
+                  // mock repite la única foto del catálogo.
+                  fotos: patrocinio.fotos,
+                  fondoMarca: patrocinio.fondo,
+                ),
+              ),
             TarjetaSemana(
               paso: paso,
               rangoActual: rangoActual,
               totalSemanas: totalSemanas,
-              numeroSiguiente: numeroSiguiente,
+              // Sin la píldora de la marca cuando arriba están sus
+              // fotos: el logo quedaría dos veces en cinco centímetros.
+              conChipMarca: patrocinio == null,
+              // Sin botón al pie: esta hoja se abre DESDE el camino. Un
+              // "Ver las 10 semanas" acá llevaría a donde el usuario ya
+              // está parado.
+              //
               // Sin marco: la hoja YA es la superficie. Una tarjeta con
               // borde adentro de una hoja blanca se lee como una caja
               // dentro de otra caja.
@@ -226,8 +277,9 @@ class TarjetaSemana extends StatelessWidget {
     required this.paso,
     required this.rangoActual,
     required this.totalSemanas,
-    this.numeroSiguiente,
+    this.onVerCamino,
     this.conMarco = true,
+    this.conChipMarca = true,
   });
 
   /// La semana con el rango en que deja y lo que paga. Viene ya resuelto
@@ -241,34 +293,106 @@ class TarjetaSemana extends StatelessWidget {
 
   final int totalSemanas;
 
-  /// Cómo se llama la semana que sigue, para decir cuándo arranca. Null
-  /// cuando esta es la última del programa.
-  final int? numeroSiguiente;
+  /// Qué hace el botón del pie. Null en la hoja del camino: ahí el botón
+  /// no se dibuja, porque el camino ya está abierto.
+  final VoidCallback? onVerCamino;
 
   /// False dentro de una hoja modal, que ya es superficie por sí sola.
   final bool conMarco;
+
+  /// False cuando la marca ya se está viendo en grande arriba de la
+  /// tarjeta: el mismo logo dos veces en la misma hoja es uno de más.
+  final bool conChipMarca;
 
   SemanaObjetivos get _semana => paso.semana;
 
   @override
   Widget build(BuildContext context) {
+    final alPie = onVerCamino;
+
     final contenido = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          // Menos aire abajo cuando hay botón: el relleno del botón ya
+          // separa la última fila del borde, y sumados los dos dejaban
+          // un hueco en el medio de la tarjeta.
+          padding: EdgeInsets.fromLTRB(20, 24, 20, alPie == null ? 20 : 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_titular(), style: _estiloTitular(context)),
+              // EL TITULAR Y LA MARCA, EN LA MISMA LÍNEA.
+              //
+              // La marca de la semana estaba abajo del todo, en un
+              // bloque propio con su logo y dos renglones de texto: se
+              // leía después de los tres objetivos y del plazo, o sea
+              // último, cuando es lo que hace distinta a esta semana de
+              // las otras nueve. Arriba, al lado del número de semana,
+              // se ve de entrada y sin ocupar un renglón nuevo.
+              //
+              // La marca va PEGADA A LA DERECHA y arriba de todo, en su
+              // esquina. El titular se queda con lo que sobre: es una
+              // palabra y un número, así que sobra de más.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      _titular(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _estiloTitular(context),
+                    ),
+                  ),
+                  if (conChipMarca)
+                    if (_semana.patrocinio case final p?) ...[
+                      const SizedBox(width: 10),
+                      ChipMarcaSemana(patrocinio: p),
+                    ],
+                ],
+              ),
               const SizedBox(height: 6),
-              Text(
-                _conteo(),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.35,
-                ),
+              // EL RENGLÓN DE APOYO: cómo viene la semana a la
+              // izquierda, cuándo cierra a la derecha. Dos datos, un
+              // renglón, ningún bloque nuevo.
+              //
+              // El plazo NO lleva flex y va después: Flutter mide
+              // primero a los hijos sin flex, así que se lleva lo que
+              // necesita —son tres palabras— y el conteo se queda con
+              // todo el resto. Es la misma mecánica que la cola de cada
+              // objetivo, y el tope existe por lo mismo: con el tamaño
+              // de letra de iOS al máximo, sin acotarlo, empuja el
+              // conteo fuera de la tarjeta.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      _conteo(),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ConstrainedBox(
+                    // 150 y no 130: "cierran el domingo 20" entra en dos
+                    // renglones justos: más angosto se parte en tres y
+                    // deja el conteo de la izquierda flotando solo.
+                    constraints: const BoxConstraints(maxWidth: 150),
+                    child: Text(
+                      plazoCorto(_semana),
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               for (final o in _semana.objetivos)
@@ -276,42 +400,62 @@ class TarjetaSemana extends StatelessWidget {
                   objetivo: o,
                   apagada: _semana.estado == EstadoSemana.futura,
                 ),
-              const SizedBox(height: 14),
-              // El plazo va acá abajo y no en cada fila: es el MISMO para
-              // los tres. Repetirlo tres veces sería decir tres veces lo
-              // mismo, y ponerlo arriba lo separaría de los objetivos a
-              // los que se aplica.
-              Text(
-                plazoDeLaSemana(_semana, numeroSiguiente: numeroSiguiente),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
-              ),
+              // QUÉ PAGA LA MARCA: solo cuando YA SE GANÓ.
+              //
+              // "Esta semana paga Entrada gratis en Montanos" se fue: es
+              // una promesa, y la promesa ya la hace la píldora de la
+              // marca arriba, al lado del titular. Lo que sí se dice es
+              // lo que el usuario SE LLEVÓ, porque eso no lo dice
+              // ninguna otra pieza —el nodo del camino solo muestra las
+              // monedas— y de "Cupón de Montanos" nadie sabe qué ganó.
+              if (_semana.patrocinio case final p?)
+                if (_semana.estado == EstadoSemana.cerrada &&
+                    _semana.subioDeRango) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'Ganaste ${p.cupon}.',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: acentoDeMarca(p),
+                      fontWeight: FontWeight.w700,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
             ],
           ),
         ),
-        _FranjaPrograma(
-          semana: _semana,
-          rangoActual: rangoActual,
-          totalSemanas: totalSemanas,
-          monedas: paso.monedas,
-          cobradas: !paso.proyectado,
-        ),
+        if (alPie != null)
+          _PieCamino(totalSemanas: totalSemanas, onPressed: alPie),
+        // LA FRANJA AZUL DEL PIE SE SACÓ ENTERA, y lo que quedó en su
+        // lugar es un botón, no otra franja de datos.
+        //
+        // Llevaba tres cosas y ninguna se ganaba el lugar acá:
+        //
+        //   · La tira de diez marcas. Decía por qué semana va, que es
+        //     exactamente lo que ya dice el titular con palabras
+        //     ("Semana 3 de 10") a quince centímetros de distancia.
+        //   · El rótulo "RANGO N", que además rotulaba mal a esa tira:
+        //     la tira cuenta semanas, no rangos. El rango vive en la
+        //     insignia del camino.
+        //   · El chip de monedas. Está en el nodo de esta semana,
+        //     adentro del camino, que es donde se compara contra los de
+        //     las otras nueve — que es para lo que sirve saber cuánto
+        //     paga cada una.
       ],
     );
 
     if (!conMarco) return contenido;
 
     return Container(
+      // Recorta: el botón del pie tiene relleno propio y llega hasta el
+      // borde. Sin el recorte, sus esquinas cuadradas asoman por fuera
+      // del redondeo de la tarjeta.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.cardBorder),
       ),
-      // La franja del pie llega hasta el borde y tiene que respetar el
-      // radio: sin recortar, sus esquinas cuadradas asoman por fuera.
-      clipBehavior: Clip.antiAlias,
       child: contenido,
     );
   }
@@ -321,7 +465,14 @@ class TarjetaSemana extends StatelessWidget {
   /// Antes contaba los objetivos que faltaban ("Te faltan 2 objetivos").
   /// Ese dato está mejor en chico: lo primero que hay que saber es POR
   /// QUÉ SEMANA se va, y recién después cómo viene.
-  String _titular() => 'Semana ${_semana.numero} de $totalSemanas';
+  ///
+  /// SIN EL "DE 10". A 26 px, "Semana 3 de 10" más la tarjeta de la
+  /// marca al lado no entran en un iPhone: el titular terminaba cortado
+  /// en "Semana 3 de …", que es la peor de las dos opciones —se pierde
+  /// el número que importa y encima se ve roto—. Cuántas semanas tiene
+  /// el programa lo dice el botón del pie ("Ver las 10 semanas") y el
+  /// camino entero; acá lo único que hace falta es en cuál va.
+  String _titular() => 'Semana ${_semana.numero}';
 
   /// El renglón chico: cuántos objetivos van, y cómo terminó la semana si
   /// ya cerró.
@@ -367,6 +518,81 @@ TextStyle _estiloTitular(BuildContext context) =>
     );
 
 // ============================================================
+// El pie: la entrada al camino.
+// ============================================================
+
+/// Llave del botón que abre el camino, para agarrarlo desde un test.
+const Key llaveBotonCamino = ValueKey('ver-camino-semanas');
+
+/// El pie de la tarjeta, que es la única acción que tiene.
+///
+/// PEGADO A LA TARJETA Y NO FLOTANDO ARRIBA. Antes era una barra suelta
+/// entre el encabezado de la sección y la tarjeta: ahí arriba, con el
+/// mismo relleno azul que usan los rótulos de la app, se leía como un
+/// título de sección más y no como algo que se toca. Al pie, cerrando
+/// la tarjeta de lado a lado y con el chevron a la derecha, es la forma
+/// que iOS usa para "seguir hacia adentro" — la misma de una celda de
+/// tabla.
+///
+/// `azulNiebla` y no `accent`: la acción principal de la pantalla es
+/// cumplir los tres objetivos de arriba, no irse a mirar el camino. El
+/// botón tiene que verse sin gritar.
+class _PieCamino extends StatelessWidget {
+  const _PieCamino({required this.totalSemanas, required this.onPressed});
+
+  final int totalSemanas;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    // CupertinoButton y no un GestureDetector: trae gratis el atenuado
+    // al presionar que un usuario de iPhone ya conoce (ver CLAUDE.md).
+    return CupertinoButton(
+      key: llaveBotonCamino,
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      borderRadius: BorderRadius.zero,
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        onPressed();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 15, 20, 15),
+        decoration: const BoxDecoration(
+          color: AppColors.azulNiebla,
+          // La misma línea que separa un objetivo del siguiente: el pie
+          // es el renglón que sigue, no una pieza aparte.
+          border: Border(top: BorderSide(color: AppColors.cardBorder)),
+        ),
+        child: Row(
+          children: [
+            // Sin ícono a la izquierda. El chevron ya dice que lleva a
+            // otro lado, y dos marcas para una sola acción es una de
+            // más en una tarjeta que se está tratando de aligerar.
+            Expanded(
+              child: Text(
+                'Ver las $totalSemanas semanas',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              size: 15,
+              color: AppColors.accent,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
 // Un objetivo, en una línea.
 // ============================================================
 
@@ -385,7 +611,7 @@ class _FilaObjetivo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hecho = objetivo.completo;
-    final cola = faltanteDicho(objetivo);
+    final cola = avanceDicho(objetivo);
 
     return Semantics(
       key: llaveObjetivo(objetivo.id),
@@ -401,8 +627,8 @@ class _FilaObjetivo extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
           children: [
-            _Indicador(hecho: hecho),
-            const SizedBox(width: 13),
+            _Riel(hecho: hecho, apagada: apagada),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 objetivo.nombre,
@@ -423,18 +649,42 @@ class _FilaObjetivo extends StatelessWidget {
             // partía en dos líneas aunque sobrara espacio a la derecha.
             //
             // El tope existe para el otro extremo: con el tamaño de letra
-            // de iOS al máximo, "Faltan 3,400 pasos" empujaba la fila
+            // de iOS al máximo, "36,600 de 40,000 pasos" empujaba la fila
             // fuera de la tarjeta. Acotada, envuelve. Hay un test a 1.6x.
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 112),
-              child: Text(
-                cola,
-                textAlign: TextAlign.right,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontSize: 14,
-                  fontWeight: hecho ? FontWeight.w600 : FontWeight.w500,
-                  color: hecho ? AppColors.accent : AppColors.textSecondary,
-                ),
+              constraints: const BoxConstraints(maxWidth: 124),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // El check SUELTO, sin círculo y sin relleno: es uno de
+                  // los cuatro lugares donde CLAUDE.md deja entrar el
+                  // naranja, y acá hace el trabajo que hacía el círculo
+                  // de la izquierda sin prometer que se puede tocar. Va
+                  // pegado a la palabra que ya dice lo mismo, así que se
+                  // lee como una marca y no como un control.
+                  if (hecho) ...[
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: AppColors.accentSecondary,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Flexible(
+                    child: Text(
+                      cola,
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontSize: 14,
+                        fontWeight: hecho ? FontWeight.w600 : FontWeight.w500,
+                        color: hecho
+                            ? AppColors.accent
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -444,180 +694,45 @@ class _FilaObjetivo extends StatelessWidget {
   }
 }
 
-/// El punto de estado de un objetivo.
+/// El estado de un objetivo, como un RIEL y no como una casilla.
 ///
-/// Lleno o vacío, sin estados intermedios: no hay anillo parcial ni
-/// porcentaje adentro. Un objetivo al 90% cuenta lo mismo que uno al 0%
-/// mientras no esté cumplido, y el indicador tiene que decir eso.
-class _Indicador extends StatelessWidget {
-  const _Indicador({required this.hecho});
+/// POR QUÉ SE FUE EL CÍRCULO (prueba con usuario, 22 de septiembre de
+/// 2026). Era un círculo de 19 px con un check adentro, o sea la forma
+/// exacta de un checkbox de iOS, y la primera persona que probó la app
+/// intentó tocarlo para marcar el objetivo. No hay nada que marcar: los
+/// tres objetivos los cierra el SERVIDOR el domingo 23:59 con los datos
+/// de Apple Health. Una casilla promete una acción que no existe, y
+/// descubrir que no hace nada se siente una app rota.
+///
+/// Un riel no promete nada. Es una barra de 3,5 px pegada al borde
+/// izquierdo de la fila: se lee como el margen de color de una lista, no
+/// como un control. Nadie toca una línea.
+///
+/// Y SIGUE SIENDO BINARIO, lleno o vacío, sin anillo parcial ni
+/// porcentaje: un objetivo al 90% cuenta lo mismo que uno al 0% mientras
+/// no esté cumplido. Cuánto lleva ya lo dice la columna de la derecha,
+/// en unidades reales ("48 de 90 min"), que es donde se puede leer.
+class _Riel extends StatelessWidget {
+  const _Riel({required this.hecho, required this.apagada});
 
   final bool hecho;
 
+  /// Una semana futura no arrancó: su riel va más pálido todavía, para
+  /// que no se lea como un objetivo en curso que va en cero.
+  final bool apagada;
+
   @override
   Widget build(BuildContext context) => Container(
-    width: 19,
-    height: 19,
+    width: 3.5,
+    height: 22,
     decoration: BoxDecoration(
-      color: hecho ? AppColors.accent : AppColors.azulNiebla,
-      shape: BoxShape.circle,
-      border: hecho ? null : Border.all(color: AppColors.azulSuave, width: 1.6),
-    ),
-    child: hecho
-        ? const Icon(Icons.check_rounded, size: 13, color: Colors.white)
-        : null,
-  );
-}
-
-// ============================================================
-// La franja del pie: dónde vas y qué se gana.
-// ============================================================
-
-class _FranjaPrograma extends StatelessWidget {
-  const _FranjaPrograma({
-    required this.semana,
-    required this.rangoActual,
-    required this.totalSemanas,
-    required this.monedas,
-    required this.cobradas,
-  });
-
-  final SemanaObjetivos semana;
-  final int rangoActual;
-  final int totalSemanas;
-  final int monedas;
-
-  /// True cuando ese monto ya se acreditó; false cuando es lo que se
-  /// ganaría al cumplir.
-  final bool cobradas;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      decoration: const BoxDecoration(
-        color: AppColors.azulNiebla,
-        border: Border(top: BorderSide(color: AppColors.cardBorder)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  // Sin repetir la semana: eso ya lo dice el titular de
-                  // arriba. Acá queda el rango, que es lo otro que ubica.
-                  'RANGO $rangoActual',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.4,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _TiraSemanas(actual: semana.numero, total: totalSemanas),
-              ],
-            ),
-          ),
-          if (monedas > 0) ...[
-            const SizedBox(width: 14),
-            _ChipRecompensa(monedas: monedas, cobradas: cobradas),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Llave de la tira de semanas, para los tests.
-const Key llaveTiraSemanas = ValueKey('tira-semanas');
-
-/// Las semanas del programa como marcas chiquitas.
-///
-/// Sin candados y sin números: lo que informa es cuántas quedan y por
-/// dónde va, no cuál es cuál. Para eso está el camino completo.
-class _TiraSemanas extends StatelessWidget {
-  const _TiraSemanas({required this.actual, required this.total});
-
-  final int actual;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    // FittedBox: las marcas miden 15×5 con 5 de separación, o sea 195 px
-    // con diez semanas. En un iPhone angosto eso no entra al lado del
-    // chip, y se achican en vez de desbordarse.
-    return FittedBox(
-      key: llaveTiraSemanas,
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var n = 1; n <= total; n++) ...[
-            Container(
-              width: 15,
-              height: 5,
-              decoration: BoxDecoration(
-                color: _color(n),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            if (n != total) const SizedBox(width: 5),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Color _color(int numero) {
-    if (numero == actual) {
-      // La de ahora, a media tinta: ya empezó pero todavía no cerró.
-      return AppColors.accent.withValues(alpha: 0.45);
-    }
-    if (numero < actual) return AppColors.accent;
-    return AppColors.azulTenue;
-  }
-}
-
-/// Lo que paga esta semana.
-class _ChipRecompensa extends StatelessWidget {
-  const _ChipRecompensa({required this.monedas, required this.cobradas});
-
-  final int monedas;
-  final bool cobradas;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: cobradas
-        ? 'Esta semana pagó $monedas monedas'
-        : 'Cumplirla paga $monedas monedas',
-    excludeSemantics: true,
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.accentSecondary),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MonedaAnimada(size: 17, apagado: !cobradas),
-          const SizedBox(width: 4),
-          Text(
-            '+$monedas',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: AppColors.accentSecondary,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
+      // Azul de marca el cumplido, azul pálido el que falta: lo que
+      // separa los dos estados es la LUMINOSIDAD, igual que en los
+      // niveles de cashback y en las muescas del rango.
+      color: hecho
+          ? AppColors.accent
+          : (apagada ? AppColors.azulNiebla : AppColors.azulBruma),
+      borderRadius: BorderRadius.circular(AppRadios.pildora),
     ),
   );
 }
