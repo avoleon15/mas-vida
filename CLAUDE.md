@@ -262,9 +262,19 @@ selección con colores distintos, la app se lee como dos apps.
 verde `#5FAE85`. Si encontrás esos dos hex o el verde de salud en el código,
 son del tema viejo.)
 
-- **background:** casi blanco con tinte azul mínimo `#F5F6FA`
-- **card:** blanco puro `#FFFFFF` con borde sutil `#E3E6F0`
-  (necesario para que las tarjetas no se pierdan contra el fondo claro)
+- **background:** casi blanco con tinte azul mínimo `#F5F6FA`. Es también
+  el fondo de pantalla (`fondoDePantalla`), que hasta el 21 de septiembre
+  de 2026 era un beige cálido `#F3F1ED`. **Una sola temperatura en toda
+  la app:** el fondo y el borde de tarjeta son las dos superficies que
+  más lugar ocupan, y mezclarles la temperatura —beige cálido contra
+  borde azulado— es lo que daba la sensación de que nada terminaba de
+  verse fino. Si encontrás `#F3F1ED`, es del modelo viejo
+- **card:** blanco puro `#FFFFFF`. **Ya no lleva borde:** las tarjetas se
+  despegan del fondo con `AppSombras.tarjeta`, una sombra de UNA capa muy
+  abierta y casi invisible. Un contorno dibujado en las cuatro esquinas
+  hace que la pantalla se vea trazada con lápiz; una sombra difusa se lee
+  como papel apoyado. `cardBorder` `#E3E6F0` sigue existiendo para
+  separadores y rellenos apagados, no para contornear tarjetas
 - **accent (azul de marca):** `#012096` — botones principales, links,
   elementos interactivos
 - **accentSecondary (naranja de marca):** `#F58700` — estados de éxito,
@@ -273,6 +283,63 @@ son del tema viejo.)
   duro sobre fondo claro)
 - **textSecondary:** gris medio `#6B7280`
 - **Tipografía:** SF Pro (o la más parecida disponible)
+
+**UNA SOLA COSA LEVANTADA POR PANTALLA** (decisión de Daniel, 21 de
+septiembre de 2026). Es la regla que ordena todas las demás.
+
+El problema que resuelve: Social llegó a tener **16 tarjetas blancas** con
+el mismo radio y el mismo borde, y Progreso tres del mismo peso. Cuando
+todo está dentro de una caja idéntica, nada es importante — el ojo no
+encuentra dónde parar y la pantalla se lee como una lista de formularios.
+Home y Premios nunca tuvieron ese problema: Home tiene un héroe (el
+anillo) y cuatro tratamientos de superficie distintos, y en Premios las
+fotos hacen el diseño solas.
+
+La regla es al revés de lo que parece: **no se marca el héroe pintándolo,
+se marca dejando plano todo lo demás.** En cada pantalla hay UNA pieza con
+superficie y sombra; el resto se apoya directo sobre el fondo. Con una
+sola cosa levantada, esa es la que se mira, y no hace falta que grite.
+
+Qué es el héroe de cada pantalla:
+
+| Pantalla | El héroe | Lo demás |
+|---|---|---|
+| Hoy | el anillo de pasos | plano |
+| **Progreso** | **las gráficas** | el total y la actividad, planos |
+| **Social** | **el duelo activo** | amigos y ranking, listas planas |
+| Premios | la cuadrícula de fotos | plano |
+
+En Progreso el héroe son **las gráficas y no el número**. Se probó al
+revés —el total en una tarjeta oscura, a 64 px— y salió peor: lo que
+llamaba la atención era el total y los dibujos quedaban de relleno debajo.
+El total es CONTEXTO para poder leer las gráficas, no el protagonista.
+
+**NO hay superficies oscuras.** Se probó un escalón oscuro de la escala de
+azules para las tarjetas héroe y se descartó el mismo día: a tamaño de
+tarjeta, una superficie de color llama demasiado la atención y le roba la
+lectura al contenido que tiene adentro. Si aparece un `azulTinta` o una
+`AppSombras.heroe` en el código, son de ese intento y hay que sacarlos.
+
+**Una lista es una lista, no una pila de tarjetas.** Amigos, grupos,
+entrenamientos, filas de ranking: van como renglones separados por una
+línea de un pelo (`AppColors.separador`, 0,5 px), nunca metiendo cada uno
+en su propia caja con borde. Es lo que hace iOS y es lo que deja recorrer
+una lista sin leerla entera. En una tabla de ranking, **solo tu fila lleva
+relleno** (`azulBruma`, de lado a lado): así te encontrás antes de leer un
+nombre.
+
+**Dos radios y no más** (`AppRadios`): `tarjeta` = 18 para cualquier
+superficie, `pildora` = 999 para chips, badges y barras. Había diez
+mezclados —10, 12, 14, 16, 18, 24, 28—: dos tarjetas hermanas con 16 y 18
+no se ven distintas, se ven mal hechas.
+
+**Las gráficas se dibujan para mirarse, no para consultarse.** Alto
+generoso (210-215 px, no 150), línea de 3 px con degradado del `azulMedio`
+al `accent`, área de abajo al 28% y **una sola marca**, la del tramo en
+curso — un círculo en cada punto ensucia la curva, y lo que una curva
+tiene que mostrar es la FORMA. Las barras van anchas, con la punta de
+arriba redondeada a 8 y degradado vertical: un degradado es lo que hace
+que una barra se vea como un volumen y no como un rectángulo de color.
 
 Reglas visuales:
 - **Nunca bordes punteados** en botones, tabs, o nav — corregir siempre a
@@ -285,23 +352,38 @@ Reglas visuales:
   la LUMINOSIDAD, no el matiz: se leen como escalones aunque no se
   distingan bien los colores
 - **Barras de progreso:** fondo vacío en `#E3E6F0`, relleno en azul
+- **El anillo de pasos de Home se mide desde CERO, no desde el piso de su
+  tramo** (bug que encontró Daniel el 21 de septiembre de 2026). El texto
+  del centro dice "8.000 de 10.000" y el aro tiene que verse a cuatro
+  quintos. Antes el aro de plata se llenaba de 7.000 a 10.000, así que
+  con 8.000 pasos se pintaba un tercio debajo de un texto que decía otra
+  cosa: dos escalas para el mismo dato. La fórmula vive en
+  `fraccionDelAro()` de `progress_ring.dart` y tiene tres reglas — un
+  tramo terminado queda completo debajo del siguiente, uno que no arrancó
+  queda en cero, y el que está EN CURSO vale `pasos / su techo`
 - **Header** (`lib/widgets/app_header.dart`, reutilizado en TODAS las
   pantallas): "+VIDA" pegado a la esquina superior IZQUIERDA, foto de
   perfil pegada a la DERECHA
 - **La foto del usuario sale de `lib/widgets/avatar_usuario.dart`** y de
   ningún otro lado. Aparece en tres lugares —el header, la ficha de
-  Perfil y el escalón de la escalera de cashback de **Home** donde el
-  usuario está parado— y los tres tienen que mostrar la MISMA. Es el
+  Perfil y el escalón de la escalera de cashback donde el
+  usuario está parado, que ahora vive en la hoja de niveles de **Mi
+  Plan**— y los tres tienen que mostrar la MISMA. Es el
   único archivo que nombra la ruta del asset; el día que la foto llegue
   del backend cambia ahí y nada más. En la escalera de cashback la foto
   REEMPLAZA al cartel "ESTÁS AQUÍ": una cara se reconoce sola y un
   cartel hay que leerlo.
 
-  La escalera con la foto vive en **Home** (`escalera_cashback.dart`), no
-  en Mi Plan (decisión de Daniel, 17 de septiembre de 2026). Esto
-  reemplaza a la versión anterior de este documento, que la ubicaba en Mi
-  Plan: esa pantalla muestra el nivel de HOY en su tarjeta hero y el
-  camino completo de niveles no se repite ahí.
+  La escalera con la foto (`escalera_cashback.dart`) se abre **tocando el
+  medallón del nivel en Mi Plan**, dentro de la hoja de niveles
+  (`hoja_niveles.dart`), que trae los puntos del año, el nivel y la
+  escalera completa. Esto reemplaza a la versión anterior de este
+  documento, que la dejaba siempre abierta en Home (decisión de Daniel,
+  22 de septiembre de 2026): son cinco barras que el usuario ya conoce a
+  la segunda semana ocupando media pantalla todos los días para
+  contestar una pregunta que se hace una vez por mes. Un disco con un
+  número adentro es exactamente lo que se toca para saber qué significa
+  ese número.
 - **Barra inferior** (`lib/widgets/bottom_nav_bar.dart`, reutilizada en
   TODAS las pantallas): 5 ítems fijos en este orden: Hoy, Progreso,
   Social, Premios, Mi Plan. El ítem activo necesita fondo de píldora sutil
@@ -361,18 +443,65 @@ resuelven, no por cómo se ven de fábrica.
 - Anillo de pasos (color según categoría, gradiente, marcadores 25%), meta
   diaria, tiempo restante del día
 - Tarjeta de puntos totales (SIN botón de canje)
-- "Tu Cashback": monto acumulado, camino de categorías, link a Mi Plan
+- **"Tu Cashback" quedó en tres datos y SIN gráfica** (decisión de
+  Daniel, 22 de septiembre de 2026): los puntos del año, la pastilla del
+  nivel con su %, cuánto falta para el siguiente y el botón que abre el
+  monto en quetzales con su nota regulatoria. Va plano, sin tarjeta: el
+  héroe de Hoy es el anillo de pasos y esto era una tarjeta blanca con
+  borde compitiendo con él
 - "Objetivos de la semana": las semanas del mes, cada una plegable, con
   sus 3 objetivos (progreso/monedas/check) y el rango. Las metas mensuales
   ya NO existen
+- **Un objetivo NO se marca, y no puede parecer que se marca** (prueba
+  con usuario, 22 de septiembre de 2026). Cada fila llevaba un círculo
+  de 19 px con un check adentro —la forma exacta de un checkbox de
+  iOS— y la primera persona que probó la app intentó tocarlo. No hay
+  nada que tocar: los tres objetivos los cierra el SERVIDOR el domingo
+  23:59 con los datos de Apple Health. El estado va ahora en un RIEL:
+  una barra de 3,5 px pegada al borde izquierdo de la fila, azul de
+  marca si está cumplido y azul pálido si no. El cumplido suma un check
+  suelto en naranja al lado de la palabra "Completado" — sin círculo y
+  sin relleno, que es el cuarto uso permitido del naranja. Sigue siendo
+  binario: cuánto lleva lo dice la columna de la derecha en unidades
+  reales ("48 de 90 min")
 - **El camino de las semanas** (`camino_semanas_screen.dart`) va y
   vuelve por FILAS, como un tablero de mesa: 3 nodos por fila, la fila
-  siguiente al revés, y el giro siempre en la misma columna. Así ningún
-  tramo sale en diagonal, no quedan huecos en la grilla y diez semanas
-  entran en 4 filas (antes era una columna de diez renglones: 1.520 px
-  de scroll). **Cada nodo dice arriba qué semana es** ("Semana 7"), y la
-  etiqueta de la semana en curso es la única rellena de azul: eso
-  reemplaza a la píldora "ESTA SEMANA"
+  siguiente al revés, y el giro siempre en la misma columna. No quedan
+  huecos en la grilla y diez semanas entran en 4 filas (antes era una
+  columna de diez renglones: 1.520 px de scroll)
+- **La grilla ordena, la CINTA ondula** (decisión de Daniel, 22 de
+  septiembre de 2026). Los CENTROS de los nodos no se tocan —todos a la
+  misma altura dentro de su fila y a la misma distancia entre sí; un
+  nodo fuera de la grilla se lee como un error de alineación—, pero el
+  trazo que los une se comba: los tramos de una fila de a uno hacia
+  arriba y de a uno hacia abajo (una onda larga, nunca un zigzag) y el
+  giro de fila abriéndose hacia el borde de la pantalla. Con tramos
+  rectos y esquinas de 90° lo que se veía era el contorno de una tabla.
+  Es una CINTA de 9 px y no un cable de 5: es la única cosa levantada de
+  la pantalla. Esto reemplaza a la versión anterior de este documento,
+  que pedía que ningún tramo saliera en diagonal — lo que esa regla
+  evitaba eran las diagonales largas de la versión por columnas, no que
+  la línea se curve
+- **Cada círculo dice qué semana es, con todas las letras: "SEM 7".** En
+  esa pantalla conviven tres escaleras de números —semanas, rangos y
+  monedas— y un número suelto adentro de un círculo puede ser cualquiera
+  de las tres; lo que el usuario necesita saber al mirar adelante es a
+  qué SEMANA va a entrar. El rótulo va adentro del círculo y no colgado
+  del nodo: rotular los diez por fuera eran diez cajitas blancas
+  flotando sobre el camino. La semana en curso no lo repite, porque
+  arriba tiene la única etiqueta del camino —rellena de azul, la que
+  reemplazó a la píldora "ESTA SEMANA"— que ya dice "Semana 3"
+- **En el camino no hay ninguna tarjeta.** El rango es un renglón
+  apoyado sobre el fondo con una línea de un pelo debajo (era un bloque
+  de `azulNiebla`) y lo que paga cada semana va sin pastilla blanca: el
+  fondo que corta la cinta detrás del texto es del color del fondo de
+  pantalla. Es la regla de UNA SOLA COSA LEVANTADA, y acá esa cosa es el
+  camino
+- **El camino se dibuja solo al entrar:** la cinta crece tramo por
+  tramo y cada nodo aparece cuando llega hasta él, en vez de entrar los
+  diez juntos. El halo de la semana en curso late muy despacio (3 s, 6%)
+  y es el único movimiento perpetuo de la pantalla. Todo eso se apaga
+  con "Reducir movimiento" de iOS
 - **El titular nombra la PANTALLA, no una semana: "TU CAMINO".** Antes
   decía "SEMANA 3" y se leía como si la pantalla fuera de esa sola
   semana, con diez nodos debajo. En qué semana va y quién la patrocina
@@ -409,7 +538,23 @@ resuelven, no por cómo se ven de fábrica.
 **Progress** (`lib/screens/progress_screen.dart`) — construida
 - Selector Semana/Mes/Año con contenido real por pestaña
 - Meta del período + comparación vs. período anterior
+- **"Tu actividad" trae DOS cifras y cambian con el filtro.** En MES la
+  segunda dice "20 de 30" con la etiqueta "días activos de septiembre":
+  el denominador son los días que tiene ESE mes —se calcula de la fecha
+  del dato, nunca escrito a mano, que febrero tiene 28— y el mes se
+  nombra para que quede claro que la cuenta arranca de cero el día 1. En
+  AÑO la segunda dice "promedio de puntos por mes" con todas las
+  letras: "puntos por mes" al lado de un 1.405 se leía como si cada mes
+  hubiera pagado eso
 - Gráfico de actividad (nunca 30+ barras finitas sin etiqueta)
+- **El mapa de calor del año dibuja UNA CASILLA POR DÍA VIVIDO, y ni una
+  más** (decisión de Daniel, 22 de septiembre de 2026). Llegaba al 31 de
+  diciembre, así que en septiembre había tres meses y medio de casillas
+  vacías a la derecha esperando a existir y el año propio se veía a
+  medio hacer. Cada día que pasa aparece su casilla y se va llenando,
+  como el mismo mapa en Claude Code. Los meses ANTERIORES al primer dato
+  sí se dibujan, vacíos: esos días existieron aunque la app no estuviera
+  instalada, y son los que le dan al año su forma
 - Racha con historial de 8 semanas (cada casilla refleja si se cumplió) +
   progreso al próximo hito de monedas
 - Sección "Recompensas por constancia": los 5 hitos con check en los
@@ -419,10 +564,57 @@ resuelven, no por cómo se ven de fábrica.
 - CTA "Ver mis récords" (pantalla de Récords Personales — pendiente)
 
 **Social** (`lib/screens/social_screen.dart`) — construida, dos pestañas
-- Amigos: alerta de racha en riesgo, Duelo (activo/invitación), superación
-  del propio baseline (nunca comparación directa), historial W/L, lista de
-  conexiones y contadores de amigos / solicitudes recibidas / enviadas,
-  con aceptar, rechazar, cancelar y eliminar
+- **La pestaña Amigos abre con los TRES NÚMEROS**, como un perfil de
+  Instagram: **Amigos · Solicitudes · Duelos activos**. Tienen que decir
+  cosas DISTINTAS — no hay "seguidores" y "seguidos" por separado,
+  porque la amistad en +Vida es mutua (se manda solicitud y el otro
+  acepta) y serían el mismo número dos veces. El de solicitudes lleva el
+  punto naranja cuando hay algo esperando; el de duelos no navega, es un
+  marcador de lo que está justo abajo
+- **No hay lista de amigos en Social** (decisión de Daniel, 22 de
+  septiembre de 2026). Estaban los tres primeros con un "ver todos" al
+  lado, que abre la misma lista que el contador de arriba: la pantalla
+  mostraba dos veces lo mismo y el duelo —lo único que está pasando
+  AHORA— quedaba aplastado entre dos listas de gente
+- **UN DUELO ES UN RETO CON META COMÚN** (decisión de Daniel, 22 de
+  septiembre de 2026): los dos van por el mismo número de pasos y el
+  mismo plazo ("70.000 pasos en una semana"), y gana el primero que
+  llega; si el domingo no llegó ninguno, gana el que quedó más cerca. La
+  tarjeta lo dice en este orden: el RETO arriba y en grande, después de
+  cada uno cuántos pasos lleva, qué parte de la meta es y cuánto le
+  falta, y al tuyo además a qué ritmo diario tenés que ir. Cierra con
+  cómo vas en palabras ("Vas arriba por 3.500 pasos") y la regla de cómo
+  se gana.
+
+  **Esto reemplaza a la regla anterior de este documento**, que pedía
+  medir la superación del propio baseline y prohibía la comparación
+  directa. El motivo de la regla vieja sigue siendo cierto —quien camina
+  3.000 al día no le gana nunca a quien camina 12.000— pero "+18% sobre
+  tu promedio" no dice cuánto falta ni qué hacer hoy. El duelo NO paga
+  monedas ni toca el cashback, así que la asimetría no cuesta plata; lo
+  que hay que cuidar es que la meta se elija entre los dos y sea
+  alcanzable. [PENDIENTE: elegir meta y plazo al armar el duelo — hoy
+  sale el reto por defecto.]
+- **El historial de duelos dice contra QUIÉN fue.** Eran cinco avatares
+  grises en fila con una W o una L en la esquina: no se reconocía a
+  nadie, que es lo único que un historial tiene para contar. Ahora es
+  una lista con la inicial, el nombre, el usuario y "Ganaste"/"Perdiste"
+  —la palabra entera, no una W— más el marcador arriba a la derecha
+- **"Retar a alguien" es un renglón, no un botón con relieve**, y cierra
+  el bloque de duelos en vez de flotar arriba a la derecha compitiendo
+  con el duelo en curso. Lleva a una pantalla PROPIA
+  (`retar_screen.dart`) que solo lista a tus amigos con un botón Retar
+  por renglón: antes llevaba a la pantalla de Amigos, y el que entró a
+  retar se encontraba administrando su lista de contactos
+- Alerta de racha en riesgo y, en la pantalla de Amigos, aceptar,
+  rechazar y eliminar
+- **No hay pestaña de "Enviadas"** (decisión de Daniel, 22 de septiembre
+  de 2026). Ver la lista de lo que mandaste no lleva a ninguna parte.
+  Que ya la mandaste se dice donde alguien lo preguntaría de nuevo: al
+  buscar a esa persona para agregarla, el botón dice **"Solicitud
+  enviada"** y no deja mandarla otra vez (y "Ya son amigos" si ya lo es).
+  Es el funcionamiento de Instagram, y la solicitud queda guardada, así
+  que cerrar la hoja y volver a buscar sigue diciendo lo mismo
 - **De otra persona SOLO se muestra la racha.** El nivel y las monedas
   quedaron prohibidos (decisión de Daniel, 4 de septiembre de 2026): el
   nivel se deriva del % de cashback sobre la prima, y las monedas son
@@ -463,6 +655,16 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 **Mi Plan** — diseñada, confirmar si está construida en Flutter
 - Cashback acumulado, proyección de fin de año, calendario de cálculo,
   nota regulatoria, tabla de categorías
+- **Al cambiar de filtro se anima SOLO lo que cambia** (decisión de
+  Daniel, 22 de septiembre de 2026): el contenido de abajo entra con su
+  transición y el título, el medallón de nivel y la tarjeta del cashback
+  se quedan quietos. Dicen lo mismo con cualquier filtro puesto, y una
+  pieza que se desvanece y vuelve se lee como que cambió. En pantalla
+  alta eso pasaba solo, porque el cabezal vive afuera del scroll; el
+  caso que había que arreglar era el corto —o con la letra de iOS
+  grande—, donde el cabezal baja adentro del scroll. El scroll vuelve
+  arriba con un controlador, no con una llave: la llave reconstruía el
+  scroll entero y era lo que obligaba a animar todo junto
 - Sección "Detalles de tu Póliza" (datos que la aseguradora expone al
   asegurado, agrupados en 2-3 tarjetas por tema): número de póliza,
   titular y dependientes, tipo de plan, suma asegurada, deducible,
