@@ -5,7 +5,8 @@
     "Los duelos no dan monedas ni premios: son puramente competitivos.",
     "En un grupo de tipo 'desconocidos' los puntos NUNCA se muestran, solo la posicion.",
     "puntos_periodo son los puntos del CICLO de ese grupo: del mes en una competencia con conocidos, del trimestre en la liga local. La clave vieja se llamaba puntos_semana y ningun ranking corre por semana: lo semanal son los retos, que es otra mecanica.",
-    "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
+    "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar.",
+    "Un duelo es un RETO con meta comun: los dos van por el mismo numero de pasos y el mismo plazo. Antes eran dos porcentajes de superacion sobre el promedio de cada uno, que no dejaban ver que estaba en juego."
   ],
   "yo": {
     "nombre": "Diego",
@@ -16,30 +17,38 @@
     "activo": {
       "activo": true,
       "rival_handle": "@mery_run",
-      "tiempo_restante": "2 días restantes",
-      "superacion_propia": 18,
-      "superacion_rival": 12
+      "rival_nombre": "Maria Rodriguez",
+      "dias_restantes": 2,
+      "meta_pasos": 70000,
+      "plazo": "en una semana",
+      "pasos_propios": 52400,
+      "pasos_rival": 48900
     },
     "historial": [
       {
         "rival": "@mery_run",
-        "ganado": true
+        "ganado": true,
+        "nombre": "Maria Rodriguez"
       },
       {
         "rival": "@juan_fit",
-        "ganado": false
+        "ganado": false,
+        "nombre": "Juan Perez"
       },
       {
         "rival": "@carlos_gt",
-        "ganado": true
+        "ganado": true,
+        "nombre": "Carlos Herrera"
       },
       {
         "rival": "@ana_runner",
-        "ganado": true
+        "ganado": true,
+        "nombre": "Ana Castillo"
       },
       {
         "rival": "@luis_gym",
-        "ganado": false
+        "ganado": false,
+        "nombre": "Luis Montenegro"
       }
     ]
   },

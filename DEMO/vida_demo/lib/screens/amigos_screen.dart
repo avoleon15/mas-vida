@@ -27,7 +27,15 @@ import '../widgets/flujos_social.dart';
 // mueven listas en memoria: al cerrar la app vuelve todo como estaba.
 // ============================================================
 
-enum _Pestania { amigos, recibidas, enviadas }
+/// Las dos pestañas de la pantalla.
+///
+/// La de ENVIADAS se fue (decisión de Daniel, 22 de septiembre de 2026):
+/// una lista de solicitudes que mandaste no lleva a ninguna parte, no hay
+/// nada que hacer ahí, y se comía un tercio de la fila de contadores. Que
+/// ya la mandaste se dice donde alguien lo preguntaría de nuevo — al
+/// buscar a esa persona para agregarla, el botón dice "Solicitud
+/// enviada" y no deja mandarla otra vez. Es como funciona Instagram.
+enum _Pestania { amigos, recibidas }
 
 class AmigosScreen extends StatefulWidget {
   const AmigosScreen({super.key, this.pestaniaInicial = 0});
@@ -41,7 +49,8 @@ class AmigosScreen extends StatefulWidget {
 }
 
 class _AmigosScreenState extends State<AmigosScreen> {
-  late _Pestania _tab = _Pestania.values[widget.pestaniaInicial];
+  late _Pestania _tab = _Pestania
+      .values[widget.pestaniaInicial.clamp(0, _Pestania.values.length - 1)];
   String _busqueda = '';
 
   DatosSociales get _social => Datos.i.social;
@@ -69,12 +78,6 @@ class _AmigosScreenState extends State<AmigosScreen> {
     HapticFeedback.selectionClick();
     setState(() => _social.solicitudesRecibidas.remove(s));
     _avisar('Solicitud rechazada');
-  }
-
-  void _cancelar(Solicitud s) {
-    HapticFeedback.selectionClick();
-    setState(() => _social.solicitudesEnviadas.remove(s));
-    _avisar('Cancelaste tu solicitud a ${s.nombre}');
   }
 
   Future<void> _eliminar(Conexion c) async {
@@ -133,6 +136,7 @@ class _AmigosScreenState extends State<AmigosScreen> {
                           Text('AMIGOS', style: AppTheme.sectionTitle),
                           const SizedBox(height: 18),
                           ContadoresAmigos(
+                            contadores: contadoresDeAmigos(),
                             seleccionado: _tab.index,
                             onTocar: (i) {
                               HapticFeedback.selectionClick();
@@ -223,29 +227,8 @@ class _AmigosScreenState extends State<AmigosScreen> {
           separatorBuilder: (_, _) => const SizedBox(height: 8),
           itemBuilder: (_, i) => _FilaSolicitud(
             solicitud: lista[i],
-            recibida: true,
-            onPrincipal: () => _aceptar(lista[i]),
-            onSecundaria: () => _rechazar(lista[i]),
-          ),
-        );
-
-      case _Pestania.enviadas:
-        final lista = _social.solicitudesEnviadas
-            .where((s) => _coincide(s.nombre, s.handle))
-            .toList();
-        if (lista.isEmpty) {
-          return _vacio(
-            CupertinoIcons.paperplane,
-            'No tenés solicitudes esperando respuesta.',
-          );
-        }
-        return SliverList.separated(
-          itemCount: lista.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => _FilaSolicitud(
-            solicitud: lista[i],
-            recibida: false,
-            onSecundaria: () => _cancelar(lista[i]),
+            onAceptar: () => _aceptar(lista[i]),
+            onRechazar: () => _rechazar(lista[i]),
           ),
         );
     }
@@ -358,23 +341,22 @@ class _FilaAmigo extends StatelessWidget {
   }
 }
 
-/// Una solicitud, recibida o enviada.
+/// Una solicitud que te mandaron: aceptarla o rechazarla.
+///
+/// Solo recibidas. Las enviadas ya no se listan en ningún lado —ver lo
+/// que mandaste no lleva a ninguna parte—, así que esta fila dejó de
+/// tener dos modos.
 class _FilaSolicitud extends StatelessWidget {
   const _FilaSolicitud({
     required this.solicitud,
-    required this.recibida,
-    required this.onSecundaria,
-    this.onPrincipal,
+    required this.onAceptar,
+    required this.onRechazar,
   });
 
   final Solicitud solicitud;
 
-  /// Recibida trae dos botones (Aceptar / Rechazar). Enviada trae uno
-  /// solo (Cancelar): no hay nada que aceptar de tu propio pedido.
-  final bool recibida;
-
-  final VoidCallback? onPrincipal;
-  final VoidCallback onSecundaria;
+  final VoidCallback onAceptar;
+  final VoidCallback onRechazar;
 
   @override
   Widget build(BuildContext context) {
@@ -420,47 +402,29 @@ class _FilaSolicitud extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!recibida)
-                ShadBadge.raw(
-                  variant: ShadBadgeVariant.secondary,
-                  backgroundColor: AppColors.cardBorder.withValues(alpha: 0.7),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    'Pendiente',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              if (recibida) ...[
-                Expanded(
-                  child: BotonRelieve(
-                    label: 'Aceptar',
-                    compacto: true,
-                    anchoCompleto: true,
-                    onPressed: onPrincipal!,
-                  ),
-                ),
-                const SizedBox(width: 10),
-              ],
               Expanded(
                 child: BotonRelieve(
-                  label: recibida ? 'Rechazar' : 'Cancelar',
+                  label: 'Aceptar',
+                  compacto: true,
+                  anchoCompleto: true,
+                  onPressed: onAceptar,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: BotonRelieve(
+                  label: 'Rechazar',
                   // Gris y no rojo: rechazar no es destructivo, la
                   // solicitud se puede volver a mandar.
                   color: AppColors.textSecondary,
                   compacto: true,
                   anchoCompleto: true,
-                  onPressed: onSecundaria,
+                  onPressed: onRechazar,
                 ),
               ),
             ],

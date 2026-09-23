@@ -358,9 +358,16 @@ class _AgregarAmigo extends StatefulWidget {
   State<_AgregarAmigo> createState() => _AgregarAmigoState();
 }
 
+/// En qué estado está alguien que buscaste.
+///
+/// Es lo que decide qué dice el botón. Sale de los datos que la app ya
+/// tiene —tus amigos y las solicitudes que mandaste—, no de una bandera
+/// local: si cerrás la hoja y volvés a buscar a la misma persona, tiene
+/// que seguir diciendo lo mismo.
+enum _EstadoDeAlguien { nuevo, yaEsAmigo, solicitudEnviada }
+
 class _AgregarAmigoState extends State<_AgregarAmigo> {
   final _usuario = TextEditingController();
-  bool _enviado = false;
 
   @override
   void dispose() {
@@ -368,11 +375,51 @@ class _AgregarAmigoState extends State<_AgregarAmigo> {
     super.dispose();
   }
 
-  bool get _valido => _usuario.text.trim().length >= 3;
+  /// Cómo se escribe un usuario para compararlo: sin arroba, sin
+  /// espacios y en minúsculas. "@Mery_Run" y "mery_run" son la misma
+  /// persona.
+  String _normalizado(String texto) =>
+      texto.trim().toLowerCase().replaceFirst('@', '');
+
+  bool get _valido => _normalizado(_usuario.text).length >= 3;
+
+  /// Si ya es amigo, si ya le mandaste, o si es alguien nuevo.
+  _EstadoDeAlguien get _estado {
+    final buscado = _normalizado(_usuario.text);
+    if (buscado.isEmpty) return _EstadoDeAlguien.nuevo;
+
+    final social = Datos.i.social;
+    if (social.conexiones.any((c) => _normalizado(c.handle) == buscado)) {
+      return _EstadoDeAlguien.yaEsAmigo;
+    }
+    if (social.solicitudesEnviadas.any(
+      (s) => _normalizado(s.handle) == buscado,
+    )) {
+      return _EstadoDeAlguien.solicitudEnviada;
+    }
+    return _EstadoDeAlguien.nuevo;
+  }
+
+  /// Manda la solicitud y la DEJA GUARDADA.
+  ///
+  /// Guardarla es lo que hace que buscar a la misma persona otra vez
+  /// diga "Solicitud enviada" en vez de volver a ofrecer el botón. Antes
+  /// era una bandera local que se perdía al cerrar la hoja, así que se
+  /// podía mandar la misma solicitud infinitas veces.
+  void _enviar() {
+    HapticFeedback.selectionClick();
+    final handle = '@${_normalizado(_usuario.text)}';
+    setState(() {
+      Datos.i.social.solicitudesEnviadas.add(
+        Solicitud(nombre: handle, handle: handle, amigosEnComun: 0),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final miCodigo = Datos.i.perfil.usuarioId.toUpperCase();
+    final estado = _estado;
 
     return _Hoja(
       titulo: 'Agregar a alguien',
@@ -381,29 +428,35 @@ class _AgregarAmigoState extends State<_AgregarAmigo> {
           controlador: _usuario,
           etiqueta: 'Usuario',
           ejemplo: '@diego-002',
-          onChanged: (_) => setState(() => _enviado = false),
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: AppSpacing.entre),
+        // EL BOTÓN DICE EN QUÉ ESTÁS CON ESA PERSONA, como en Instagram:
+        // si ya le mandaste, lo dice y no deja mandar de nuevo. Un botón
+        // que se puede apretar dos veces promete que algo pasó dos
+        // veces.
         _BotonHoja(
-          texto: _enviado ? 'Invitación enviada' : 'Enviar invitación',
-          habilitado: _valido && !_enviado,
-          onPressed: () {
-            HapticFeedback.selectionClick();
-            setState(() => _enviado = true);
+          texto: switch (estado) {
+            _EstadoDeAlguien.yaEsAmigo => 'Ya son amigos',
+            _EstadoDeAlguien.solicitudEnviada => 'Solicitud enviada',
+            _EstadoDeAlguien.nuevo => 'Enviar solicitud',
           },
+          habilitado: _valido && estado == _EstadoDeAlguien.nuevo,
+          onPressed: _enviar,
         ),
-        if (_enviado) ...[
+        if (estado != _EstadoDeAlguien.nuevo) ...[
           const SizedBox(height: AppSpacing.dentro),
           Text(
-            'Le llega la invitación y aparece en tus conexiones cuando la '
-            'acepte.',
+            estado == _EstadoDeAlguien.yaEsAmigo
+                ? 'Ya está en tu lista de amigos.'
+                : 'Le llega la solicitud y aparece en tus amigos cuando la '
+                      'acepte.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: AppColors.textSecondary,
               height: 1.35,
             ),
           ),
         ],
-
         const SizedBox(height: AppSpacing.seccion),
         Text(
           'O pasale tu código',

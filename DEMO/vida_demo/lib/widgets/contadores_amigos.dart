@@ -5,23 +5,101 @@ import '../datos/fuente_datos.dart';
 import '../theme.dart';
 
 // ============================================================
-// AMIGOS · SOLICITUDES · ENVIADAS.
+// LA FILA DE TRES NÚMEROS.
 //
-// Los tres números que resumen tu vida social en la app, como la fila de
-// un perfil de Instagram. Vive acá y no dentro de una pantalla porque se
-// usa en dos lugares con dos comportamientos distintos:
+// Lo primero que se ve al entrar a Social, como la fila de un perfil de
+// Instagram: tres cifras grandes, su palabra debajo, y dos líneas de un
+// pelo que las separan. Nada más — ni caja, ni borde, ni sombra.
+//
+// VIVE ACÁ y no adentro de una pantalla porque se usa en dos lugares con
+// dos comportamientos distintos:
 //
 //   Social  -> cada número NAVEGA a esa lista
 //   Amigos  -> cada número es una PESTAÑA de la pantalla
 //
-// Lo que cambia es a dónde va el toque; lo que se ve tiene que ser
-// idéntico, o parecen dos componentes distintos que dicen lo mismo.
+// Lo que cambia es a dónde va el toque y qué cuenta cada uno; lo que se
+// ve tiene que ser idéntico, o parecen dos componentes distintos que
+// dicen lo mismo.
+//
+// QUÉ CUENTA CADA FILA. Los números tienen que decir COSAS DISTINTAS:
+// amigos, solicitudes esperando respuesta y —solo en Social— duelos en
+// juego. No hay "seguidores" y "seguidos" por separado: en +Vida la
+// amistad es mutua —se manda solicitud y el otro acepta—, así que
+// serían el mismo número escrito dos veces.
 // ============================================================
 
-class ContadoresAmigos extends StatelessWidget {
-  const ContadoresAmigos({super.key, required this.onTocar, this.seleccionado});
+/// Un número de la fila.
+class ContadorSocial {
+  const ContadorSocial({
+    required this.numero,
+    required this.etiqueta,
+    this.conAviso = false,
+  });
 
-  /// Recibe 0 (amigos), 1 (recibidas) o 2 (enviadas).
+  final int numero;
+  final String etiqueta;
+
+  /// Marca naranja de "hay algo esperándote". Solo para lo que pide una
+  /// acción del usuario, nunca para un total.
+  final bool conAviso;
+}
+
+/// Los tres de SOCIAL: con cuántos contás, quién está esperando
+/// respuesta y qué tenés en juego ahora mismo.
+List<ContadorSocial> contadoresDeSocial() {
+  final social = Datos.i.social;
+
+  return [
+    ContadorSocial(numero: social.conexiones.length, etiqueta: 'Amigos'),
+    ContadorSocial(
+      numero: social.solicitudesRecibidas.length,
+      etiqueta: 'Solicitudes',
+      // El punto naranja es lo que hace que se note que hay algo
+      // esperando: un número solo se pierde entre tres.
+      conAviso: social.solicitudesRecibidas.isNotEmpty,
+    ),
+    ContadorSocial(
+      numero: social.duelo.activo ? 1 : 0,
+      // "Activos" y no "Duelos" a secas: el número cuenta los que están
+      // corriendo, no los que jugaste en tu vida. El historial completo
+      // está abajo, en la misma pantalla.
+      etiqueta: 'Duelos activos',
+    ),
+  ];
+}
+
+/// Los DOS de la pantalla de Amigos, que son sus pestañas.
+///
+/// Dos y no tres: la pestaña de enviadas se fue. Ver la lista de lo que
+/// mandaste no lleva a ninguna parte —no hay nada que hacer ahí— y
+/// ocupaba un tercio de la fila de arriba. Que ya la mandaste se dice
+/// donde se preguntaría de nuevo: el botón de agregar, que pasa a decir
+/// "Solicitud enviada".
+List<ContadorSocial> contadoresDeAmigos() {
+  final social = Datos.i.social;
+
+  return [
+    ContadorSocial(numero: social.conexiones.length, etiqueta: 'Amigos'),
+    ContadorSocial(
+      numero: social.solicitudesRecibidas.length,
+      etiqueta: 'Solicitudes',
+      conAviso: social.solicitudesRecibidas.isNotEmpty,
+    ),
+  ];
+}
+
+class ContadoresAmigos extends StatelessWidget {
+  const ContadoresAmigos({
+    super.key,
+    required this.contadores,
+    required this.onTocar,
+    this.seleccionado,
+  });
+
+  /// Los tres números, en orden.
+  final List<ContadorSocial> contadores;
+
+  /// Recibe la posición del que se tocó.
   final ValueChanged<int> onTocar;
 
   /// Cuál está abierto. Null cuando el componente solo navega y no
@@ -30,67 +108,49 @@ class ContadoresAmigos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final social = Datos.i.social;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
+    // SIN CAJA (decisión de Daniel, 21 de septiembre de 2026). Era una
+    // tarjeta blanca con borde, una más entre las dieciséis que tenía
+    // Social. Los tres números se leen igual de bien apoyados sobre el
+    // fondo: lo que los agrupa son los dos separadores del medio, no un
+    // contorno alrededor.
+    return IntrinsicHeight(
+      child: Row(
+        children: [
+          for (var i = 0; i < contadores.length; i++) ...[
+            if (i > 0) _separadorVertical,
             Expanded(
               child: _Contador(
-                numero: social.conexiones.length,
-                etiqueta: 'Amigos',
-                activo: seleccionado == 0,
-                onTap: () => onTocar(0),
-              ),
-            ),
-            const VerticalDivider(width: 1, color: AppColors.cardBorder),
-            Expanded(
-              child: _Contador(
-                numero: social.solicitudesRecibidas.length,
-                etiqueta: 'Solicitudes',
-                // El punto naranja es lo que hace que se note que hay
-                // algo esperando: un número solo se pierde entre tres.
-                conAviso: social.solicitudesRecibidas.isNotEmpty,
-                activo: seleccionado == 1,
-                onTap: () => onTocar(1),
-              ),
-            ),
-            const VerticalDivider(width: 1, color: AppColors.cardBorder),
-            Expanded(
-              child: _Contador(
-                numero: social.solicitudesEnviadas.length,
-                etiqueta: 'Enviadas',
-                activo: seleccionado == 2,
-                onTap: () => onTocar(2),
+                contador: contadores[i],
+                activo: seleccionado == i,
+                onTap: () => onTocar(i),
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
+
+  /// La línea de un pelo entre dos contadores. Es lo único que los
+  /// agrupa desde que no hay caja alrededor.
+  static final Widget _separadorVertical = VerticalDivider(
+    width: 1,
+    thickness: 0.5,
+    indent: 6,
+    endIndent: 6,
+    color: AppColors.separador,
+  );
 }
 
 class _Contador extends StatelessWidget {
   const _Contador({
-    required this.numero,
-    required this.etiqueta,
+    required this.contador,
     required this.activo,
     required this.onTap,
-    this.conAviso = false,
   });
 
-  final int numero;
-  final String etiqueta;
+  final ContadorSocial contador;
   final bool activo;
-  final bool conAviso;
   final VoidCallback onTap;
 
   @override
@@ -99,7 +159,7 @@ class _Contador extends StatelessWidget {
 
     return CupertinoButton(
       onPressed: onTap,
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
       minimumSize: Size.zero,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -108,10 +168,10 @@ class _Contador extends StatelessWidget {
             clipBehavior: Clip.none,
             children: [
               Text(
-                '$numero',
+                '${contador.numero}',
                 style: AppTheme.display(24).copyWith(color: color),
               ),
-              if (conAviso)
+              if (contador.conAviso)
                 Positioned(
                   right: -9,
                   top: 0,
@@ -128,8 +188,9 @@ class _Contador extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            etiqueta,
+            contador.etiqueta,
             maxLines: 1,
+            textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: activo ? AppColors.accent : AppColors.textSecondary,

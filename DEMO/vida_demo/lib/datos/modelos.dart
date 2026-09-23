@@ -276,6 +276,61 @@ class Historial {
         .toList();
   }
 
+  /// Las semanas del mes en curso, cada una con sus días, de la más
+  /// vieja a la más nueva.
+  ///
+  /// UNA SEMANA ES DEL MES DE SU LUNES, no del mes de cada día suelto
+  /// (decisión de Daniel, 21 de septiembre de 2026). Antes se agrupaban
+  /// por su lunes los días del mes CALENDARIO, y eso partía una semana
+  /// entre dos meses: agosto de 2026 arranca sábado, así que el 1 y el 2
+  /// —que son la cola de la semana del 27 de julio— salían como "semana
+  /// 1 de agosto", una barra de dos días parada al lado de barras de
+  /// siete. Se leía como una semana pésima y ni siquiera era una semana.
+  /// Agosto tiene CUATRO semanas, no cinco.
+  ///
+  /// Es la misma regla que ya manda en todo lo demás: la semana corre de
+  /// lunes 00:00 a domingo 23:59 y la cierra el servidor de una sola
+  /// vez, así que es indivisible — no puede contarse mitad en un mes y
+  /// mitad en el otro.
+  ///
+  /// La ÚLTIMA sí puede ser corta, pero por el motivo bueno: es la
+  /// semana en curso y todavía no terminó.
+  ///
+  /// Consecuencia a tener presente: estas semanas NO suman los puntos
+  /// del mes calendario. Los días anteriores al primer lunes del mes
+  /// quedan afuera, contados en el mes anterior, que es donde cayó su
+  /// semana.
+  ///
+  /// Borde: mientras un mes que no arranca en lunes no llega a su primer
+  /// lunes, no tiene ninguna semana propia. Ahí se devuelve la semana en
+  /// curso sola — una barra sin nada al lado con qué confundirla es
+  /// mejor que un panel vacío.
+  List<List<DiaActividad>> get semanasDelMes {
+    final mes = hoy.fecha;
+    final porLunes = <DateTime, List<DiaActividad>>{};
+    for (final d in mesEnCurso) {
+      final lunes = DateTime(
+        d.fecha.year,
+        d.fecha.month,
+        d.fecha.day,
+      ).subtract(Duration(days: d.fecha.weekday - 1));
+      if (lunes.year != mes.year || lunes.month != mes.month) continue;
+      porLunes.putIfAbsent(lunes, () => []).add(d);
+    }
+    if (porLunes.isEmpty) return [semanaEnCurso];
+    final lunes = porLunes.keys.toList()..sort();
+    return [for (final l in lunes) porLunes[l]!];
+  }
+
+  /// Los días de [semanasDelMes], aplanados y en orden.
+  ///
+  /// Es lo que se le pasa a un widget que agrupa por su cuenta: así
+  /// cuenta las mismas semanas que la gráfica y las numera igual, sin
+  /// tener que repetir la regla.
+  List<DiaActividad> get diasDeLasSemanasDelMes => [
+    for (final semana in semanasDelMes) ...semana,
+  ];
+
   factory Historial.desdeJson(Map<String, dynamic> j) => Historial(
     zonaHoraria: j['zona_horaria'] as String,
     dias: (j['dias'] as List)
@@ -1031,41 +1086,129 @@ enum Tendencia {
 
 /// Duelo activo. Los duelos NO otorgan monedas ni premios: son
 /// puramente competitivos y sociales.
+/// UN DUELO ES UN RETO CON META (decisión de Daniel, 22 de septiembre
+/// de 2026): los dos van por el mismo número de pasos y el mismo plazo,
+/// y gana el que llegue primero.
+///
+/// Antes eran dos porcentajes de superación sobre el promedio de cada
+/// uno. Era más justo en teoría —cada quien contra su propia historia—
+/// pero la tarjeta no dejaba ver qué estaba en juego: "+18% sobre tu
+/// promedio" no dice cuánto falta ni qué hay que hacer hoy. Con una meta
+/// común los dos números se leen solos.
+///
+/// OJO: esto es una comparación DIRECTA de pasos entre dos personas, que
+/// es lo que la regla vieja de CLAUDE.md evitaba a propósito (alguien
+/// que camina 3.000 al día no le gana nunca a alguien que camina
+/// 12.000). El duelo no paga monedas ni afecta el cashback, así que la
+/// asimetría no cuesta plata, pero el reto lo eligen los dos al armarlo
+/// y ahí es donde hay que dejar elegir una meta alcanzable.
 class Duelo {
   const Duelo({
     required this.activo,
     required this.rivalHandle,
-    required this.tiempoRestante,
-    required this.superacionPropia,
-    required this.superacionRival,
+    required this.diasRestantes,
+    required this.metaPasos,
+    required this.plazo,
+    required this.pasosPropios,
+    required this.pasosRival,
+    this.rivalNombre,
   });
 
   final bool activo;
   final String rivalHandle;
-  final String tiempoRestante;
 
-  /// % sobre el propio promedio de cada quien. Nunca comparación directa
-  /// de pasos entre personas.
-  final double superacionPropia;
-  final double superacionRival;
+  /// El nombre del rival, si el servidor lo mandó.
+  ///
+  /// Nullable y con [rivalDicho] al lado: un duelo contra alguien que
+  /// todavía no es contacto puede llegar solo con el usuario, y en ese
+  /// caso la pantalla muestra el usuario en vez de un renglón vacío.
+  final String? rivalNombre;
+
+  /// Cómo se nombra al rival en pantalla: el nombre si vino, el usuario
+  /// si no.
+  String get rivalDicho => rivalNombre ?? rivalHandle;
+
+  /// Cuántos días le quedan al reto. NÚMERO y no texto: con el número se
+  /// puede además calcular a qué ritmo hay que ir para llegar, que es lo
+  /// único que la tarjeta puede decirle al usuario que haga hoy.
+  final int diasRestantes;
+
+  /// Los pasos que hay que juntar. Es lo que se retaron.
+  final int metaPasos;
+
+  /// En cuánto tiempo ("en una semana"). Viene del servidor porque el
+  /// plazo lo eligen los dos al armar el duelo.
+  final String plazo;
+
+  final int pasosPropios;
+  final int pasosRival;
+
+  /// El plazo, en palabras.
+  String get tiempoDicho => switch (diasRestantes) {
+    <= 0 => 'Cierra hoy',
+    1 => 'Último día',
+    _ => '$diasRestantes días restantes',
+  };
+
+  /// Cuánto le falta a cada uno. Nunca negativo: pasada la meta, falta
+  /// cero.
+  int get faltanPropios => (metaPasos - pasosPropios).clamp(0, metaPasos);
+  int get faltanRival => (metaPasos - pasosRival).clamp(0, metaPasos);
+
+  /// Qué fracción de la meta lleva cada uno, de 0 a 1.
+  double get avancePropio =>
+      metaPasos <= 0 ? 0 : (pasosPropios / metaPasos).clamp(0.0, 1.0);
+  double get avanceRival =>
+      metaPasos <= 0 ? 0 : (pasosRival / metaPasos).clamp(0.0, 1.0);
+
+  /// Cuántos pasos de ventaja le llevás. Negativo si va ganando el otro.
+  int get ventaja => pasosPropios - pasosRival;
+
+  /// A cuántos pasos por día tenés que ir para llegar a la meta.
+  ///
+  /// Null cuando ya llegaste o cuando el reto cierra hoy: en los dos
+  /// casos un promedio diario no le dice nada a nadie.
+  int? get ritmoNecesario {
+    if (faltanPropios <= 0 || diasRestantes <= 0) return null;
+    return (faltanPropios / diasRestantes).ceil();
+  }
 
   factory Duelo.desdeJson(Map<String, dynamic> j) => Duelo(
     activo: j['activo'] as bool,
     rivalHandle: j['rival_handle'] as String,
-    tiempoRestante: j['tiempo_restante'] as String,
-    superacionPropia: (j['superacion_propia'] as num).toDouble(),
-    superacionRival: (j['superacion_rival'] as num).toDouble(),
+    rivalNombre: j['rival_nombre'] as String?,
+    diasRestantes: (j['dias_restantes'] as num).toInt(),
+    metaPasos: (j['meta_pasos'] as num).toInt(),
+    plazo: j['plazo'] as String,
+    pasosPropios: (j['pasos_propios'] as num).toInt(),
+    pasosRival: (j['pasos_rival'] as num).toInt(),
   );
 }
 
 class DueloHistorial {
-  const DueloHistorial({required this.rival, required this.ganado});
+  const DueloHistorial({
+    required this.rival,
+    required this.ganado,
+    this.nombre,
+  });
 
+  /// El usuario del rival ("@mery_run").
   final String rival;
+
+  /// Su nombre, si vino. El historial se lee para reconocer contra
+  /// quién jugaste, y un usuario suelto no siempre alcanza.
+  final String? nombre;
+
   final bool ganado;
 
-  factory DueloHistorial.desdeJson(Map<String, dynamic> j) =>
-      DueloHistorial(rival: j['rival'] as String, ganado: j['ganado'] as bool);
+  /// Cómo se nombra en pantalla: el nombre si vino, el usuario si no.
+  String get dicho => nombre ?? rival;
+
+  factory DueloHistorial.desdeJson(Map<String, dynamic> j) => DueloHistorial(
+    rival: j['rival'] as String,
+    nombre: j['nombre'] as String?,
+    ganado: j['ganado'] as bool,
+  );
 }
 
 /// Una conexión. De otra persona solo se exponen racha, nivel y monedas

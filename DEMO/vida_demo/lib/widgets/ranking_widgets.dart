@@ -405,7 +405,11 @@ class ListaRanking extends StatelessWidget {
             persona: grupo.miembros[i],
             grupo: grupo,
           ),
-          if (i != grupo.miembros.length - 1) const SizedBox(height: 8),
+          // Línea de un pelo entre renglones, no aire: sin las cajas
+          // que tenía cada fila, el espacio solo dejaba la tabla
+          // desarmada. La línea es lo que la vuelve a leer como tabla.
+          if (i != grupo.miembros.length - 1)
+            Divider(height: 0.5, thickness: 0.5, color: AppColors.separador),
         ],
       ],
     );
@@ -437,19 +441,21 @@ class FilaRanking extends StatelessWidget {
         grupo.premiosMonedas.isNotEmpty &&
         posicion <= grupo.premiosMonedas.length;
 
+    // SOLO TU FILA LLEVA FONDO (decisión de Daniel, 21 de septiembre de
+    // 2026). Antes cada persona de la tabla era su propia tarjeta con
+    // borde, y la tuya se distinguía apenas por un tinte al 8% — o sea
+    // que encontrarte en la lista costaba leerla entera.
+    //
+    // Ahora las demás filas no tienen superficie: son renglones de una
+    // lista. La tuya es la única con relleno, y va de lado a lado, así
+    // que salta antes de leer un solo nombre. Esa es toda la jerarquía
+    // que una tabla necesita.
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: persona.esUsuario
-            ? AppColors.accent.withValues(alpha: 0.08)
-            : AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: persona.esUsuario
-              ? AppColors.accent.withValues(alpha: 0.3)
-              : AppColors.cardBorder,
-        ),
+        color: persona.esUsuario ? AppColors.azulBruma : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadios.tarjeta),
       ),
       child: Row(
         children: [
