@@ -81,6 +81,14 @@ class AppColors {
   /// toca el azul.
   static final Color azulSombra = Color.lerp(accent, Colors.black, 0.28)!;
 
+  /// El separador de una lista: el azul de los bordes, diluido.
+  ///
+  /// Es lo que reemplaza a una tarjeta cuando lo que hay que mostrar es
+  /// una LISTA. Una lista de personas, de entrenamientos o de grupos en
+  /// iOS se separa con una línea de un pelo, no metiendo cada renglón en
+  /// su propia caja con borde.
+  static final Color separador = azulSuave.withValues(alpha: 0.45);
+
   /// Naranja de marca. Detalles chicos: estados de éxito, checks,
   /// marcadores, chips. Antes acá vivía el verde de salud.
   static const Color accentSecondary = Color(0xFFF58700);
@@ -134,9 +142,9 @@ class AppColors {
   // tiene que verse apagado para que el salto a plata se sienta como que
   // algo se prendió.
   //
-  // Bronce, plata y oro en sus valores estándar. `silver` y `gold` son
-  // colores con nombre del estándar CSS, así que esos dos hex son los
-  // oficiales; el bronce no está en CSS y #CD7F32 es su valor canónico.
+  // Oro en su valor estándar (`gold` del estándar CSS). Bronce y plata
+  // NO: los dos van bajados a mano respecto del canónico, y cada uno por
+  // su motivo (ver abajo).
   //
   // ACCESIBILIDAD — no "corregir" estos tres valores por gusto estético
   // sin volver a revisar la luminosidad. Se usan con un usuario daltónico,
@@ -145,13 +153,17 @@ class AppColors {
   // bronce y oro nunca se tocan (siempre hay plata completa en medio), que
   // es el par que más se podría confundir por ser los dos cálidos.
   //
-  // La plata puede ser tan clara porque nunca se dibuja contra el track:
-  // para cuando aparece, el aro de bronce ya está completo debajo.
+  // La plata está BAJADA respecto del `silver` de CSS (#C0C0C0, L* ≈ 78):
+  // ese valor se pensó contra el bronce que tiene debajo, pero la plata es
+  // el aro que más superficie ocupa y el que se dibuja contra el fondo casi
+  // blanco de la app. A L* 78 contra un fondo #F5F6FA el aro se desvanecía.
+  // Bajada a L* ≈ 70 se despega del fondo sin dejar de leerse como metal
+  // claro, y sigue bien separada del bronce (L* ≈ 55) y del oro (L* ≈ 87).
   // El bronce va apagado a propósito (el estándar #CD7F32 es bastante más
   // naranja y saturado): es el tramo que no paga puntos, tiene que verse
   // mate al lado del brillo de la plata.
   static const Color aroBronce = Color(0xFFA0764A);
-  static const Color aroPlata = Color(0xFFC0C0C0);
+  static const Color aroPlata = Color(0xFFAAAAAA);
   static const Color aroOro = Color(0xFFFFD700);
 
   // Reflejos metálicos de los tres aros. Cada uno es un degradado que le
@@ -162,7 +174,7 @@ class AppColors {
   // ACCESIBILIDAD — el brillo se hace así, con contraste INTERNO, y no
   // subiéndole la luminosidad al color plano. Cada rampa está armada para
   // que la luminosidad PROMEDIO del metal se mantenga en su lugar
-  // (bronce L* ≈ 55, plata ≈ 78, oro ≈ 86) y los tres sigan separados.
+  // (bronce L* ≈ 55, plata ≈ 70, oro ≈ 86) y los tres sigan separados.
   // Al oro se lo mantiene alto a propósito, porque se dibuja pegado a la
   // plata. Si se tocan estas rampas, hay que volver a mirar el anillo en
   // escala de grises (lo hace lib/demo_anillo.dart).
@@ -175,13 +187,59 @@ class AppColors {
     Color(0xFF6E4E2E),
   ];
 
+  // La plata es la rampa MÁS ABIERTA de las tres, a propósito: va de
+  // casi blanco a un gris bien plantado. El brillo de un metal es el
+  // salto entre su reflejo y su sombra, no lo claro que sea el promedio
+  // — una plata pareja se ve como cartulina gris. Las sombras hacen que
+  // el aro no se pierda contra el fondo casi blanco, y los reflejos son
+  // los que lo hacen ver pulido.
   static const List<Color> brilloPlata = [
-    Color(0xFF8E9BA3),
-    Color(0xFFF4F7F9),
-    Color(0xFFA8B4BC),
-    Color(0xFFF4F7F9),
-    Color(0xFF8E9BA3),
+    Color(0xFF6F7B84),
+    Color(0xFFFBFCFD),
+    Color(0xFF8C99A2),
+    Color(0xFFFBFCFD),
+    Color(0xFF6F7B84),
   ];
+
+  // Los tres metales en versión TINTA: texto, íconos, y cualquier
+  // círculo o pastilla rellena que tenga contenido blanco adentro.
+  //
+  // Por qué no se usa el metal del aro para eso: el color del aro está
+  // pensado para un TRAZO sobre fondo claro. El oro #FFD700 con una
+  // check blanca encima no se lee, y la plata tampoco. Estos tres pasan
+  // 4,5:1 contra blanco, así que sirven de texto.
+  //
+  // Siguen siendo reconociblemente bronce, plata y oro: lo que baja es
+  // la luminosidad, nunca el matiz — la misma regla que separa los
+  // niveles de cashback.
+  //
+  // Los tres pasan 4,5:1 sobre blanco, que es el fondo de la tarjeta
+  // donde se usan, y de sobra sobre el gris apagado de una tarjeta
+  // bloqueada.
+  //
+  // Esta terna NO tiene que separarse en escala de grises, a diferencia
+  // de la de los aros. Un aro es uno de tres arcos del mismo anillo y
+  // ahí el color es lo único que los distingue; una tinta siempre va
+  // adentro de una tarjeta que ya se identifica por su lavado, su
+  // número y su ícono.
+  static const Color tintaBronce = Color(0xFF6A4A2C);
+  static const Color tintaPlata = Color(0xFF5A646B);
+  static const Color tintaOro = Color(0xFF765D00);
+
+  /// El metal de un tramo del anillo, en sus dos versiones.
+  ///
+  /// [i] es el índice del tramo: 0 bronce, 1 plata, 2 oro. Se pide por
+  /// índice y no por color para que nadie tenga que mapear un hex a
+  /// mano y se le escape uno.
+  ///
+  /// NO hay una tercera versión para rellenar superficies: el metal se
+  /// usa en el trazo del anillo y en lo chico de una tarjeta (borde,
+  /// círculo, pastilla), nunca de fondo.
+  static ({Color aro, Color tinta}) metal(int i) => switch (i) {
+    0 => (aro: aroBronce, tinta: tintaBronce),
+    1 => (aro: aroPlata, tinta: tintaPlata),
+    _ => (aro: aroOro, tinta: tintaOro),
+  };
 
   static const List<Color> brilloOro = [
     Color(0xFFE0AA00),
@@ -223,18 +281,21 @@ class AppColors {
   // solo tono, sin degradado.
   static const Color tarjetaBordeAzul = accent;
 
-  /// Fondo de la pantalla: gris cálido muy suave, con las tarjetas de
-  /// contenido en blanco puro. El contraste entre los dos es lo que da
-  /// profundidad; antes fondo y tarjetas eran casi el mismo blanco y la
-  /// pantalla se veía plana.
+  /// Fondo de la pantalla, con las tarjetas de contenido en blanco puro.
+  /// El contraste entre los dos es lo que da profundidad; antes fondo y
+  /// tarjetas eran casi el mismo blanco y la pantalla se veía plana.
   ///
-  /// El tinte cálido emparenta el fondo con el naranja de marca sin traer
-  /// nada de saturación.
+  /// UNA SOLA TEMPERATURA (decisión de Daniel, 21 de septiembre de 2026).
+  /// Era #F3F1ED, un beige cálido, mientras que el borde de tarjeta
+  /// [cardBorder] es azulado. Esas dos son las superficies que más lugar
+  /// ocupan en la app, y mezclarles la temperatura es lo que daba la
+  /// sensación de que nada terminaba de verse fino: el ojo no lo nombra,
+  /// pero lo registra como suciedad.
   ///
-  /// [PENDIENTE DE APROBACIÓN] Este tono es PROPUESTA: no salió de
-  /// ninguna constante previa del proyecto porque no había ninguna que
-  /// sirviera.
-  static const Color fondoDePantalla = Color(0xFFF3F1ED);
+  /// Ahora es el mismo valor que [background], o sea el azul de la
+  /// familia diluido hasta casi blanco. Toda la app —fondo, bordes,
+  /// tintes, tinta— es el mismo azul en distintas luminosidades.
+  static const Color fondoDePantalla = background;
 
   /// Devuelve el color de un nivel anual (1 a 4).
   ///
@@ -280,6 +341,45 @@ class AppSpacing {
 
   /// Entre una sección y la siguiente. Es el corte grande.
   static const double seccion = 40;
+}
+
+/// Los radios de la app. Son DOS y no hay más.
+///
+/// Había diez mezclados —10, 12, 14, 16, 18, 24, 28— y esa es una de las
+/// razones por las que la app se leía como armada de a pedazos: dos
+/// tarjetas hermanas con 16 y 18 no se ven distintas, se ven mal hechas.
+class AppRadios {
+  AppRadios._();
+
+  /// Cualquier superficie: tarjetas, hojas modales, tintes de bloque.
+  static const double tarjeta = 18;
+
+  /// Cualquier cosa con forma de pastilla: chips, badges, barras de
+  /// progreso, botones redondeados.
+  static const double pildora = 999;
+}
+
+/// Las sombras de la app.
+///
+/// UNA SOLA CAPA, muy abierta y casi invisible. Es lo que reemplaza al
+/// `border: Border.all(color: cardBorder)` que llevaba cada tarjeta: un
+/// borde dibujado en las cuatro esquinas hace que la pantalla se vea
+/// trazada con lápiz, mientras que una sombra difusa se lee como papel
+/// apoyado sobre el fondo.
+///
+/// Nunca un glow (ver CLAUDE.md): el color es el azul de marca con
+/// muchísima transparencia, no un halo de color saturado.
+class AppSombras {
+  AppSombras._();
+
+  /// Tarjeta común, apoyada sobre el fondo de la pantalla.
+  static List<BoxShadow> get tarjeta => [
+    BoxShadow(
+      color: AppColors.accent.withValues(alpha: 0.05),
+      blurRadius: 24,
+      offset: const Offset(0, 6),
+    ),
+  ];
 }
 
 class AppTheme {

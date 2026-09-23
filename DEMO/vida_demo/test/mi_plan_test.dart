@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/screens/mi_plan_screen.dart';
 import 'package:vida_demo/theme.dart';
+import 'package:vida_demo/widgets/escalera_cashback.dart';
 
 /// Mi Plan: arriba una zona FIJA —el titulo, el cashback del año y el
 /// riel de cuatro categorias— y abajo lo unico que cambia: la proyeccion
@@ -47,6 +48,25 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  /// La misma pantalla pero CON animaciones, que es donde se puede ver
+  /// qué se anima y qué no.
+  ///
+  /// El alto es de teléfono corto a propósito: es el caso donde el
+  /// cabezal baja adentro del scroll, y era justamente ahí donde el
+  /// título y la tarjeta del cashback volvían a entrar con cada filtro.
+  Future<void> montarConAnimacion(
+    WidgetTester tester, {
+    Size size = const Size(390, 640),
+  }) async {
+    await tester.binding.setSurfaceSize(size);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    await tester.pumpWidget(
+      const MaterialApp(home: TemaVida(child: MiPlanScreen())),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
   }
 
   /// Las cuatro etiquetas del riel, en orden.
@@ -255,11 +275,35 @@ void main() {
     expect(find.text('Q1,800'), findsOneWidget);
     // El medallon: la etiqueta y el nivel, no un nombre en ingles.
     expect(find.text('NIVEL'), findsOneWidget);
-    expect(find.bySemanticsLabel('Nivel 3'), findsOneWidget);
+    // El medallón abre la escalera de niveles, así que su etiqueta de
+    // accesibilidad dice también qué pasa al tocarlo.
+    expect(
+      find.bySemanticsLabel('Nivel 3, ver la escalera de niveles'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Bronze'), findsNothing);
     expect(find.textContaining('Silver'), findsNothing);
     expect(find.textContaining('Gold'), findsNothing);
     expect(find.textContaining('Platinum'), findsNothing);
+  });
+
+  testWidgets('tocar el medallón abre la escalera de niveles', (tester) async {
+    await montar(tester);
+
+    // La gráfica de los cinco niveles vivía siempre abierta en Hoy.
+    // Ahora se abre donde alguien pregunta por su nivel: acá.
+    expect(find.byType(EscaleraCashback), findsNothing);
+
+    await tester.tap(
+      find.bySemanticsLabel('Nivel 3, ver la escalera de niveles'),
+    );
+    // Dos pumps y NO pumpAndSettle: adentro de la hoja hay animación que
+    // no termina de asentarse nunca.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.byType(EscaleraCashback), findsOneWidget);
+    expect(find.textContaining('PUNTOS ACUMULADOS'), findsOneWidget);
   });
 
   testWidgets('la nota regulatoria nunca se va de la pantalla', (tester) async {
@@ -375,7 +419,130 @@ void main() {
       expect(find.textContaining('medalla'), findsNothing);
     }
   });
+
+  // ----------------------------------------------------------
+  // Una sola cosa levantada
+  // ----------------------------------------------------------
+
+  testWidgets('abajo del riel no queda ninguna tarjeta blanca', (tester) async {
+    await montar(tester);
+
+    // Eran cuatro rectángulos con el mismo radio, el mismo borde y la
+    // misma sombra, apilados: la proyección, el calendario, la lista de
+    // datos y los contactos. Con todo adentro de una caja idéntica nada
+    // es importante. Lo único levantado de la pantalla es el cashback,
+    // y ese es azul.
+    for (final categoria in [null, ...categorias]) {
+      if (categoria != null) await _elegir(tester, categoria);
+
+      final blancas = _superficies(
+        tester,
+      ).where((d) => d.color == AppColors.card && d.boxShadow != null);
+
+      expect(
+        blancas,
+        isEmpty,
+        reason: 'volvió una tarjeta blanca en ${categoria ?? 'la plata'}',
+      );
+    }
+  });
+
+  testWidgets('el cashback sigue siendo lo único levantado', (tester) async {
+    await montar(tester);
+
+    // El contraste del test de arriba: sacar las tarjetas no puede
+    // terminar sacando también al héroe. Va sobre la pantalla entera y
+    // no sobre el scroll: con la pantalla alta el cabezal vive afuera,
+    // que es justamente lo que lo mantiene siempre a la vista.
+    final conSombra = tester
+        .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+        .map((d) => d.decoration)
+        .whereType<BoxDecoration>()
+        .where((d) => d.gradient != null && d.boxShadow != null);
+    expect(conSombra, isNotEmpty);
+  });
+
+  // ----------------------------------------------------------
+  // Qué se anima al cambiar de filtro
+  // ----------------------------------------------------------
+
+  testWidgets('el título y el cashback NO se animan al cambiar de filtro', (
+    tester,
+  ) async {
+    await montarConAnimacion(tester);
+
+    // Dicen lo mismo con cualquier filtro puesto. Una pieza que se
+    // desvanece y vuelve se lee como que cambió, y ahí el usuario la
+    // vuelve a leer para nada.
+    for (final quieto in ['MI PLAN', 'TU CASHBACK DE ESTE AÑO']) {
+      expect(
+        find.ancestor(
+          of: find.text(quieto),
+          matching: find.byType(AnimatedSwitcher),
+        ),
+        findsNothing,
+        reason: '"$quieto" quedó adentro de la transición',
+      );
+    }
+
+    await tester.tap(_boton('Cobertura'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // A mitad de la transición siguen enteros y sin desvanecerse.
+    expect(find.text('MI PLAN'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.text('MI PLAN'),
+        matching: find.byType(AnimatedSwitcher),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('lo que sí cambia entra animado', (tester) async {
+    // Alto de sobra para que la faja de la categoría quede construida:
+    // en un teléfono corto el panel arranca fuera del viewport y de su
+    // caché, así que no habría nada que buscar.
+    await montarConAnimacion(tester, size: const Size(430, 2600));
+    await tester.tap(_boton('Cobertura'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // El contraste del test de arriba: si nada estuviera adentro del
+    // switcher, cambiar de filtro sería un corte seco.
+    expect(
+      find.ancestor(
+        of: find.text('Tu cobertura'),
+        matching: find.byType(AnimatedSwitcher),
+      ),
+      findsWidgets,
+    );
+    // Y el título sigue afuera también acá, con el cabezal fijo.
+    expect(
+      find.ancestor(
+        of: find.text('MI PLAN'),
+        matching: find.byType(AnimatedSwitcher),
+      ),
+      findsNothing,
+    );
+  });
 }
+
+/// Todas las superficies decoradas que viven adentro del scroll.
+///
+/// `DecoratedBox` y no `Container`: un Container con decoración termina
+/// construyendo uno, así que así se ven las dos formas de pintar una
+/// caja con la misma búsqueda.
+Iterable<BoxDecoration> _superficies(WidgetTester tester) => tester
+    .widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byType(CustomScrollView),
+        matching: find.byType(DecoratedBox),
+      ),
+    )
+    .map((d) => d.decoration)
+    .whereType<BoxDecoration>();
 
 /// Toca un boton del riel y espera.
 ///

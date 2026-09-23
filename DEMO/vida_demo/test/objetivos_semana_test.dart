@@ -4,6 +4,7 @@ import 'package:getwidget/getwidget.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/reglas_rango.dart';
+import 'package:vida_demo/theme.dart';
 import 'package:vida_demo/screens/camino_semanas_screen.dart';
 import 'package:vida_demo/widgets/patrocinio.dart';
 import 'package:vida_demo/widgets/semanas_objetivos.dart';
@@ -74,6 +75,72 @@ void main() {
       for (final o in objetivos.enCurso!.objetivos) {
         expect(find.byKey(llaveObjetivo(o.id)), findsOneWidget);
       }
+    });
+  });
+
+  group('Un objetivo no se puede marcar', () {
+    testWidgets('ninguna fila tiene forma de casilla', (t) async {
+      await montarHome(t);
+
+      // La primera persona que probó la app intentó TOCAR el círculo
+      // para marcar el objetivo. No hay nada que marcar: los tres los
+      // cierra el servidor el domingo 23:59 con los datos de Apple
+      // Health, así que un control que no controla nada se siente una
+      // app rota. En su lugar va un riel: una barra de 3,5 px pegada al
+      // borde izquierdo, que nadie toca.
+      for (final o in objetivos.enCurso!.objetivos) {
+        final redondos = t
+            .widgetList<Container>(
+              find.descendant(
+                of: find.byKey(llaveObjetivo(o.id)),
+                matching: find.byType(Container),
+              ),
+            )
+            .map((c) => c.decoration)
+            .whereType<BoxDecoration>()
+            .where((d) => d.shape == BoxShape.circle);
+
+        expect(
+          redondos,
+          isEmpty,
+          reason: '"${o.nombre}" volvió a tener un círculo tocable',
+        );
+      }
+    });
+
+    testWidgets('la fila entera tampoco recibe toques', (t) async {
+      await montarHome(t);
+
+      // Ni el riel ni la fila: tocar un objetivo no lleva a ningún lado.
+      // Lo único que se toca en la tarjeta es el pie, que abre el camino.
+      for (final o in objetivos.enCurso!.objetivos) {
+        expect(
+          find.descendant(
+            of: find.byKey(llaveObjetivo(o.id)),
+            matching: find.byType(GestureDetector),
+          ),
+          findsNothing,
+          reason: '"${o.nombre}" quedó tocable',
+        );
+      }
+    });
+
+    testWidgets('el cumplido se marca con un check suelto, en naranja', (
+      t,
+    ) async {
+      await montarHome(t);
+
+      final hecho = objetivos.enCurso!.objetivos.firstWhere((o) => o.completo);
+      final check = t.widget<Icon>(
+        find.descendant(
+          of: find.byKey(llaveObjetivo(hecho.id)),
+          matching: find.byIcon(Icons.check_rounded),
+        ),
+      );
+
+      // Es uno de los cuatro lugares donde CLAUDE.md deja entrar el
+      // naranja: el check de una etapa completada, suelto y sin relleno.
+      expect(check.color, AppColors.accentSecondary);
     });
   });
 
@@ -358,7 +425,9 @@ void main() {
       expect(
         t.getTopLeft(find.text(plazoCorto(enCurso))).dy,
         lessThan(
-          t.getTopLeft(find.byKey(llaveObjetivo(enCurso.objetivos.first.id))).dy,
+          t
+              .getTopLeft(find.byKey(llaveObjetivo(enCurso.objetivos.first.id)))
+              .dy,
         ),
       );
     });

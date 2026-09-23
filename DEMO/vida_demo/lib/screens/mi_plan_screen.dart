@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/numero_animado.dart';
+import '../widgets/hoja_niveles.dart';
 import '../widgets/refresco_vida.dart';
 
 // ============================================================
@@ -189,27 +190,28 @@ const double escalaQueSueltaElCabezal = 1.3;
 const double altoMinimoParaCabezalFijo = 720;
 
 // ============================================================
-// EL ASPECTO DE UNA TARJETA
+// EL ASPECTO DE UN BLOQUE
+//
+// ACÁ YA NO HAY TARJETAS BLANCAS (decisión de Daniel, 22 de septiembre
+// de 2026). Había cuatro recetas del mismo rectángulo —la proyección, el
+// calendario, la lista de datos y los contactos—, todas con el mismo
+// radio, el mismo borde y la misma sombra, apiladas una debajo de la
+// otra. Con todo adentro de una caja idéntica nada es importante: el ojo
+// no encuentra dónde parar y la pantalla se lee como una pila de
+// formularios. Es exactamente el problema que CLAUDE.md ya resolvió en
+// Social y en Progreso con la regla de UNA SOLA COSA LEVANTADA.
+//
+// Acá la cosa levantada es el CASHBACK, que es la respuesta a la
+// pregunta con la que alguien entra a esta pantalla. Todo lo demás se
+// apoya directo sobre el fondo: un título de bloque arriba, las filas
+// separadas por una línea de un pelo, y aire entre una sección y la
+// siguiente. Es lo mismo que hace Progreso, donde `_Tarjeta` hace rato
+// que es una Column sin superficie.
+//
+// Lo que se gana no es sutileza: son cuatro bordes, cuatro sombras y
+// ocho esquinas menos, y el contenido gana los 40 px de ancho que se
+// comían los padding internos.
 // ============================================================
-
-/// Borde hairline + sombra difusa, nunca `elevation` de Material.
-///
-/// Es la misma receta de `desglose_puntos_hoy.dart`: sombra azulada muy
-/// abierta, jamás un glow (sobre fondo claro un brillo saturado se ve
-/// mal, ver CLAUDE.md). El borde no es decorativo: una tarjeta blanca
-/// pura sobre un fondo casi blanco se pierde sin él.
-BoxDecoration _tarjeta({double radio = 18}) => BoxDecoration(
-  color: AppColors.card,
-  borderRadius: BorderRadius.circular(radio),
-  border: Border.all(color: AppColors.cardBorder),
-  boxShadow: [
-    BoxShadow(
-      color: AppColors.accent.withValues(alpha: 0.08),
-      blurRadius: 18,
-      offset: const Offset(0, 6),
-    ),
-  ],
-);
 
 /// El degradado de TODA superficie azul de la pantalla.
 ///
@@ -416,11 +418,28 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
 
 /// Lo único que cambia de la pantalla: la plata, o UNA categoría.
 ///
-/// Es un `AnimatedSwitcher` con la categoría de llave, así que cada
-/// cambio destruye lo anterior y construye lo nuevo — que es
-/// exactamente lo que se quiere, porque acá no hay nada que conservar
-/// entre una vista y la otra.
-class _ZonaQueCambia extends StatelessWidget {
+/// SOLO SE ANIMA LO QUE CAMBIA (revisión de Daniel, 22 de septiembre de
+/// 2026). El título, el medallón de nivel y la tarjeta del cashback
+/// dicen lo mismo con cualquier filtro puesto, así que no tienen por qué
+/// volver a entrar cada vez que se toca uno: una pieza que se desvanece
+/// y vuelve se lee como que cambió, y ahí el usuario la vuelve a leer
+/// para nada.
+///
+/// Con la pantalla alta eso ya pasaba solo, porque el cabezal vive
+/// afuera del scroll. El que se animaba de más era el caso contrario
+/// —pantalla corta o letra grande—, donde el cabezal baja adentro del
+/// scroll para poder scrollear: ahí quedaba adentro del `AnimatedSwitcher`
+/// y entraba con todo lo demás. Ahora el switcher envuelve SOLO al
+/// contenido de abajo, en los dos casos.
+///
+/// El scroll vuelve arriba al cambiar de vista, que antes lo hacía una
+/// llave en el `CustomScrollView`. La llave reconstruía el scroll
+/// entero —cabezal incluido— y era justamente lo que obligaba a animar
+/// todo junto; ahora el salto lo hace el controlador y no se toca nada
+/// más. Sin esto, entrar a Contacto después de haber bajado en Cobertura
+/// dejaría la pantalla a mitad de camino de un contenido que ya no
+/// existe.
+class _ZonaQueCambia extends StatefulWidget {
   const _ZonaQueCambia({
     required this.cabezal,
     required this.elegida,
@@ -437,85 +456,118 @@ class _ZonaQueCambia extends StatelessWidget {
   final UsoDelSeguro uso;
   final VoidCallback alCerrar;
 
+  @override
+  State<_ZonaQueCambia> createState() => _ZonaQueCambiaState();
+}
+
+class _ZonaQueCambiaState extends State<_ZonaQueCambia> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant _ZonaQueCambia anterior) {
+    super.didUpdateWidget(anterior);
+    if (anterior.elegida != widget.elegida && _scroll.hasClients) {
+      // De un salto y no animado: lo que se mira es la vista nueva
+      // entrando, y un scroll viajando al mismo tiempo son dos
+      // movimientos discutiendo por la misma pantalla.
+      _scroll.jumpTo(0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   /// La vista de abajo: la plata, o la categoría abierta.
+  ///
+  /// La LLAVE es la categoría: es lo que le dice al switcher que esto es
+  /// otra vista y no la misma con otros datos. Dos categorías distintas
+  /// son las dos un `_PanelCategoria`, así que sin llave el cambio
+  /// pasaría sin transición.
   Widget _contenido() {
-    final categoria = elegida;
-    if (categoria == null) return _VistaDeLaPlata();
+    final categoria = widget.elegida;
+    if (categoria == null) return _VistaDeLaPlata(key: const ValueKey('plata'));
     return _PanelCategoria(
+      key: ValueKey(categoria),
       categoria: categoria,
-      aseguradora: aseguradora,
-      uso: uso,
-      alCerrar: alCerrar,
+      aseguradora: widget.aseguradora,
+      uso: widget.uso,
+      alCerrar: widget.alCerrar,
     );
   }
+
+  /// El contenido, entrando. Es lo ÚNICO que se anima de la pantalla.
+  Widget _contenidoAnimado() => AnimatedSwitcher(
+    duration: duracionEntradaPanel,
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeIn,
+    // El que sale se va en la MITAD de tiempo que el que entra: si los
+    // dos duran lo mismo, durante medio cruce se ven las dos vistas
+    // encimadas y se lee como un fantasma.
+    reverseDuration: duracionEntradaPanel ~/ 2,
+    layoutBuilder: (actual, anteriores) => Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        // El que se va queda anclado arriba y con su propio alto: una
+        // vista larga forzada al alto de una corta se desborda, y el
+        // alto de esta caja lo manda SIEMPRE la que entra.
+        for (final anterior in anteriores)
+          Positioned(top: 0, left: 0, right: 0, child: anterior),
+        ?actual,
+      ],
+    ),
+    transitionBuilder: (hijo, animacion) => FadeTransition(
+      opacity: animacion,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, desplazamientoEntradaPanel),
+          end: Offset.zero,
+        ).animate(animacion),
+        child: hijo,
+      ),
+    ),
+    child: _contenido(),
+  );
 
   @override
   Widget build(BuildContext context) {
     final quieto = MediaQuery.of(context).disableAnimations;
+    final cabezal = widget.cabezal;
 
     // CustomScrollView y no SingleChildScrollView porque el control de
     // refresco de Cupertino es un sliver y solo vive adentro de uno.
-    final lista = CustomScrollView(
-      // La llave hace que cada vista arranque con su scroll en cero. Sin
-      // esto, entrar a Contacto después de haber bajado en Cobertura
-      // dejaría la pantalla a mitad de camino de un contenido que ya no
-      // existe.
-      key: ValueKey(elegida),
+    return CustomScrollView(
+      controller: _scroll,
       physics: fisicaConRefresco,
       slivers: [
         const RefrescoVida(),
+        // El cabezal va AFUERA del switcher aunque scrollee con lo
+        // demás: no cambia con el filtro, así que no se mueve.
+        if (cabezal != null)
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                cabezal,
+                const SizedBox(height: AppSpacing.seccion),
+              ],
+            ),
+          ),
         SliverPadding(
           // Sin margen lateral acá: el cabezal trae el suyo pieza por
           // pieza, porque el riel de categorías tiene que llegar hasta
           // los bordes. Lo que va debajo se lo pone solo.
           padding: const EdgeInsets.only(bottom: 24),
           sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (cabezal != null) ...[
-                  cabezal!,
-                  const SizedBox(height: AppSpacing.seccion),
-                ],
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _contenido(),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: quieto ? _contenido() : _contenidoAnimado(),
             ),
           ),
         ),
       ],
-    );
-
-    if (quieto) return lista;
-
-    return AnimatedSwitcher(
-      duration: duracionEntradaPanel,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeIn,
-      // El que sale se va en la MITAD de tiempo que el que entra: si los
-      // dos duran lo mismo, durante medio cruce se ven las dos vistas
-      // encimadas y se lee como un fantasma.
-      reverseDuration: duracionEntradaPanel ~/ 2,
-      layoutBuilder: (actual, anteriores) => Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          for (final anterior in anteriores) Positioned.fill(child: anterior),
-          ?actual,
-        ],
-      ),
-      transitionBuilder: (hijo, animacion) => FadeTransition(
-        opacity: animacion,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, desplazamientoEntradaPanel),
-            end: Offset.zero,
-          ).animate(animacion),
-          child: hijo,
-        ),
-      ),
-      child: lista,
     );
   }
 }
@@ -523,14 +575,16 @@ class _ZonaQueCambia extends StatelessWidget {
 /// La vista por defecto: lo que queda de la plata cuando el monto del
 /// año ya está arriba, fijo.
 class _VistaDeLaPlata extends StatelessWidget {
+  const _VistaDeLaPlata({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _TarjetaProyeccion(),
+        _SeccionProyeccion(),
         const SizedBox(height: AppSpacing.seccion),
-        _TarjetaCalendario(),
+        _SeccionCalendario(),
       ],
     );
   }
@@ -822,19 +876,29 @@ class _MedallonNivelState extends State<_MedallonNivel>
     );
 
     return Semantics(
-      label: 'Nivel ${widget.nivel}',
+      button: true,
+      label: 'Nivel ${widget.nivel}, ver la escalera de niveles',
       excludeSemantics: true,
-      child: AnimatedBuilder(
-        animation: _controlador,
-        builder: (context, hijo) {
-          // La MISMA curva que el resto de la app (easeOutCubic).
-          final avance = curvaNumeroAnimado.transform(_controlador.value);
-          return Opacity(
-            opacity: 0.35 + 0.65 * avance,
-            child: Transform.scale(scale: 0.82 + 0.18 * avance, child: hijo),
-          );
-        },
-        child: medallon,
+      // EL MEDALLÓN ABRE LA ESCALERA (decisión de Daniel, 22 de
+      // septiembre de 2026). La gráfica de los cinco niveles vivía
+      // siempre abierta en Hoy; ahora se abre acá, que es donde alguien
+      // pregunta por su nivel. Un disco con un número adentro es
+      // exactamente lo que se toca para saber qué significa ese número.
+      child: GestureDetector(
+        onTap: () => mostrarHojaNiveles(context),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedBuilder(
+          animation: _controlador,
+          builder: (context, hijo) {
+            // La MISMA curva que el resto de la app (easeOutCubic).
+            final avance = curvaNumeroAnimado.transform(_controlador.value);
+            return Opacity(
+              opacity: 0.35 + 0.65 * avance,
+              child: Transform.scale(scale: 0.82 + 0.18 * avance, child: hijo),
+            );
+          },
+          child: medallon,
+        ),
       ),
     );
   }
@@ -877,34 +941,30 @@ class _PieRegulatorio extends StatelessWidget {
 /// prometer un nivel por una cuenta que no existe es peor que no decir
 /// nada. Lo que sí se puede afirmar es condicional y exacto: cuántos
 /// puntos faltan y cuánto pagaría ese nivel.
-class _TarjetaProyeccion extends StatelessWidget {
+class _SeccionProyeccion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final siguiente = nivelPorNumero(nivelActual + 1);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: _tarjeta(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            siguiente == null
-                ? 'Tu nivel del año'
-                : 'Tu proyección al siguiente nivel',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.entre),
-          if (siguiente == null)
-            _sinNivelSiguiente(context)
-          else
-            ..._conNivelSiguiente(context, siguiente),
-        ],
-      ),
+    // Sin superficie: el título de bloque y el aire de abajo alcanzan
+    // para separarla de lo que sigue. El mismo encabezado que el
+    // calendario, para que las dos secciones se lean como hermanas y no
+    // como dos piezas de distinto origen.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TituloDeBloque(
+          icono: Icons.trending_up_rounded,
+          texto: siguiente == null
+              ? 'Tu nivel del año'
+              : 'Tu proyección al siguiente nivel',
+        ),
+        const SizedBox(height: AppSpacing.entre),
+        if (siguiente == null)
+          _sinNivelSiguiente(context)
+        else
+          ..._conNivelSiguiente(context, siguiente),
+      ],
     );
   }
 
@@ -1010,7 +1070,7 @@ class _TarjetaProyeccion extends StatelessWidget {
 ///
 /// Ninguno lleva check naranja: el naranja de una etapa completada es
 /// para lo que YA pasó, y acá los tres pasos son futuros.
-class _TarjetaCalendario extends StatelessWidget {
+class _SeccionCalendario extends StatelessWidget {
   static const List<({IconData icono, String cuando, String que})> _pasos = [
     (
       icono: Icons.event_outlined,
@@ -1031,37 +1091,32 @@ class _TarjetaCalendario extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: _tarjeta(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TituloDeBloque(
-            icono: Icons.calendar_month_outlined,
-            texto: 'Calendario de pagos',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TituloDeBloque(
+          icono: Icons.calendar_month_outlined,
+          texto: 'Calendario de pagos',
+        ),
+        const SizedBox(height: AppSpacing.entre),
+        for (var i = 0; i < _pasos.length; i++)
+          _PasoDelCalendario(
+            numero: i + 1,
+            icono: _pasos[i].icono,
+            cuando: _pasos[i].cuando,
+            que: _pasos[i].que,
+            ultimo: i == _pasos.length - 1,
           ),
-          const SizedBox(height: AppSpacing.entre),
-          for (var i = 0; i < _pasos.length; i++)
-            _PasoDelCalendario(
-              numero: i + 1,
-              icono: _pasos[i].icono,
-              cuando: _pasos[i].cuando,
-              que: _pasos[i].que,
-              ultimo: i == _pasos.length - 1,
-            ),
-          const SizedBox(height: AppSpacing.dentro),
-          Text(
-            // El depósito depende de que la prima esté pagada: decirlo
-            // acá evita que alguien lo espere antes de tiempo.
-            'El depósito sale después de que pagues tu siguiente prima.',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
+        const SizedBox(height: AppSpacing.dentro),
+        Text(
+          // El depósito depende de que la prima esté pagada: decirlo
+          // acá evita que alguien lo espere antes de tiempo.
+          'El depósito sale después de que pagues tu siguiente prima.',
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+        ),
+      ],
     );
   }
 }
@@ -1608,6 +1663,7 @@ class _SegmentoCategoria extends StatelessWidget {
 /// que se acaba de tocar, así que dice de dónde vino este panel.
 class _PanelCategoria extends StatelessWidget {
   const _PanelCategoria({
+    super.key,
     required this.categoria,
     required this.aseguradora,
     required this.uso,
@@ -1854,9 +1910,16 @@ class _FilaDato {
   final bool copiable;
 }
 
-/// Un bloque agrupado de iOS con el aspecto de las tarjetas de +Vida.
+/// Los datos de la póliza: UNA LISTA, no una tarjeta.
 ///
-/// `backgroundColor` transparente y `decoration` propia: sin eso el
+/// Sigue siendo la lista agrupada de iOS —de ahí salen el alto mínimo de
+/// fila, el gris de pulsado y los separadores— pero sin la superficie
+/// blanca: `decoration` vacía, así que las filas se apoyan directo sobre
+/// el fondo y lo único que las separa es la línea de un pelo. Es lo que
+/// CLAUDE.md ya pide en Social y en Progreso: una lista es una lista, no
+/// una pila de cajas.
+///
+/// `backgroundColor` transparente además de la decoración: sin eso el
 /// bloque llega con el gris agrupado del sistema y la pantalla se vería
 /// hecha de dos apps.
 class _SeccionPoliza extends StatelessWidget {
@@ -1872,8 +1935,13 @@ class _SeccionPoliza extends StatelessWidget {
       margin: EdgeInsets.zero,
       topMargin: 0,
       backgroundColor: Colors.transparent,
-      decoration: _tarjeta(),
+      // Vacía a propósito: sin color, sin borde y sin sombra.
+      decoration: const BoxDecoration(),
       separatorColor: AppColors.cardBorder,
+      // Los separadores llegan de punta a punta: sangrados se leían como
+      // el interior de una caja que ya no está.
+      dividerMargin: 0,
+      additionalDividerMargin: 0,
       // Ninguna fila lleva ícono a la izquierda: sin esto los
       // separadores quedan sangrados como si lo llevaran.
       hasLeading: false,
@@ -1986,8 +2054,16 @@ class _FilaPolizaState extends State<_FilaPoliza> {
     // sangrados de la sección; el reparto de las dos columnas es nuestro.
     return CupertinoListTile(
       onTap: fila.copiable ? _copiar : null,
+      // Transparente: la fila ya no vive adentro de una tarjeta blanca,
+      // así que el blanco que trae `CupertinoListTile` de fábrica se
+      // vería como un renglón pintado sobre el fondo.
+      backgroundColor: Colors.transparent,
       // El gris de pulsado de iOS, solo donde hay algo que pulsar.
       backgroundColorActivated: AppColors.azulBruma,
+      // Sin el sangrado horizontal de iOS: el margen de la pantalla ya
+      // lo pone la pantalla, y con los dos la lista quedaba metida 20 px
+      // adentro de su propio título.
+      padding: const EdgeInsets.symmetric(vertical: 12),
       title: largo
           // Valor largo: debajo de la etiqueta, a la izquierda.
           ? Column(
@@ -2032,46 +2108,52 @@ class _PanelAseguradora extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Los cuatro contactos, en lista y sin caja. El título de
+        // bloque es el que los junta, igual que junta a los pasos de
+        // "Cómo usar tu seguro" acá abajo: dos secciones con el mismo
+        // encabezado se leen como dos partes de una misma pantalla, y
+        // dos tarjetas con el mismo borde se leen como dos formularios.
+        //
+        // El aviso va DEBAJO del título y arriba de los teléfonos, que
+        // es el mismo orden del bloque de abajo: si fuera al revés, el
+        // primer renglón de la categoría sería una advertencia sobre
+        // algo que todavía no se nombró.
+        _TituloDeBloque(
+          icono: Icons.contact_phone_outlined,
+          texto: 'Cómo contactarlos',
+        ),
+        const SizedBox(height: AppSpacing.entre),
         if (!a.verificado) ...[
           const _AvisoSinVerificar(),
           const SizedBox(height: AppSpacing.entre),
         ],
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: _tarjeta(),
-          child: Column(
-            children: [
-              _ContactoAseguradora(
-                icono: Icons.emergency_outlined,
-                etiqueta: 'Emergencias, 24/7',
-                valor: a.telefonoEmergencias,
-                urgente: true,
-                habilitado: a.verificado,
-              ),
-              const _SeparadorFino(),
-              _ContactoAseguradora(
-                icono: Icons.support_agent_outlined,
-                etiqueta: 'Servicio al cliente',
-                valor: a.telefonoServicio,
-                habilitado: a.verificado,
-              ),
-              const _SeparadorFino(),
-              _ContactoAseguradora(
-                icono: Icons.mail_outline,
-                etiqueta: 'Correo',
-                valor: a.correo,
-                habilitado: a.verificado,
-              ),
-              const _SeparadorFino(),
-              _ContactoAseguradora(
-                icono: Icons.schedule_outlined,
-                etiqueta: 'Horario de oficina',
-                valor: a.horario,
-                habilitado: a.verificado,
-              ),
-            ],
-          ),
+        _ContactoAseguradora(
+          icono: Icons.emergency_outlined,
+          etiqueta: 'Emergencias, 24/7',
+          valor: a.telefonoEmergencias,
+          urgente: true,
+          habilitado: a.verificado,
+        ),
+        const _SeparadorFino(),
+        _ContactoAseguradora(
+          icono: Icons.support_agent_outlined,
+          etiqueta: 'Servicio al cliente',
+          valor: a.telefonoServicio,
+          habilitado: a.verificado,
+        ),
+        const _SeparadorFino(),
+        _ContactoAseguradora(
+          icono: Icons.mail_outline,
+          etiqueta: 'Correo',
+          valor: a.correo,
+          habilitado: a.verificado,
+        ),
+        const _SeparadorFino(),
+        _ContactoAseguradora(
+          icono: Icons.schedule_outlined,
+          etiqueta: 'Horario de oficina',
+          valor: a.horario,
+          habilitado: a.verificado,
         ),
         const SizedBox(height: AppSpacing.grupo),
         _TituloDeBloque(

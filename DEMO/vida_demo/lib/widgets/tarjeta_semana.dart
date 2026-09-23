@@ -627,8 +627,8 @@ class _FilaObjetivo extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Row(
           children: [
-            _Indicador(hecho: hecho),
-            const SizedBox(width: 13),
+            _Riel(hecho: hecho, apagada: apagada),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 objetivo.nombre,
@@ -652,15 +652,39 @@ class _FilaObjetivo extends StatelessWidget {
             // de iOS al máximo, "36,600 de 40,000 pasos" empujaba la fila
             // fuera de la tarjeta. Acotada, envuelve. Hay un test a 1.6x.
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 112),
-              child: Text(
-                cola,
-                textAlign: TextAlign.right,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontSize: 14,
-                  fontWeight: hecho ? FontWeight.w600 : FontWeight.w500,
-                  color: hecho ? AppColors.accent : AppColors.textSecondary,
-                ),
+              constraints: const BoxConstraints(maxWidth: 124),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // El check SUELTO, sin círculo y sin relleno: es uno de
+                  // los cuatro lugares donde CLAUDE.md deja entrar el
+                  // naranja, y acá hace el trabajo que hacía el círculo
+                  // de la izquierda sin prometer que se puede tocar. Va
+                  // pegado a la palabra que ya dice lo mismo, así que se
+                  // lee como una marca y no como un control.
+                  if (hecho) ...[
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: AppColors.accentSecondary,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Flexible(
+                    child: Text(
+                      cola,
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontSize: 14,
+                        fontWeight: hecho ? FontWeight.w600 : FontWeight.w500,
+                        color: hecho
+                            ? AppColors.accent
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -670,27 +694,45 @@ class _FilaObjetivo extends StatelessWidget {
   }
 }
 
-/// El punto de estado de un objetivo.
+/// El estado de un objetivo, como un RIEL y no como una casilla.
 ///
-/// Lleno o vacío, sin estados intermedios: no hay anillo parcial ni
-/// porcentaje adentro. Un objetivo al 90% cuenta lo mismo que uno al 0%
-/// mientras no esté cumplido, y el indicador tiene que decir eso.
-class _Indicador extends StatelessWidget {
-  const _Indicador({required this.hecho});
+/// POR QUÉ SE FUE EL CÍRCULO (prueba con usuario, 22 de septiembre de
+/// 2026). Era un círculo de 19 px con un check adentro, o sea la forma
+/// exacta de un checkbox de iOS, y la primera persona que probó la app
+/// intentó tocarlo para marcar el objetivo. No hay nada que marcar: los
+/// tres objetivos los cierra el SERVIDOR el domingo 23:59 con los datos
+/// de Apple Health. Una casilla promete una acción que no existe, y
+/// descubrir que no hace nada se siente una app rota.
+///
+/// Un riel no promete nada. Es una barra de 3,5 px pegada al borde
+/// izquierdo de la fila: se lee como el margen de color de una lista, no
+/// como un control. Nadie toca una línea.
+///
+/// Y SIGUE SIENDO BINARIO, lleno o vacío, sin anillo parcial ni
+/// porcentaje: un objetivo al 90% cuenta lo mismo que uno al 0% mientras
+/// no esté cumplido. Cuánto lleva ya lo dice la columna de la derecha,
+/// en unidades reales ("48 de 90 min"), que es donde se puede leer.
+class _Riel extends StatelessWidget {
+  const _Riel({required this.hecho, required this.apagada});
 
   final bool hecho;
 
+  /// Una semana futura no arrancó: su riel va más pálido todavía, para
+  /// que no se lea como un objetivo en curso que va en cero.
+  final bool apagada;
+
   @override
   Widget build(BuildContext context) => Container(
-    width: 19,
-    height: 19,
+    width: 3.5,
+    height: 22,
     decoration: BoxDecoration(
-      color: hecho ? AppColors.accent : AppColors.azulNiebla,
-      shape: BoxShape.circle,
-      border: hecho ? null : Border.all(color: AppColors.azulSuave, width: 1.6),
+      // Azul de marca el cumplido, azul pálido el que falta: lo que
+      // separa los dos estados es la LUMINOSIDAD, igual que en los
+      // niveles de cashback y en las muescas del rango.
+      color: hecho
+          ? AppColors.accent
+          : (apagada ? AppColors.azulNiebla : AppColors.azulBruma),
+      borderRadius: BorderRadius.circular(AppRadios.pildora),
     ),
-    child: hecho
-        ? const Icon(Icons.check_rounded, size: 13, color: Colors.white)
-        : null,
   );
 }

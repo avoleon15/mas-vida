@@ -107,7 +107,7 @@ void main() {
     });
   });
 
-  group('La tarjeta de rango', () {
+  group('El renglón de rango', () {
     testWidgets('la insignia dice el rango que manda el servidor', (t) async {
       await montarCamino(t);
 
@@ -124,7 +124,7 @@ void main() {
       // Lo que faltaba: el usuario veia una escalera de diez escalones y
       // ningun lado decia que la mueve. Y que se pueda BAJAR no se puede
       // callar: enterarse un lunes es un castigo escondido.
-      expect(find.byKey(llaveTarjetaRango), findsOneWidget);
+      expect(find.byKey(llaveRenglonRango), findsOneWidget);
       expect(
         find.textContaining('Rango ${objetivos.rangoActual} de $rangoMaximo'),
         findsOneWidget,
