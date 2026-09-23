@@ -15,10 +15,10 @@ class Ledger(models.Model):
 
     puntos_intensidad = models.PositiveIntegerField(
         null=True,
-        blank=TimeoutError
+        blank=True
     )
 
-    Topediario_aplicado = models.BooleanField(
+    tope_diario_aplicado = models.BooleanField(
         null=True,
         blank=True
     )

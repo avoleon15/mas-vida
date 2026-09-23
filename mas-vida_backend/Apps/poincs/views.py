@@ -3,7 +3,7 @@ from datetime import date
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from users.models import Usuario
+from Apps.users.models import Usuario
 from .models import Ledger
 
 @api_view(["GET"])
@@ -53,20 +53,23 @@ def historial(request):
     )
 
     if fecha_desde:
-         movimientos = movimientos.filter(fecha__gte = fecha_desde_raw)
+         movimientos = movimientos.filter(fecha__gte=fecha_desde)
     if fecha_hasta:
          movimientos = movimientos.filter(fecha__lte=fecha_hasta)
 
     historial_usuario = [
          {
               "fecha":movimiento.fecha.isoformat(),
-              "puntos_pasos": movimiento.puntos_pasos,
-              "puntos_intensidad": movimiento.puntos_intensidad,
+              # Los registros anteriores a la migracion 0002 tienen estos
+              # campos en null: se leen como 0 para que la suma no reviente.
+              "puntos_pasos": movimiento.puntos_pasos or 0,
+              "puntos_intensidad": movimiento.puntos_intensidad or 0,
               "puntos_brutos": (
-                   movimiento.puntos_pasos + movimiento.puntos_intensidad
+                   (movimiento.puntos_pasos or 0)
+                   + (movimiento.puntos_intensidad or 0)
               ),
               "puntos_dia": movimiento.puntos,
-              "tope_diario_aplicado": movimiento.tope_diario_aplicado,
+              "tope_diario_aplicado": bool(movimiento.tope_diario_aplicado),
               "version_regla": movimiento.version_regla.version,
               }
             for movimiento in movimientos
