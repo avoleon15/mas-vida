@@ -1,26 +1,44 @@
 import logging
+from datetime import date
 from django.db import transaction
 from django.db.utils import DataError, IntegrityError
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
-
-from Apps.users.models import Usuario
+from services.hearth_rate import (calculate_age, calculate_intensity_from_heart_rate,)
 from .models import Muestra, MuestraBPM, Sesion
+from Apps.users.models import Usuario
+from services.points import (apply_daily_points_limit, calculate_daily_step_points,)
+from Apps.poincs.models import Ledger, VersionRegla
+
 
 logger = logging.getLogger(__name__)
-@api_view(['POST'])
+
+
+@api_view(["POST"])
 def sync(request):
     payload = request.data
     logger.debug("Payload recibido: %s", payload)
-    usuario_id = payload.get('usuario_id')
 
 
     try:
-        usuario = Usuario.objects.get(usuario_id=usuario_id)
+        usuario = request.user.usuario
     except Usuario.DoesNotExist:
         return Response(
-            {'mensaje': 'Usuario no encontrado'},
+            {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+    )
+
+    try:
+        fecha_puntuacion = date.fromisoformat(payload["fecha"])
+
+        edad = calculate_age(
+            usuario.birth_date,
+            fecha_puntuacion,
+        )
+    except (KeyError, TypeError, ValueError):
+        return Response(
+            {'mensaje': 'Fecha inválida en payload'},
             status=status.HTTP_404_NOT_FOUND
         )
 
@@ -59,7 +77,7 @@ def sync(request):
             for s in sesiones
         ]
 
-        nueva_frecuencia_cardiaca = [
+        nuevas_muestras_bpm = [
             MuestraBPM(
                 usuario=usuario,
                 external_id=f["external_id"],
@@ -80,30 +98,80 @@ def sync(request):
     try:
         with transaction.atomic():
             if nuevos_pasos:
-                Muestra.objects.bulk_create(nuevos_pasos, ignore_conflicts=True)
+                Muestra.objects.bulk_create(
+                    nuevos_pasos,
+                    ignore_conflicts=True,
+                )
 
             if nuevas_sesiones:
-                Sesion.objects.bulk_create(nuevas_sesiones, ignore_conflicts=True)
+                Sesion.objects.bulk_create(
+                    nuevas_sesiones,
+                    ignore_conflicts=True,
+                )
 
-            if nueva_frecuencia_cardiaca:
-                MuestraBPM.objects.bulk_create(nueva_frecuencia_cardiaca, ignore_conflicts=True)
+            if nuevas_muestras_bpm:
+                MuestraBPM.objects.bulk_create(
+                    nuevas_muestras_bpm,
+                    ignore_conflicts=True,
+                )
     except (DataError, IntegrityError):
         return Response(
-            {'mensaje': 'Datos inválidos en el payload'},
-            status=status.HTTP_400_BAD_REQUEST
+            {"mensaje": "Datos inválidos en el payload"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
+    pasos_totales_dia = sum(m["cantidad"] for m in pasos)
+    puntos_pasos = calculate_daily_step_points(
+        pasos_totales_dia,
+        edad,
+    )
+
+    puntos_intensidad = calculate_intensity_from_heart_rate(
+        frecuencia_cardiaca,
+        sesiones,
+        edad,
+    )
+
+    puntos_brutos = puntos_pasos + puntos_intensidad
+    puntos_dia = apply_daily_points_limit(puntos_brutos)
+    tope_diario_aplicado = puntos_brutos > puntos_dia
+
+    version_regla = (
+        VersionRegla.objects
+        .filter(vigente_desde__lte=fecha_puntuacion)
+        .order_by("-vigente_desde")
+        .first()
+    )
+
+    if version_regla is None:
+        return Response(
+            {"mensaje": "No existe una versión de regla vigente"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    Ledger.objects.update_or_create(
+        usuario=usuario,
+        fecha=fecha_puntuacion,
+        tipo="puntos_diarios",
+        defaults={
+            "puntos": puntos_dia,
+            "puntos_pasos": puntos_pasos,
+            "puntos intensidad": puntos_intensidad,
+            "tope_diario_aplicado": tope_diario_aplicado,
+            "version_regla": version_regla,
+        },
+    )
     return Response(
         {
-            "fecha": payload.get("fecha"),
-            "puntos_pasos": 0,
-            "puntos_intensidad": 0,
-            "puntos_dia": 0,
-            "tope_diario_aplicado": False,
+            "fecha": fecha_puntuacion.isoformat(),
+            "puntos_pasos": puntos_pasos,
+            "puntos_intensidad": puntos_intensidad,
+            "puntos_dia": puntos_dia,
+            "tope_diario_aplicado": tope_diario_aplicado,
             "puntos_ano": 0,
             "tope_anual_aplicado": False,
             "nivel": 0,
-            "pasos_totales_dia": 0
+            "pasos_totales_dia": pasos_totales_dia,
         },
-        status=status.HTTP_200_OK
+        status=status.HTTP_200_OK,
     )
