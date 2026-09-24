@@ -62,6 +62,10 @@ dependencies:
   # la apagamos a mano. Licencia MIT.
   flutter_animate: ^4.5.2
 
+  # Cliente HTTP para hablar con la API de Django (lib/datos/cliente_api.dart).
+  # Es el paquete oficial del equipo de Dart. Licencia BSD.
+  http: ^1.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

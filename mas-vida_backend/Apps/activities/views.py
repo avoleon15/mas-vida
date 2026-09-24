@@ -156,7 +156,7 @@ def sync(request):
         defaults={
             "puntos": puntos_dia,
             "puntos_pasos": puntos_pasos,
-            "puntos intensidad": puntos_intensidad,
+            "puntos_intensidad": puntos_intensidad,
             "tope_diario_aplicado": tope_diario_aplicado,
             "version_regla": version_regla,
         },
