@@ -4,3 +4,5 @@ from .views import historial
 urlpatterns = [
     path('historial', historial, name='historial'),
 ]
+
+
