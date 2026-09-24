@@ -76,3 +76,4 @@ def historial(request):
          {"historial": historial_usuario},
          status=status.HTTP_200_OK
     )
+

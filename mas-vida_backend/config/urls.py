@@ -35,5 +35,6 @@ urlpatterns = [
     path("api/health/", health_check),
     path("api/v1/", include("Apps.activities.urls")),
     path("api/v1/", include("Apps.users.urls")),
+    path("api/v1/", include("Apps.poincs.urls")),
 
 ]
