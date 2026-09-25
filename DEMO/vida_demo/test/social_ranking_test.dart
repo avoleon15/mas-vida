@@ -60,37 +60,35 @@ void main() {
   });
 
   group('La Liga', () {
-    testWidgets('dice el puesto, de cuántos y la franja de edad', (t) async {
+    testWidgets('dice el puesto y de cuántos', (t) async {
       await _montar(t);
       expect(find.text('${_liga.posicionUsuario}.º'), findsOneWidget);
       expect(find.text('de ${_liga.miembros.length}'), findsOneWidget);
-      expect(find.text(_liga.franjaEdad!), findsOneWidget);
       // Ya no se arma por zona.
       expect(find.textContaining('Zona'), findsNothing);
     });
 
-    testWidgets('la pista marca dónde vas con tu foto', (t) async {
+    testWidgets('la tarjeta va limpia: sin foto, puntos ni franja', (t) async {
       await _montar(t);
+      final tarjeta = find.byKey(llaveTarjetaLiga);
       expect(
-        find.descendant(
-          of: find.byType(PistaLiga),
-          matching: find.byType(AvatarUsuario),
-        ),
-        findsOneWidget,
+        find.descendant(of: tarjeta, matching: find.byType(AvatarUsuario)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: tarjeta, matching: find.textContaining('pts')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: tarjeta, matching: find.text(_liga.franjaEdad!)),
+        findsNothing,
       );
     });
 
-    testWidgets('lo que falta para el podio se dice en puestos', (t) async {
-      await _montar(t);
-      final faltan = _liga.posicionUsuario - _liga.premiosMonedas.length;
-      expect(
-        find.text(
-          faltan == 1
-              ? 'A 1 puesto del podio'
-              : 'A $faltan puestos del podio',
-        ),
-        findsOneWidget,
-      );
+    testWidgets('la franja de edad sale en la tabla', (t) async {
+      await montarPantalla(t, RankingGrupoScreen(grupo: _liga));
+      await t.pump();
+      expect(find.textContaining(_liga.franjaEdad!), findsOneWidget);
     });
 
     testWidgets('tocarla abre la tabla', (t) async {

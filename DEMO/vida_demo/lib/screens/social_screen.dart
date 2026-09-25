@@ -6,12 +6,10 @@ import '../datos/modelos.dart';
 import '../hora_guatemala.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
-import '../widgets/avatar_usuario.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/flujos_social.dart';
 import '../widgets/hoja_invitar_grupo.dart';
 import '../widgets/moneda_animada.dart';
-import '../widgets/numero_animado.dart' show milesConComa;
 import '../widgets/patrocinio.dart';
 import '../widgets/ranking_widgets.dart';
 import '../widgets/refresco_vida.dart';
@@ -24,9 +22,8 @@ import 'ranking_grupo_screen.dart';
 //
 //   1. LA LIGA, arriba y como la única pieza levantada: es lo único de
 //      Social que paga, y la arma la app sin que el usuario haga nada.
-//      Tu puesto en grande, una PISTA con todos los del grupo donde tu
-//      foto marca dónde vas, cuánto falta para el podio, lo que paga y
-//      cuándo cierra. Tocarla abre la tabla completa.
+//      Cuánto le queda, tu puesto en grande y lo que paga. Tocarla abre
+//      la tabla completa.
 //   2. MIS COMPETENCIAS, debajo y plana: las que armaste con tu gente.
 //      Se crean o se entra con un CÓDIGO que se comparte por WhatsApp o
 //      cualquier app. No hay solicitudes ni amigos.
@@ -285,10 +282,12 @@ class TarjetaLiga extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadios.tarjeta),
             boxShadow: AppSombras.tarjeta,
           ),
+          // Tres renglones y nada más: qué es y cuánto le queda, tu
+          // puesto, y lo que paga. La franja de edad, los puntos y las
+          // reglas viven en la tabla.
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Qué es y contra quién.
               Row(
                 children: [
                   Expanded(
@@ -301,7 +300,13 @@ class TarjetaLiga extends StatelessWidget {
                       style: AppTheme.subsectionTitle,
                     ),
                   ),
-                  if (liga.franjaEdad case final f?) _Pastilla(texto: f),
+                  if (dias != null)
+                    Text(
+                      cuandoCierra(dias),
+                      style: tema.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -312,7 +317,7 @@ class TarjetaLiga extends StatelessWidget {
                     color: AppColors.textSecondary,
                   ),
                 )
-              else ...[
+              else
                 // El puesto, en grande: es lo que se viene a ver.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -327,26 +332,12 @@ class TarjetaLiga extends StatelessWidget {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'de $total',
-                              style: tema.titleSmall?.copyWith(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              // Los puntos PROPIOS sí: son del usuario.
-                              '${milesConComa(yo.puntosPeriodo)} pts este mes',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: tema.bodySmall?.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'de $total',
+                          style: tema.titleSmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -356,38 +347,14 @@ class TarjetaLiga extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 22),
-                PistaLiga(liga: liga),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _meta(puesto, podio),
-                        style: tema.bodySmall?.copyWith(
-                          color: AppColors.accent,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    if (dias != null)
-                      Text(
-                        cuandoCierra(dias),
-                        style: tema.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
               const SizedBox(height: 16),
               Container(height: 0.5, color: AppColors.separador),
               const SizedBox(height: 12),
-              // Lo que paga, en un renglón, y la entrada a la tabla.
+              // Lo que paga, en un renglón, y el chevron de la tabla.
               Row(
                 children: [
                   // Los premios se achican juntos si no caben (letra de
-                  // iOS grande); "Ver tabla" no se achica nunca.
+                  // iOS grande).
                   Expanded(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
@@ -408,149 +375,16 @@ class TarjetaLiga extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'Ver tabla',
-                    style: tema.bodySmall?.copyWith(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
                   const Icon(
                     CupertinoIcons.chevron_right,
-                    size: 14,
-                    color: AppColors.accent,
+                    size: 16,
+                    color: AppColors.azulMedio,
                   ),
                 ],
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// Cuánto falta para el podio, en PUESTOS: nunca en puntos, porque
-  /// decir "te faltan 300" sería revelar los puntos de otro.
-  static String _meta(int puesto, int podio) {
-    if (podio == 0) return 'Sigue sumando';
-    if (puesto <= podio) return puesto == 1 ? 'Vas primero' : 'Vas en el podio';
-    final faltan = puesto - podio;
-    return faltan == 1 ? 'A 1 puesto del podio' : 'A $faltan puestos del podio';
-  }
-}
-
-/// La pista: todos los del grupo en una línea, del último a la izquierda
-/// al primero a la derecha, como una carrera. Tu foto marca dónde vas y
-/// los puestos que pagan brillan en naranja al final (son MONEDAS, el uso
-/// del naranja que permite CLAUDE.md).
-///
-/// Es un dibujo con widgets y no una gráfica: no mide nada, ubica. Los
-/// demás son puntos sin nombre ni puntaje, así que no expone a nadie.
-class PistaLiga extends StatelessWidget {
-  const PistaLiga({super.key, required this.liga});
-
-  final GrupoRanking liga;
-
-  /// Diámetro de la foto del usuario sobre la pista.
-  static const double _foto = 30;
-
-  @override
-  Widget build(BuildContext context) {
-    final n = liga.miembros.length;
-    final podio = liga.premiosMonedas.length;
-    final puesto = liga.posicionUsuario;
-
-    return SizedBox(
-      height: _foto + 6,
-      child: LayoutBuilder(
-        builder: (context, medidas) {
-          const margen = _foto / 2 + 3;
-          final ancho = medidas.maxWidth - margen * 2;
-          // El 1.o a la derecha, el último a la izquierda.
-          double x(int p) => n <= 1
-              ? medidas.maxWidth / 2
-              : margen + ancho * (n - p) / (n - 1);
-          final centro = (_foto + 6) / 2;
-
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // La línea de la pista.
-              Positioned(
-                left: margen,
-                right: margen,
-                top: centro - 1.5,
-                child: Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: AppColors.azulBruma,
-                    borderRadius: BorderRadius.circular(AppRadios.pildora),
-                  ),
-                ),
-              ),
-              // El tramo del podio, al final.
-              if (podio > 0 && n > podio)
-                Positioned(
-                  left: x(podio),
-                  right: margen,
-                  top: centro - 1.5,
-                  child: Container(
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: AppColors.accentSecondary.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(AppRadios.pildora),
-                    ),
-                  ),
-                ),
-              // El tramo que ya corriste, en azul de marca.
-              if (puesto > 0 && n > 1)
-                Positioned(
-                  left: margen,
-                  width: x(puesto) - margen,
-                  top: centro - 1.5,
-                  child: Container(
-                    height: 3,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.azulMedio, AppColors.accent],
-                      ),
-                      borderRadius: BorderRadius.circular(AppRadios.pildora),
-                    ),
-                  ),
-                ),
-              // Cada persona, un punto.
-              for (var p = 1; p <= n; p++)
-                if (p != puesto)
-                  Positioned(
-                    left: x(p) - (p <= podio ? 5 : 3.5),
-                    top: centro - (p <= podio ? 5 : 3.5),
-                    child: Container(
-                      width: p <= podio ? 10 : 7,
-                      height: p <= podio ? 10 : 7,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: p <= podio
-                            ? AppColors.accentSecondary
-                            : p > puesto
-                            ? AppColors.azulSuave
-                            : AppColors.azulSuave.withValues(alpha: 0.7),
-                        border: Border.all(color: AppColors.card, width: 1.5),
-                      ),
-                    ),
-                  ),
-              // Tú.
-              if (puesto > 0)
-                Positioned(
-                  left: x(puesto) - _foto / 2 - 2.5,
-                  top: centro - _foto / 2 - 2.5,
-                  child: const AvatarUsuario(
-                    diametro: _foto,
-                    borde: AppColors.accent,
-                  ),
-                ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -585,29 +419,6 @@ class _Premio extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-/// Una pastilla azul pálido: "30 a 39 años".
-class _Pastilla extends StatelessWidget {
-  const _Pastilla({required this.texto});
-
-  final String texto;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-      color: AppColors.azulBruma,
-      borderRadius: BorderRadius.circular(AppRadios.pildora),
-    ),
-    child: Text(
-      texto,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: AppColors.accent,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
   );
 }
 
