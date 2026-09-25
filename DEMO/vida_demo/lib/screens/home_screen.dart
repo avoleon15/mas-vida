@@ -507,7 +507,7 @@ class _StepsRing extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Activalo en Ajustes → Salud',
+                    'Actívalo en Ajustes → Salud',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: AppColors.textSecondary,
                     ),
