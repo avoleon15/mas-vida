@@ -1,94 +1,15 @@
 {
   "_comentario": [
-    "Mock de la pantalla Social. Cuatro bloques: yo, duelos, conexiones y grupos.",
-    "De una conexion solo se exponen racha, nivel y monedas — NUNCA pasos ni historial crudo.",
-    "Los duelos no dan monedas ni premios: son puramente competitivos.",
+    "Mock de la pantalla Social, que desde el 25 de septiembre de 2026 es solo el ranking. Dos bloques: yo y grupos. Los amigos, las solicitudes y los duelos se sacaron de la app.",
     "En un grupo de tipo 'desconocidos' los puntos NUNCA se muestran, solo la posicion.",
-    "puntos_periodo son los puntos del CICLO de ese grupo: del mes en una competencia con conocidos, del trimestre en la liga local. La clave vieja se llamaba puntos_semana y ningun ranking corre por semana: lo semanal son los retos, que es otra mecanica.",
-    "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar.",
-    "Un duelo es un RETO con meta comun: los dos van por el mismo numero de pasos y el mismo plazo. Antes eran dos porcentajes de superacion sobre el promedio de cada uno, que no dejaban ver que estaba en juego."
+    "puntos_periodo son los puntos del CICLO de ese grupo: del mes, tanto en una competencia con conocidos como en la liga local. La clave vieja se llamaba puntos_semana y ningun ranking corre por semana: lo semanal son los retos, que es otra mecanica.",
+    "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
   ],
   "yo": {
     "nombre": "Diego",
     "puntos_periodo": 850,
     "tendencia": "subida"
   },
-  "duelos": {
-    "activo": {
-      "activo": true,
-      "rival_handle": "@mery_run",
-      "rival_nombre": "Maria Rodriguez",
-      "dias_restantes": 2,
-      "meta_pasos": 70000,
-      "plazo": "en una semana",
-      "pasos_propios": 52400,
-      "pasos_rival": 48900
-    },
-    "historial": [
-      {
-        "rival": "@mery_run",
-        "ganado": true,
-        "nombre": "Maria Rodriguez"
-      },
-      {
-        "rival": "@juan_fit",
-        "ganado": false,
-        "nombre": "Juan Perez"
-      },
-      {
-        "rival": "@carlos_gt",
-        "ganado": true,
-        "nombre": "Carlos Herrera"
-      },
-      {
-        "rival": "@ana_runner",
-        "ganado": true,
-        "nombre": "Ana Castillo"
-      },
-      {
-        "rival": "@luis_gym",
-        "ganado": false,
-        "nombre": "Luis Montenegro"
-      }
-    ]
-  },
-  "conexiones": [
-    {
-      "nombre": "Juan Perez",
-      "handle": "@juan_fit",
-      "racha_semanas": 12,
-      "nivel": 3,
-      "monedas_totales": 9
-    },
-    {
-      "nombre": "Maria Rodriguez",
-      "handle": "@mery_run",
-      "racha_semanas": 8,
-      "nivel": 3,
-      "monedas_totales": 5
-    },
-    {
-      "nombre": "Pablo Arriaga",
-      "handle": "@pablo_a",
-      "racha_semanas": 5,
-      "nivel": 2,
-      "monedas_totales": 12
-    },
-    {
-      "nombre": "Rodrigo Mendez",
-      "handle": "@rodri_m",
-      "racha_semanas": 3,
-      "nivel": 2,
-      "monedas_totales": 4
-    },
-    {
-      "nombre": "Joaquin Monrroy",
-      "handle": "@joaco",
-      "racha_semanas": 1,
-      "nivel": 1,
-      "monedas_totales": 2
-    }
-  ],
   "grupos": [
     {
       "id": "oficina",
@@ -176,8 +97,8 @@
       "liga": {
         "nivel_actividad": "Intermedio",
         "zona": "Zona 10, Guatemala",
-        "ciclo": "trimestre",
-        "arranca": "2026-07-01T00:00:00-06:00",
+        "ciclo": "mes",
+        "arranca": "2026-09-01T00:00:00-06:00",
         "cierra": "2026-09-30T23:59:59-06:00",
         "premios_monedas": [
           10,
@@ -189,7 +110,7 @@
           "logo": "assets/img/premios/restaurantes/ookii.webp",
           "cupon": "2x1 en sushi de Ookii"
         },
-        "_nota_ciclo": "La liga corre por TRIMESTRE: del dia 1 del primer mes al ultimo dia del tercero, en hora de Guatemala (UTC-6, sin horario de verano). Antes decia 2026-09-06, un domingo, o sea que corria semanal: eso era el bug que reporto la revision de UI del 9 de septiembre de 2026. El ciclo SEMANAL de los retos es otra cosa y no se toca. Las competencias que arma el usuario con su gente corren por MES.",
+        "_nota_ciclo": "La liga corre por MES: del dia 1 al ultimo dia del mes, en hora de Guatemala (UTC-6, sin horario de verano). Decision de Alvaro del 22 de septiembre de 2026; antes corria por trimestre, y antes de eso cerraba un domingo (semanal), que era un bug. El ciclo SEMANAL de los retos es otra cosa y no se toca. Las competencias que arma el usuario con su gente corren por MES.",
         "_nota_patrocinio": "PLACEHOLDER: Ookii es un ejemplo, la alianza real todavia no esta cerrada (Diego la sustituye cuando cierre). El logo sale del catalogo de Premios para no meter un asset nuevo por algo provisional. Cuando exista el endpoint de Luis esto llega de la API y este bloque se borra."
       },
       "miembros": [
@@ -209,7 +130,7 @@
           "tendencia": "subida"
         },
         {
-          "_nota": "El usuario trae SU PROPIO puntos_periodo solo aca: el bloque 'yo' de arriba lleva los del MES, que es el ciclo de las competencias con conocidos, y esta liga corre por trimestre. Un mismo numero no puede servir para los dos ciclos. Tiene que quedar entre el 3.o (2400) y el 5.o (1500) o la tabla deja de estar ordenada.",
+          "_nota": "El usuario trae SU PROPIO puntos_periodo solo aca: la liga y las competencias con conocidos corren las dos por mes, pero son rankings distintos y el backend manda el puntaje de cada uno por separado. Tiene que quedar entre el 3.o (2400) y el 5.o (1500) o la tabla deja de estar ordenada.",
           "es_usuario": true,
           "puntos_periodo": 2100
         },
@@ -229,31 +150,6 @@
           "tendencia": "bajada"
         }
       ]
-    }
-  ],
-  "_pendiente_amigos": "Las solicitudes son mock: no hay backend de amistades. Aceptar o rechazar solo cambia la lista en memoria.",
-  "solicitudes_recibidas": [
-    {
-      "nombre": "Estefania Solis",
-      "handle": "@estefa",
-      "amigos_en_comun": 3
-    },
-    {
-      "nombre": "Luis Montenegro",
-      "handle": "@luis_gt",
-      "amigos_en_comun": 1
-    }
-  ],
-  "solicitudes_enviadas": [
-    {
-      "nombre": "Alexander Lopez",
-      "handle": "@alex_lp",
-      "amigos_en_comun": 2
-    },
-    {
-      "nombre": "Dhidel Osorio",
-      "handle": "@dhidel",
-      "amigos_en_comun": 0
     }
   ]
 }

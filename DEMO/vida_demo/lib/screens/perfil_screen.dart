@@ -137,13 +137,37 @@ class _PerfilScreenState extends State<PerfilScreen> {
                           valor: '${perfil.edad} años',
                           // Viene de la póliza. Se dice para que no parezca
                           // un campo que el usuario olvidó llenar.
-                          nota: 'La toma de tu póliza, no la podés cambiar acá',
+                          nota:
+                              'La toma de tu póliza, no la puedes cambiar acá',
                         ),
                         const _Separador(),
-                        _Fila(
-                          titulo: 'Apple Salud',
-                          valor: _textoPermiso(perfil.permisoHealthkit),
-                          nota: 'Pasos, ritmo cardíaco y entrenamientos',
+                        // Se toca: abre la pantalla de permisos, que le
+                        // vuelve a preguntar al nativo qué se ve HOY. El
+                        // permiso cambia desde Ajustes sin avisarle a la app.
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pushNamed('/permisos-salud'),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _Fila(
+                                  titulo: 'Apple Salud',
+                                  valor: _textoPermiso(perfil.permisoHealthkit),
+                                  nota:
+                                      'Pasos, ritmo cardíaco y entrenamientos',
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(
+                                CupertinoIcons.chevron_right,
+                                size: 15,
+                                color: AppColors.textSecondary,
+                              ),
+                            ],
+                          ),
                         ),
                         const _Separador(),
                         _Fila(
@@ -465,7 +489,7 @@ class _ConsentimientoAseguradora extends StatelessWidget {
       children: [
         _FilaSwitch(
           titulo: 'Compartir mi actividad con la aseguradora',
-          nota: 'Podés desactivarlo cuando quieras',
+          nota: 'Puedes desactivarlo cuando quieras',
           valor: valor,
           onChanged: onChanged,
         ),

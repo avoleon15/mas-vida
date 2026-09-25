@@ -7,9 +7,9 @@ import '../datos/modelos.dart';
 import '../theme.dart';
 
 // ============================================================
-// Flujos de Social: crear grupo, unirse a grupo y agregar amigo.
+// Flujos de Social: crear una competencia y unirse a una.
 //
-// Antes los tres botones no hacían nada. Ahora abren un flujo real, con
+// Antes los botones no hacían nada. Ahora abren un flujo real, con
 // su validación y su confirmación.
 //
 // Lo que se crea se guarda en el teléfono (ver `AlmacenSocial`), así que
@@ -25,8 +25,7 @@ import '../theme.dart';
 /// No es configurable a propósito (decisión de Daniel, revisión de UI del
 /// 9 de septiembre de 2026). Antes el usuario elegía 1, 2 o 3 meses: era
 /// una pregunta que nadie necesitaba contestar y dejaba competencias de
-/// duraciones distintas conviviendo en la misma pantalla. La que dura tres
-/// meses es la liga local, y esa la arma la app, no el usuario.
+/// duraciones distintas conviviendo en la misma pantalla.
 const int mesesDeCompetencia = 1;
 
 /// La fecha en que cierra una competencia que arranca hoy.
@@ -335,180 +334,6 @@ class _UnirseGrupoState extends State<_UnirseGrupo> {
         ],
         const SizedBox(height: AppSpacing.grupo),
         _BotonHoja(texto: 'Unirme', habilitado: _valido, onPressed: _unirse),
-      ],
-    );
-  }
-}
-
-/// Agregar a alguien conocido.
-void mostrarAgregarAmigo(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
-    builder: (_) => const _AgregarAmigo(),
-  );
-}
-
-class _AgregarAmigo extends StatefulWidget {
-  const _AgregarAmigo();
-
-  @override
-  State<_AgregarAmigo> createState() => _AgregarAmigoState();
-}
-
-/// En qué estado está alguien que buscaste.
-///
-/// Es lo que decide qué dice el botón. Sale de los datos que la app ya
-/// tiene —tus amigos y las solicitudes que mandaste—, no de una bandera
-/// local: si cerrás la hoja y volvés a buscar a la misma persona, tiene
-/// que seguir diciendo lo mismo.
-enum _EstadoDeAlguien { nuevo, yaEsAmigo, solicitudEnviada }
-
-class _AgregarAmigoState extends State<_AgregarAmigo> {
-  final _usuario = TextEditingController();
-
-  @override
-  void dispose() {
-    _usuario.dispose();
-    super.dispose();
-  }
-
-  /// Cómo se escribe un usuario para compararlo: sin arroba, sin
-  /// espacios y en minúsculas. "@Mery_Run" y "mery_run" son la misma
-  /// persona.
-  String _normalizado(String texto) =>
-      texto.trim().toLowerCase().replaceFirst('@', '');
-
-  bool get _valido => _normalizado(_usuario.text).length >= 3;
-
-  /// Si ya es amigo, si ya le mandaste, o si es alguien nuevo.
-  _EstadoDeAlguien get _estado {
-    final buscado = _normalizado(_usuario.text);
-    if (buscado.isEmpty) return _EstadoDeAlguien.nuevo;
-
-    final social = Datos.i.social;
-    if (social.conexiones.any((c) => _normalizado(c.handle) == buscado)) {
-      return _EstadoDeAlguien.yaEsAmigo;
-    }
-    if (social.solicitudesEnviadas.any(
-      (s) => _normalizado(s.handle) == buscado,
-    )) {
-      return _EstadoDeAlguien.solicitudEnviada;
-    }
-    return _EstadoDeAlguien.nuevo;
-  }
-
-  /// Manda la solicitud y la DEJA GUARDADA.
-  ///
-  /// Guardarla es lo que hace que buscar a la misma persona otra vez
-  /// diga "Solicitud enviada" en vez de volver a ofrecer el botón. Antes
-  /// era una bandera local que se perdía al cerrar la hoja, así que se
-  /// podía mandar la misma solicitud infinitas veces.
-  void _enviar() {
-    HapticFeedback.selectionClick();
-    final handle = '@${_normalizado(_usuario.text)}';
-    setState(() {
-      Datos.i.social.solicitudesEnviadas.add(
-        Solicitud(nombre: handle, handle: handle, amigosEnComun: 0),
-      );
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final miCodigo = Datos.i.perfil.usuarioId.toUpperCase();
-    final estado = _estado;
-
-    return _Hoja(
-      titulo: 'Agregar a alguien',
-      children: [
-        _CampoTexto(
-          controlador: _usuario,
-          etiqueta: 'Usuario',
-          ejemplo: '@diego-002',
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: AppSpacing.entre),
-        // EL BOTÓN DICE EN QUÉ ESTÁS CON ESA PERSONA, como en Instagram:
-        // si ya le mandaste, lo dice y no deja mandar de nuevo. Un botón
-        // que se puede apretar dos veces promete que algo pasó dos
-        // veces.
-        _BotonHoja(
-          texto: switch (estado) {
-            _EstadoDeAlguien.yaEsAmigo => 'Ya son amigos',
-            _EstadoDeAlguien.solicitudEnviada => 'Solicitud enviada',
-            _EstadoDeAlguien.nuevo => 'Enviar solicitud',
-          },
-          habilitado: _valido && estado == _EstadoDeAlguien.nuevo,
-          onPressed: _enviar,
-        ),
-        if (estado != _EstadoDeAlguien.nuevo) ...[
-          const SizedBox(height: AppSpacing.dentro),
-          Text(
-            estado == _EstadoDeAlguien.yaEsAmigo
-                ? 'Ya está en tu lista de amigos.'
-                : 'Le llega la solicitud y aparece en tus amigos cuando la '
-                      'acepte.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.textSecondary,
-              height: 1.35,
-            ),
-          ),
-        ],
-        const SizedBox(height: AppSpacing.seccion),
-        Text(
-          'O pasale tu código',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.dentro),
-        // El propio código, para el camino inverso: que el otro lo
-        // busque a uno.
-        GestureDetector(
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: miCodigo));
-            HapticFeedback.selectionClick();
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.entre),
-            decoration: BoxDecoration(
-              color: AppColors.fondoDePantalla,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.cardBorder),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    miCodigo,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ),
-                const Icon(
-                  Icons.copy,
-                  size: 18,
-                  color: AppColors.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Tocá para copiarlo',
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
-        ),
       ],
     );
   }

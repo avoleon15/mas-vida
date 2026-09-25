@@ -155,8 +155,8 @@ void main() {
 
     test('el proximo lote a caducar es el de menos dias', () {
       // Antes este test exigia que el mock TUVIERA un lote por vencer.
-      // Dejo de ser cierto al rehacer los lotes: ahora cada lote es un
-      // ascenso de rango, los dos son recientes y ninguno esta cerca de
+      // Dejo de ser cierto al rehacer los lotes: los dos ultimos son
+      // semanas cumplidas, son recientes y ninguno esta cerca de
       // caducar. Lo que importa no es el contenido del mock sino que la
       // regla elija bien, y eso es lo que se fija aca.
       final monedas = Datos.i.resumen.monedas;
@@ -168,6 +168,12 @@ void main() {
       expect(proximo.diasParaCaducar, minimo);
       // Y que el aviso se prenda solo cuando de verdad falta poco.
       expect(proximo.cercaDeCaducar, proximo.diasParaCaducar <= 15);
+    });
+
+    test('el saldo de monedas respeta el tope de 100', () {
+      // Regla dura: si una ganancia pasa de 100, el excedente se pierde.
+      // El mock llegó a decir 150.
+      expect(Datos.i.resumen.monedas.saldo, lessThanOrEqualTo(100));
     });
 
     test('los lotes de monedas suman el saldo', () {
@@ -245,7 +251,15 @@ void main() {
 
     testWidgets('Social', (t) async {
       await montar(t, const SocialScreen());
-      expect(find.textContaining('Duelos'), findsWidgets);
+      // Social es solo el ranking desde el 25 de septiembre de 2026.
+      expect(find.text('SOCIAL'), findsOneWidget);
+      expect(find.text('Liga local'), findsOneWidget);
+      // Nada de la pantalla vieja: ni la pestaña Ranking, ni duelos, ni
+      // solicitudes. (Un grupo PUEDE llamarse "Amigos": es una
+      // competencia entre amigos, parte del ranking.)
+      expect(find.text('Ranking'), findsNothing);
+      expect(find.textContaining('Duelo'), findsNothing);
+      expect(find.textContaining('Solicitudes'), findsNothing);
     });
 
     testWidgets('Premios', (t) async {

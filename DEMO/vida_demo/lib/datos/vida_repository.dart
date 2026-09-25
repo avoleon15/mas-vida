@@ -20,6 +20,6 @@ abstract class VidaRepository {
   /// Catálogo de premios canjeables con monedas.
   Future<Catalogo> catalogo();
 
-  /// Duelos, conexiones y ranking.
+  /// El ranking: tus competencias y la liga local.
   Future<DatosSociales> social();
 }

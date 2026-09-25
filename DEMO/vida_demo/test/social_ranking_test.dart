@@ -17,9 +17,8 @@ import 'ayudas.dart';
 // ============================================================
 
 Future<void> _montar(WidgetTester tester) async {
+  // Social es solo el ranking: ya no hay pestaña que tocar.
   await montarPantalla(tester, const SocialScreen());
-  // Ir a la pestaña Ranking (la pantalla abre en Amigos).
-  await tester.tap(find.text('Ranking'));
   await tester.pumpAndSettle();
 }
 

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
-import 'package:vida_demo/reglas_rango.dart';
+import 'package:vida_demo/hora_guatemala.dart';
 import 'package:vida_demo/screens/ranking_grupo_screen.dart';
 import 'package:vida_demo/screens/social_screen.dart';
 
@@ -10,18 +10,18 @@ import 'ayudas.dart';
 // ============================================================
 // LOS CICLOS DE COMPETENCIA (revisión de UI del 9 de septiembre de 2026).
 //
-// Son TRES y no se pueden confundir entre sí:
-//   · la liga local, por TRIMESTRE;
-//   · las competencias que arma el usuario con su gente, por MES;
-//   · los retos, por SEMANA — y esos no son un ranking.
+// La Liga y las competencias con conocidos corren las dos por MES, del
+// día 1 al último día del mes en hora de Guatemala (decisión de Alvaro,
+// 22 de septiembre de 2026). Los objetivos corren por SEMANA, y esos no
+// son un ranking.
 //
-// La liga corría por semana (cerraba un domingo) y eso era el bug. Estos
-// tests están para que no vuelva.
+// La liga llegó a correr por semana (cerraba un domingo, un bug) y
+// después por trimestre (modelo viejo). Estos tests están para que no
+// vuelva ninguna de las dos.
 // ============================================================
 
 Future<void> _abrirLiga(WidgetTester tester) async {
   await montarPantalla(tester, const SocialScreen());
-  await tester.tap(find.text('Ranking'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Liga local'));
   await tester.pumpAndSettle();
@@ -33,9 +33,9 @@ void main() {
     await Datos.cargar();
   });
 
-  group('La liga local corre por trimestre', () {
-    test('su ciclo es trimestral, no semanal', () {
-      expect(Datos.i.social.ligaLocal!.ciclo, CicloRanking.trimestre);
+  group('La liga local corre por mes', () {
+    test('su ciclo es mensual', () {
+      expect(Datos.i.social.ligaLocal!.ciclo, CicloRanking.mes);
     });
 
     test('cierra el último día de un mes, nunca un domingo cualquiera', () {
@@ -44,7 +44,7 @@ void main() {
 
       // El día siguiente cae en otro mes: eso ES ser el último del mes.
       // Se comprueba así y no con una fecha fija para que el test siga
-      // sirviendo cuando el mock avance de trimestre.
+      // sirviendo cuando el mock avance de mes.
       final siguiente = cierra.add(const Duration(days: 1));
       expect(
         siguiente.month,
@@ -53,7 +53,7 @@ void main() {
       );
     });
 
-    test('arranca el día 1 y dura tres meses', () {
+    test('arranca el día 1 y dura un solo mes', () {
       final liga = Datos.i.social.ligaLocal!;
       final arranca = enHoraDeGuatemala(liga.arranca!);
       final cierra = enHoraDeGuatemala(liga.cierra!);
@@ -61,12 +61,13 @@ void main() {
       expect(arranca.day, 1);
       final meses =
           (cierra.year - arranca.year) * 12 + cierra.month - arranca.month + 1;
-      expect(meses, 3, reason: 'un trimestre son tres meses de calendario');
+      expect(meses, 1, reason: 'la liga no puede abarcar dos meses');
     });
 
-    testWidgets('la pantalla dice el trimestre, no la semana', (tester) async {
+    testWidgets('la pantalla dice el mes, no la semana', (tester) async {
       await _abrirLiga(tester);
-      expect(find.textContaining('este trimestre'), findsWidgets);
+      expect(find.textContaining('trimestre'), findsNothing);
+      expect(find.textContaining('este mes'), findsWidgets);
       expect(find.textContaining('esta semana'), findsNothing);
     });
   });

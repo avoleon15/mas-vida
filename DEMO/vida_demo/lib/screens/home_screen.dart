@@ -10,9 +10,6 @@ import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/desglose_puntos_hoy.dart';
 import '../widgets/hoja_niveles.dart';
-import '../widgets/chip_monedas.dart';
-import '../widgets/hoja_monedas.dart';
-import '../widgets/moneda_animada.dart';
 import '../widgets/numero_animado.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/refresco_vida.dart';
@@ -34,8 +31,8 @@ int get rachaSemanas => Datos.i.resumen.rachaSemanas;
 // en Premios y caduca a los 90 días. Nunca puntos: los puntos mueven el
 // cashback anual y las dos monedas del producto no se mezclan.
 //
-// Reemplazan por completo a las viejas "Metas Mensuales", que ya no
-// existen. Las reglas del rango viven en `reglas_rango.dart`.
+// Son dos por semana —pasos y minutos de entrenamiento— y cumplir los
+// dos paga las monedas de esa semana. Cuántas, lo manda el servidor.
 // ============================================================
 
 ObjetivosSemana get _semana => Datos.i.resumen.objetivosSemana;
@@ -130,19 +127,25 @@ class HomeScreen extends StatelessWidget {
 
                             const SizedBox(height: AppSpacing.seccion),
                             _BloqueHorizonte(
-                              titulo: 'DIARIO',
+                              icono: Icons.wb_sunny_outlined,
+                              titulo: 'Hoy',
+                              explica: 'Tus pasos y los puntos del día',
+                              primero: true,
                               child: _buildSeccionHoy(context),
                             ),
 
-                            const SizedBox(height: AppSpacing.seccion),
                             _BloqueHorizonte(
-                              titulo: 'SEMANAL',
+                              icono: Icons.flag_outlined,
+                              titulo: 'Esta semana',
+                              explica: 'Dos objetivos que te dan monedas',
                               child: _buildObjetivosSemanaSection(context),
                             ),
 
-                            const SizedBox(height: AppSpacing.seccion),
                             _BloqueHorizonte(
-                              titulo: 'ANUAL',
+                              icono: Icons.account_balance_wallet_outlined,
+                              titulo: 'Este año',
+                              explica: 'Tus puntos definen tu cashback',
+                              accion: _verMiPlan(context),
                               child: _buildCashbackSection(context),
                             ),
 
@@ -162,43 +165,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// Encabezado de sección, igual para las tres secciones de Home.
-  ///
-  /// Existe para que "Tu Cashback" y "Objetivos de la semana" se vean
-  /// exactamente iguales: cosas del mismo rango tienen que verse del
-  /// mismo modo, si no la pantalla se lee como widgets sueltos.
-  static Widget _encabezadoSeccion(
-    BuildContext context,
-    IconData icono,
-    String titulo, {
-    Widget? accion,
-  }) {
-    return Row(
-      children: [
-        Icon(icono, color: AppColors.textPrimary),
-        const SizedBox(width: AppSpacing.dentro),
-        // Expanded en vez de Text suelto + Spacer: con el texto del
-        // sistema en grande, el título crecía y empujaba la acción fuera
-        // de la fila.
-        Expanded(
-          child: Text(
-            titulo,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        if (accion != null) ...[
-          const SizedBox(width: AppSpacing.dentro),
-          accion,
-        ],
-      ],
-    );
-  }
-
   /// Bloque de HOY: el anillo, cuánto queda del día y los puntos. Los
   /// tres son del MISMO horizonte temporal, por eso van pegados entre sí
   /// y separados del resto por un corte grande.
@@ -206,10 +172,7 @@ class HomeScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Solo el anillo. Antes esto era un carrusel de dos páginas y la
-        // segunda mostraba el rango otra vez, desde el modelo viejo
-        // (`EstadoRetos`, con techo 4). Home terminaba diciendo el rango
-        // dos veces, con dos techos distintos, en la misma pantalla.
+        // Solo el anillo: es el héroe de Hoy.
         Center(child: _StepsRing(steps: pasos)),
         // Pegado al anillo: el tiempo restante es un pie del anillo, no
         // un elemento aparte.
@@ -376,36 +339,28 @@ class HomeScreen extends StatelessWidget {
   /// siempre se devuelve como dinero después del pago de la prima (regla
   /// regulatoria de Guatemala) — nunca se le llama "descuento" ni "ahorro
   /// en tu prima".
+  /// "Ver mi plan", a la derecha del título del bloque del año.
+  Widget _verMiPlan(BuildContext context) => _Presionable(
+    onTap: () => Navigator.of(context).pushNamed('/mi-plan'),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Ver mi plan ',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: AppColors.accent,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Icon(Icons.arrow_forward, size: 14, color: AppColors.accent),
+      ],
+    ),
+  );
+
   Widget _buildCashbackSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _encabezadoSeccion(
-          context,
-          Icons.account_balance_wallet_outlined,
-          'Tu Cashback',
-          accion: _Presionable(
-            onTap: () => Navigator.of(context).pushNamed('/mi-plan'),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Ver mi plan ',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward,
-                  size: 14,
-                  color: AppColors.accent,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.grupo),
         // SIN TARJETA Y SIN GRÁFICA (decisión de Daniel, 22 de
         // septiembre de 2026).
         //
@@ -480,30 +435,15 @@ class HomeScreen extends StatelessWidget {
   /// de puntos/cashback de arriba. Las monedas se gastan en Premios y
   /// caducan a los 90 días; los puntos nunca se gastan.
   ///
-  /// Son 3 objetivos, los tres de la MISMA semana. Se evalúan una sola
+  /// Son 2 objetivos, los dos de la MISMA semana. Se evalúan una sola
   /// vez, el domingo 23:59 (hora de Guatemala).
   Widget _buildObjetivosSemanaSection(BuildContext context) {
     final semana = _semana;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _encabezadoSeccion(
-          context,
-          Icons.flag_outlined,
-          'Objetivos de la semana',
-          // El saldo de MONEDAS vive acá arriba, no en una tarjeta aparte
-          // al final: es el marcador de toda la sección y sube cada vez
-          // que se completa un objetivo.
-          // El SALDO, no lo ganado este mes: es el mismo número que se ve
-          // en Premios. Para el usuario es una sola billetera, y ver 40
-          // en una pantalla y 3 en otra se lee como un error de la app.
-          accion: _SaldoMonedasChip(monedas: saldoMonedas),
-        ),
-        const SizedBox(height: AppSpacing.grupo),
-        SemanasObjetivos(objetivos: semana),
-      ],
-    );
+    // Sin el saldo de monedas (decisión de Daniel, 24 de septiembre de
+    // 2026): vive en la pantalla del camino, que es donde se ve qué
+    // paga cada semana. Acá competía con el "+10" de la semana.
+    return SemanasObjetivos(objetivos: semana);
   }
 
   static String _formatNumber(int value) {
@@ -841,103 +781,92 @@ class _PresionableState extends State<_Presionable> {
   }
 }
 
-/// MONEDAS ganadas con los objetivos, en la esquina superior derecha de
-/// la sección. Se toca para ver de dónde salieron.
+/// Uno de los tres bloques de Home: HOY, ESTA SEMANA y ESTE AÑO.
 ///
-/// Es la SUMA de lo que dieron las semanas que se ven abajo, y sube cada
-/// vez que se completa un objetivo. No es el saldo de la billetera —ese
-/// incluye meses anteriores y descuenta lo gastado en Premios—, porque
-/// acá tiene que cuadrar con lo que el usuario puede sumar a ojo.
-///
-/// Son MONEDAS: se gastan en Premios y caducan a los 90 días. Nunca
-/// puntos.
-class _SaldoMonedasChip extends StatefulWidget {
-  const _SaldoMonedasChip({required this.monedas});
-
-  final int monedas;
-
-  @override
-  State<_SaldoMonedasChip> createState() => _SaldoMonedasChipState();
-}
-
-class _SaldoMonedasChipState extends State<_SaldoMonedasChip> {
-  bool _presionado = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      // El hundido responde en el press, no al soltar.
-      onTapDown: (_) => setState(() => _presionado = true),
-      onTapUp: (_) => setState(() => _presionado = false),
-      onTapCancel: () => setState(() => _presionado = false),
-      onTap: () => mostrarHojaMonedas(context),
-      child: AnimatedScale(
-        scale: _presionado ? 0.94 : 1,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
-          decoration: BoxDecoration(
-            color: AppColors.accentSecondary.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(12),
-            // El borde y el chevron son lo que dice que esto se toca. Sin
-            // ellos parecía una etiqueta más y nadie lo intentaba.
-            border: Border.all(
-              color: AppColors.accentSecondary.withValues(alpha: 0.45),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const MonedaAnimada(size: 21),
-              const SizedBox(width: 5),
-              Text(
-                '${widget.monedas}',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 17,
-                color: AppColors.accentSecondary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Uno de los tres bloques de Home, con su etiqueta de horizonte
-/// temporal: DIARIO, SEMANAL, ANUAL.
-///
-/// La etiqueta va en `AppTheme.subsectionTitle`: el mismo azul de marca
-/// y la misma fuente que el título de la pantalla, pero a 12 px. Así un
-/// bloque se lee como pariente del título y no como una nota al margen
-/// —era gris y en Manrope—, sin competirle a los números grandes, que
-/// son lo que tiene que resaltar en Home.
-///
-/// La etiqueta va suelta sobre el fondo tintado: no hace falta ningún
-/// contenedor, porque el fondo ya separa los bloques de las tarjetas.
+/// Rediseño de Daniel del 24 de septiembre de 2026: los bloques no se
+/// distinguían. Tenían un rótulo de 12 px ("DIARIO") y, debajo, OTRO
+/// título con ícono ("Objetivos de la semana"): dos niveles de títulos
+/// peleando, y nada que dijera dónde terminaba un bloque y empezaba el
+/// siguiente. Ahora cada bloque tiene UN título, en grande, que nombra
+/// el horizonte de tiempo con palabras de todos los días, una línea que
+/// dice qué hay adentro, y una raya de un pelo que lo separa del de
+/// arriba.
 class _BloqueHorizonte extends StatelessWidget {
-  const _BloqueHorizonte({required this.titulo, required this.child});
+  const _BloqueHorizonte({
+    required this.icono,
+    required this.titulo,
+    required this.explica,
+    required this.child,
+    this.accion,
+    this.primero = false,
+  });
 
+  final IconData icono;
   final String titulo;
+
+  /// Qué hay en el bloque, en una línea: es lo que le dice al usuario
+  /// dónde buscar cada cosa.
+  final String explica;
+
   final Widget child;
+  final Widget? accion;
+
+  /// El primero no lleva raya arriba: arriba está el saludo.
+  final bool primero;
 
   @override
   Widget build(BuildContext context) {
-    final etiqueta = Text(titulo, style: AppTheme.subsectionTitle);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        etiqueta,
-        const SizedBox(height: AppSpacing.dentro),
+        if (!primero) ...[
+          const SizedBox(height: AppSpacing.seccion),
+          Container(height: 0.5, color: AppColors.separador),
+          const SizedBox(height: AppSpacing.grupo),
+        ],
+        Row(
+          children: [
+            // El ícono en un disco de azul pálido: en negro suelto se
+            // perdía entre tanto blanco.
+            Container(
+              width: 38,
+              height: 38,
+              decoration: const BoxDecoration(
+                color: AppColors.azulBruma,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icono, size: 20, color: AppColors.accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.display(
+                      22,
+                    ).copyWith(color: AppColors.textPrimary, height: 1.1),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    explica,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (accion case final a?) ...[
+              const SizedBox(width: AppSpacing.dentro),
+              a,
+            ],
+          ],
+        ),
+        const SizedBox(height: AppSpacing.grupo),
         child,
       ],
     );

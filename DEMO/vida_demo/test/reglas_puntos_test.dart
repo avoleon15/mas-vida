@@ -149,16 +149,16 @@ void main() {
       }
     });
 
-    test('nivel 3 va de 10.000 a 11.999 con 10% de cashback', () {
+    test('nivel 3 va de 10.000 a 14.999 con 10% de cashback', () {
       final n = nivelPorNumero(3)!;
       expect(n.puntosMinimos, 10000);
-      expect(n.puntosMaximos, 11999);
+      expect(n.puntosMaximos, 14999);
       expect(n.porcentajeCashback, 10);
     });
 
-    test('nivel 4 va de 12.000 a 15.000 con 20% de cashback', () {
+    test('nivel 4 arranca en 15.000 con 20% de cashback', () {
       final n = nivelPorNumero(4)!;
-      expect(n.puntosMinimos, 12000);
+      expect(n.puntosMinimos, 15000);
       expect(n.porcentajeCashback, 20);
     });
 
@@ -167,16 +167,15 @@ void main() {
       expect(nivelParaPuntos(2500), 1);
       expect(nivelParaPuntos(9999), 2);
       expect(nivelParaPuntos(11240), 3);
-      expect(nivelParaPuntos(12000), 4);
+      expect(nivelParaPuntos(12000), 3);
+      expect(nivelParaPuntos(15000), 4);
     });
 
-    test('el nivel 4 arranca justo donde topa la actividad física', () {
-      // `techoAnual` topa SOLO los puntos por actividad física. El nivel 4
-      // empieza exactamente ahí: de ese punto en adelante, los puntos
-      // vienen de los chequeos médicos.
-      expect(nivelPorNumero(4)!.puntosMinimos, techoAnual);
-      expect(nivelParaPuntos(techoAnual), 4);
-      expect(nivelParaPuntos(techoAnual - 1), 3);
+    test('el techo de actividad deja al usuario en el nivel 3', () {
+      // Con el chequeo fuera de v1, 12.000 es lo máximo del año: nivel 3,
+      // 10% de cashback. El nivel 4 queda fuera de alcance en el piloto.
+      expect(nivelParaPuntos(techoAnual), 3);
+      expect(nivelPorNumero(4)!.puntosMinimos, greaterThan(techoAnual));
     });
   });
 }

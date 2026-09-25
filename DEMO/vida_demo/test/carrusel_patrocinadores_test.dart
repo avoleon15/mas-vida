@@ -26,6 +26,7 @@ SemanaObjetivos _semana(int numero, String marca) => SemanaObjetivos(
   cierra: DateTime.utc(2026, 10, 11, 5, 59, 59),
   estado: EstadoSemana.futura,
   objetivos: const [],
+  monedas: 0,
   patrocinio: Patrocinio(
     id: marca.toLowerCase(),
     marca: marca,

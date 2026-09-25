@@ -54,7 +54,12 @@ void main() {
     });
 
     test('no pierde ni duplica ningún premio', () {
-      for (final destacados in [<int>{}, {0}, {2, 5}, {1, 2, 3, 4, 5, 6, 7}]) {
+      for (final destacados in [
+        <int>{},
+        {0},
+        {2, 5},
+        {1, 2, 3, 4, 5, 6, 7},
+      ]) {
         final original = lista(12, destacados: destacados);
         final orden = destacadosPrimero(original);
 

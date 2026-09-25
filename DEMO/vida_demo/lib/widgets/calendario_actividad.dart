@@ -364,7 +364,7 @@ class _Detalle extends StatelessWidget {
     final d = dia;
     if (d == null) {
       return Text(
-        'Tocá un día para ver sus pasos y sus puntos.',
+        'Toca un día para ver sus pasos y sus puntos.',
         style: Theme.of(
           context,
         ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
-import 'package:vida_demo/reglas_rango.dart';
+import 'package:vida_demo/hora_guatemala.dart';
 
 // ============================================================
 // EL RELEVO DE SEMANA: LUNES 00:00, HORA DE GUATEMALA.
@@ -11,7 +11,7 @@ import 'package:vida_demo/reglas_rango.dart';
 //
 // Que no lo decida el teléfono no es un detalle de arquitectura: si lo
 // decidiera, cambiar la zona horaria en Ajustes abriría una semana nueva
-// antes de tiempo, con tres objetivos nuevos y un rango más para ganar.
+// antes de tiempo, con dos objetivos nuevos y otra semana de monedas.
 // ============================================================
 
 void main() {

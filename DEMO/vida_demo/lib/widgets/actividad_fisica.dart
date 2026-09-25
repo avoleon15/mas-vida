@@ -68,8 +68,8 @@ class RitmoCardiacoHoy extends StatelessWidget {
 //   SEMANA → cada ENTRENAMIENTO, con los puntos que pagó. Es el único
 //            tramo donde una sesión suelta todavía se recuerda.
 //   MES    → cada SEMANA del mes, con sus pasos y sus puntos. La semana
-//            es la unidad en la que se mueve el rango, así que es la
-//            que dice si el mes viene bien o mal.
+//            es la unidad de los objetivos, así que es la que dice si
+//            el mes viene bien o mal.
 //   AÑO    → cada MES, con sus puntos. Es lo que construye el nivel de
 //            cashback, que se define por los puntos del año.
 //

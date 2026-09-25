@@ -37,24 +37,32 @@ void main() {
     final semanas = h.semanasDelMes;
 
     expect(semanas.length, 4);
-    expect(
-      semanas.map((s) => s.first.fecha.day).toList(),
-      [3, 10, 17, 24],
-      reason: 'cada semana arranca en su lunes de agosto',
-    );
+    expect(semanas.map((s) => s.first.fecha.day).toList(), [
+      3,
+      10,
+      17,
+      24,
+    ], reason: 'cada semana arranca en su lunes de agosto');
   });
 
-  test('el 1 y el 2 de agosto no son "semana 1": son de la semana de julio', () {
-    final h = historialQueTerminaEl(DateTime(2026, 8, 26));
-    final primera = h.semanasDelMes.first;
+  test(
+    'el 1 y el 2 de agosto no son "semana 1": son de la semana de julio',
+    () {
+      final h = historialQueTerminaEl(DateTime(2026, 8, 26));
+      final primera = h.semanasDelMes.first;
 
-    expect(primera.length, 7, reason: 'la primera barra es una semana entera');
-    expect(
-      primera.any((d) => d.fecha.day <= 2),
-      isFalse,
-      reason: 'el 1 y el 2 cayeron en la semana del 27 de julio',
-    );
-  });
+      expect(
+        primera.length,
+        7,
+        reason: 'la primera barra es una semana entera',
+      );
+      expect(
+        primera.any((d) => d.fecha.day <= 2),
+        isFalse,
+        reason: 'el 1 y el 2 cayeron en la semana del 27 de julio',
+      );
+    },
+  );
 
   test('la única semana corta es la última, porque va en curso', () {
     final h = historialQueTerminaEl(DateTime(2026, 8, 26));
@@ -75,15 +83,18 @@ void main() {
     expect(semanas.first.first.fecha.day, 1);
   });
 
-  test('antes del primer lunes del mes se devuelve la semana en curso sola', () {
-    // Sábado 1 de agosto de 2026: agosto todavía no tiene un lunes
-    // propio, así que no tiene ninguna semana propia.
-    final h = historialQueTerminaEl(DateTime(2026, 8, 1));
-    final semanas = h.semanasDelMes;
+  test(
+    'antes del primer lunes del mes se devuelve la semana en curso sola',
+    () {
+      // Sábado 1 de agosto de 2026: agosto todavía no tiene un lunes
+      // propio, así que no tiene ninguna semana propia.
+      final h = historialQueTerminaEl(DateTime(2026, 8, 1));
+      final semanas = h.semanasDelMes;
 
-    expect(semanas.length, 1, reason: 'una barra, sin nada al lado');
-    expect(semanas.single, h.semanaEnCurso);
-  });
+      expect(semanas.length, 1, reason: 'una barra, sin nada al lado');
+      expect(semanas.single, h.semanaEnCurso);
+    },
+  );
 
   test('los días aplanados son exactamente los de las semanas del mes', () {
     final h = historialQueTerminaEl(DateTime(2026, 8, 26));

@@ -4,12 +4,12 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../datos/modelos.dart';
-import '../reglas_rango.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
+import '../widgets/chip_monedas.dart';
+import '../widgets/hoja_monedas.dart';
 import '../widgets/moneda_animada.dart';
 import '../widgets/curva_camino.dart';
-import '../widgets/insignia_rango.dart';
 import '../widgets/patrocinio.dart';
 import '../widgets/tarjeta_semana.dart';
 
@@ -36,24 +36,19 @@ import '../widgets/tarjeta_semana.dart';
 // esquinas de 90° lo que se veía era el contorno de una tabla.
 //
 // CADA CÍRCULO DICE QUÉ SEMANA ES, con todas las letras: "SEM 7". En la
-// pantalla conviven tres escaleras de números —semanas, rangos y
-// monedas— y un número suelto adentro de un círculo puede ser cualquiera
-// de las tres. Lo que el usuario necesita saber al mirar adelante es a
-// qué SEMANA va a entrar.
+// pantalla conviven dos escaleras de números —semanas y monedas— y un
+// número suelto adentro de un círculo puede ser cualquiera de las dos.
+// Lo que el usuario necesita saber al mirar adelante es a qué SEMANA va
+// a entrar.
 //
 // UNA SOLA COSA LEVANTADA, Y ES EL CAMINO. No hay tarjetas en esta
-// pantalla: el rango es un renglón apoyado sobre el fondo con una línea
-// de un pelo debajo, y lo que cada semana paga va sin pastilla blanca.
-// Lo único con cuerpo propio es la cinta.
+// pantalla: lo que cada semana paga va sin pastilla blanca. Lo único con
+// cuerpo propio es la cinta.
 //
 // NO HAY CANDADOS EN NINGÚN NODO. Un candado promete que hay algo que
 // hacer para abrirlo, y acá no lo hay: la semana 7 llega el 7, haga lo
-// que haga el usuario. Adelante va la RECOMPENSA, no la traba.
-//
-// SEMANA Y RANGO NO COINCIDEN. Fallar baja un rango, así que en la
-// semana 5 se puede estar subiendo apenas al 4. Por eso los montos salen
-// de `ObjetivosSemana.recorrido`, que arrastra el rango semana a semana,
-// y nunca del número de la semana.
+// que haga el usuario. Adelante va la RECOMPENSA, no la traba. Lo que
+// paga cada semana lo manda el servidor en la propia semana.
 // ============================================================
 
 /// Alto de cada renglón del camino.
@@ -156,9 +151,7 @@ class CaminoSemanasScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final recorrido = objetivos.recorrido;
     final enCurso = objetivos.enCurso;
-    final ganadas = objetivos.monedasGanadas;
 
     return Scaffold(
       body: SafeArea(
@@ -190,10 +183,6 @@ class CaminoSemanasScreen extends StatelessWidget {
                         Text('TU CAMINO', style: AppTheme.sectionTitle),
                         const SizedBox(height: 2),
                         Text(
-                          // Solo la semana. El rango se fue a su tarjeta,
-                          // que es donde además se explica cómo se sube;
-                          // acá arriba los dos juntos eran dos escaleras
-                          // distintas en el mismo renglón.
                           enCurso == null
                               ? '${objetivos.semanas.length} semanas'
                               : 'Semana ${enCurso.numero} de '
@@ -204,48 +193,27 @@ class CaminoSemanasScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (ganadas > 0) _MonedasGanadas(monedas: ganadas),
+                  // El SALDO de la billetera, el mismo número de Premios
+                  // (decisión de Daniel, 24 de septiembre de 2026: se sacó
+                  // de Hoy y vive acá, al lado de lo que paga cada semana).
+                  // Tocarlo abre de qué está hecho y cuándo caduca.
+                  ChipMonedas(
+                    cantidad: saldoMonedas,
+                    onTap: () => mostrarHojaMonedas(context),
+                  ),
                 ],
               ),
             ),
-            // Una sola tira que scrollea: la tarjeta de rango y el camino
-            // se mueven juntos. Antes el camino tenía su propio scroll, y
-            // con algo debajo habrían quedado dos scrolls anidados, que
-            // es la forma más rápida de que ninguno de los dos responda
-            // bien al dedo.
+            // EL PATROCINADOR YA NO VIVE ACÁ (decisión de Daniel, 21 de
+            // septiembre de 2026). Cada marca aparece al ABRIR su semana,
+            // que es el momento en que el usuario preguntó por ella. En el
+            // camino quedan las dos señales chicas de siempre: el logo
+            // montado en el borde del nodo y el anillo con el color de la
+            // marca.
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.only(bottom: 28),
-                child: Column(
-                  children: [
-                    // EL PATROCINADOR YA NO VIVE ACÁ (decisión de Daniel,
-                    // 21 de septiembre de 2026). Estaba la foto de la
-                    // marca de la semana en curso a pantalla completa y,
-                    // debajo, un botón con las marcas de las semanas que
-                    // vienen: dos bloques de publicidad antes de ver el
-                    // camino, que es el protagonista de la pantalla.
-                    //
-                    // Ahora cada marca aparece al ABRIR su semana, que es
-                    // el momento en que el usuario preguntó por ella. En
-                    // el camino quedan las dos señales chicas de siempre:
-                    // el logo montado en el borde del nodo y el anillo
-                    // con el color de la marca.
-                    _RenglonRango(
-                      rango: objetivos.rangoActual,
-                      // El siguiente sale de las reglas y no de
-                      // `rango + 1`: en el tope de la escalera no hay
-                      // siguiente y la frase cambia.
-                      siguiente: objetivos.rangoActual < rangoMaximo
-                          ? objetivos.rangoActual + 1
-                          : null,
-                    ),
-                    _Camino(
-                      recorrido: recorrido,
-                      rangoActual: objetivos.rangoActual,
-                      totalSemanas: objetivos.semanas.length,
-                    ),
-                  ],
-                ),
+                child: _Camino(semanas: objetivos.semanas),
               ),
             ),
           ],
@@ -255,136 +223,14 @@ class CaminoSemanasScreen extends StatelessWidget {
   }
 }
 
-/// Llave del renglón de rango, para los tests.
-const Key llaveRenglonRango = ValueKey('renglon-rango');
-
-/// En qué rango va el usuario y CÓMO SE SUBE.
-///
-/// La segunda mitad es la razón de existir de este renglón. El medallón
-/// ya estaba en la pantalla —suelto, al lado del título—, pero en ningún
-/// lado decía qué hace subir una muesca: el usuario veía una escalera de
-/// diez escalones y ninguna regla para moverse.
-///
-/// Es UNA oración y dice las dos direcciones. Que se pueda BAJAR no es
-/// un detalle que se pueda callar: es la mitad de la mecánica, y
-/// enterarse un lunes de que se bajó sin que nadie lo hubiera avisado se
-/// siente un castigo escondido.
-///
-/// YA NO ES UNA TARJETA (decisión de Daniel, 22 de septiembre de 2026).
-/// Era un bloque de `azulNiebla` con radio propio arriba del camino, y
-/// CLAUDE.md pide UNA sola cosa levantada por pantalla: acá esa cosa es
-/// el camino. Con la superficie afuera, el medallón se apoya directo
-/// sobre el fondo y lo único que separa esta información del recorrido
-/// es una línea de un pelo, que es lo que hace iOS.
-///
-/// Sin números de monedas acá: cuánto paga cada escalón está debajo de
-/// cada nodo del camino, que es donde se compara uno contra otro.
-class _RenglonRango extends StatelessWidget {
-  const _RenglonRango({required this.rango, required this.siguiente});
-
-  final int rango;
-
-  /// El escalón que sigue, o null si ya está en el último.
-  final int? siguiente;
-
-  @override
-  Widget build(BuildContext context) {
-    final siguiente = this.siguiente;
-
-    return Column(
-      key: llaveRenglonRango,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-          child: Row(
-            children: [
-              // Más grande que antes (56 -> 68): era lo único de la
-              // pantalla que habla del usuario y estaba del tamaño de un
-              // ícono.
-              InsigniaRango(rango: rango, tamano: 68),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Rango $rango de $rangoMaximo',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      siguiente == null
-                          // En el tope no se promete un escalón que no
-                          // existe, pero se sigue pudiendo bajar.
-                          ? 'Llegaste al último. Cumplí los tres objetivos '
-                                'de la semana para quedarte acá.'
-                          : 'Cumplí los tres objetivos de la semana y subís '
-                                'al $siguiente. Si no, bajás uno.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        // La línea de un pelo que reemplaza al borde de la tarjeta. Corta
-        // de lado a lado y no de margen a margen: así se lee como el
-        // corte entre dos secciones y no como el contorno de una caja.
-        Container(height: 0.5, color: AppColors.separador),
-      ],
-    );
-  }
-}
-
-/// Lo ya ganado, en el encabezado.
-class _MonedasGanadas extends StatelessWidget {
-  const _MonedasGanadas({required this.monedas});
-
-  final int monedas;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Llevás $monedas monedas ganadas',
-    excludeSemantics: true,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const MonedaAnimada(size: 20),
-        const SizedBox(width: 5),
-        Text(
-          '$monedas',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: AppColors.accentSecondary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 // ============================================================
 // El camino.
 // ============================================================
 
 class _Camino extends StatelessWidget {
-  const _Camino({
-    required this.recorrido,
-    required this.rangoActual,
-    required this.totalSemanas,
-  });
+  const _Camino({required this.semanas});
 
-  final List<PasoDelPrograma> recorrido;
-  final int rangoActual;
-  final int totalSemanas;
+  final List<SemanaObjetivos> semanas;
 
   /// Dónde cae cada semana: en qué columna y en qué fila.
   ///
@@ -400,7 +246,7 @@ class _Camino extends StatelessWidget {
   /// SIEMPRE en la misma columna, así que el tramo entre una fila y la
   /// siguiente es vertical y corto. Ningún tramo es diagonal.
   ///
-  /// Devuelve (columna, fila) por semana, en el orden del recorrido.
+  /// Devuelve (columna, fila) por semana, en orden.
   static List<({int columna, int fila})> _serpentina(
     int cuantas,
     int columnas,
@@ -423,19 +269,18 @@ class _Camino extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (recorrido.isEmpty) return const SizedBox.shrink();
+    if (semanas.isEmpty) return const SizedBox.shrink();
 
     final quieto = MediaQuery.disableAnimationsOf(context);
     // Un programa de dos semanas usa dos columnas, no tres con una
     // vacía: la grilla tiene que quedar llena para verse pareja.
-    final columnas = math.min(_columnasDelCamino, recorrido.length);
-    final lugares = _serpentina(recorrido.length, columnas);
+    final columnas = math.min(_columnasDelCamino, semanas.length);
+    final lugares = _serpentina(semanas.length, columnas);
     final filas = lugares.map((l) => l.fila).reduce(math.max) + 1;
     final alto = filas * _altoFila;
 
     // Sin scroll propio: el camino es UNA pieza de alto conocido adentro
-    // del scroll de la pantalla, que es el que mueve también a la tarjeta
-    // del patrocinador de arriba.
+    // del scroll de la pantalla.
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       child: LayoutBuilder(
@@ -467,7 +312,7 @@ class _Camino extends StatelessWidget {
               // aparece cuando la cinta llega hasta él. Es lo que
               // convierte una grilla de círculos en un recorrido: se ve
               // de dónde viene y hacia dónde sigue.
-              final tramos = math.max(recorrido.length - 1, 1);
+              final tramos = math.max(semanas.length - 1, 1);
               double aparicionDe(int i) => quieto
                   ? 1
                   // El 0.9 le da ventaja al nodo sobre la cinta: si
@@ -485,22 +330,20 @@ class _Camino extends StatelessWidget {
                       child: CustomPaint(
                         painter: _PintorCamino(
                           centros: centros,
-                          recorrido: recorrido,
+                          semanas: semanas,
                           crecimiento: t,
                         ),
                       ),
                     ),
-                    for (var i = 0; i < recorrido.length; i++)
+                    for (var i = 0; i < semanas.length; i++)
                       Positioned(
                         left: centros[i].dx - anchoCelda / 2,
                         top: centros[i].dy - _altoFila / 2,
                         width: anchoCelda,
                         height: _altoFila,
                         child: _Nodo(
-                          key: llaveNodoSemana(recorrido[i].semana.numero),
-                          paso: recorrido[i],
-                          rangoActual: rangoActual,
-                          totalSemanas: totalSemanas,
+                          key: llaveNodoSemana(semanas[i].numero),
+                          semana: semanas[i],
                           aparicion: aparicionDe(i),
                         ),
                       ),
@@ -530,12 +373,12 @@ class _Camino extends StatelessWidget {
 class _PintorCamino extends CustomPainter {
   const _PintorCamino({
     required this.centros,
-    required this.recorrido,
+    required this.semanas,
     required this.crecimiento,
   });
 
   final List<Offset> centros;
-  final List<PasoDelPrograma> recorrido;
+  final List<SemanaObjetivos> semanas;
   final double crecimiento;
 
   /// Si el tramo que SALE de la semana [i] ya se caminó.
@@ -544,7 +387,7 @@ class _PintorCamino extends CustomPainter {
   /// no se cumplió, queda pálido. Nada se marchita ni se pinta de rojo —
   /// la app tiene que transmitir calma, no reproche.
   bool _caminado(int i) =>
-      !recorrido[i].proyectado && recorrido[i].semana.subioDeRango;
+      semanas[i].estado == EstadoSemana.cerrada && semanas[i].cumplida;
 
   /// El último tramo ya caminado, o null si no hay ninguno.
   int? _hastaDonde() {
@@ -646,17 +489,9 @@ Key llaveNodoSemana(int numero) => ValueKey('nodo-semana-$numero');
 Key llaveCirculoSemana(int numero) => ValueKey('circulo-semana-$numero');
 
 class _Nodo extends StatefulWidget {
-  const _Nodo({
-    super.key,
-    required this.paso,
-    required this.rangoActual,
-    required this.totalSemanas,
-    required this.aparicion,
-  });
+  const _Nodo({super.key, required this.semana, required this.aparicion});
 
-  final PasoDelPrograma paso;
-  final int rangoActual;
-  final int totalSemanas;
+  final SemanaObjetivos semana;
 
   /// Cuánto lleva aparecido este nodo, de 0 a 1.
   ///
@@ -671,14 +506,9 @@ class _Nodo extends StatefulWidget {
 class _NodoState extends State<_Nodo> {
   bool _presionado = false;
 
-  SemanaObjetivos get _semana => widget.paso.semana;
+  SemanaObjetivos get _semana => widget.semana;
 
-  void _abrir() => mostrarHojaSemana(
-    context,
-    paso: widget.paso,
-    rangoActual: widget.rangoActual,
-    totalSemanas: widget.totalSemanas,
-  );
+  void _abrir() => mostrarHojaSemana(context, semana: widget.semana);
 
   @override
   Widget build(BuildContext context) {
@@ -702,7 +532,7 @@ class _NodoState extends State<_Nodo> {
 
   Widget _cuerpo(BuildContext context) {
     final estado = _semana.estado;
-    final cumplida = estado == EstadoSemana.cerrada && _semana.subioDeRango;
+    final cumplida = estado == EstadoSemana.cerrada && _semana.cumplida;
     final enCurso = estado == EstadoSemana.enCurso;
     final patrocinio = _semana.patrocinio;
 
@@ -801,7 +631,7 @@ class _NodoState extends State<_Nodo> {
               left: 0,
               right: 0,
               top: _altoFila / 2 + _diametroVisible(cumplida, enCurso) / 2 + 6,
-              child: _PieDelNodo(paso: widget.paso, cumplida: cumplida),
+              child: _PieDelNodo(semana: _semana, cumplida: cumplida),
             ),
           ],
         ),
@@ -826,35 +656,20 @@ class _NodoState extends State<_Nodo> {
       enCurso ? _dHalo : _diametroDe(cumplida, enCurso);
 
   /// Qué le dice el nodo a VoiceOver.
-  ///
-  /// Lleva el rango que el pie del nodo dejó de escribir: en la pantalla
-  /// esa relación la explica la tarjeta de arriba, pero alguien que
-  /// recorre el camino con el lector de a un nodo por vez nunca la
-  /// escuchó, y "más 20 monedas" solo no dice a dónde lleva.
-  String _dicho() {
-    final paso = widget.paso;
+  String _dicho() => switch (_semana.estado) {
+    EstadoSemana.cerrada when _semana.cumplida =>
+      'cumplida, ganaste ${_semana.monedas} monedas',
+    EstadoSemana.cerrada => 'cerrada, sin monedas',
+    EstadoSemana.enCurso =>
+      'esta semana, ${_semana.cumplidos} de '
+          '${_semana.objetivos.length} objetivos, ${_loQuePaga()}',
+    EstadoSemana.futura => 'empieza más adelante, ${_loQuePaga()}',
+  };
 
-    return switch (_semana.estado) {
-      EstadoSemana.cerrada when _semana.subioDeRango =>
-        'cumplida, ganaste ${paso.monedas} monedas y subiste al rango '
-            '${paso.rangoAlCerrar}',
-      EstadoSemana.cerrada => 'cerrada, no subiste de rango',
-      EstadoSemana.enCurso =>
-        'esta semana, ${_semana.cumplidos} de '
-            '${_semana.objetivos.length} objetivos, '
-            '${_loQuePaga(paso)}',
-      EstadoSemana.futura => 'empieza más adelante, ${_loQuePaga(paso)}',
-    };
-  }
-
-  /// "paga 20 monedas al subir al rango 4", o nada si no paga.
-  ///
-  /// Una semana que no sube de rango no paga: decir "paga 0 monedas"
-  /// sería anunciar un premio que no existe.
-  String _loQuePaga(PasoDelPrograma paso) => paso.monedas <= 0
-      ? 'sin monedas'
-      : 'paga ${paso.monedas} monedas al subir al rango '
-            '${paso.rangoAlCerrar}';
+  /// "paga 20 monedas", o "sin monedas" si no paga: decir "paga 0
+  /// monedas" sería anunciar un premio que no existe.
+  String _loQuePaga() =>
+      _semana.monedas <= 0 ? 'sin monedas' : 'paga ${_semana.monedas} monedas';
 }
 
 /// El anillo con el color de la marca, alrededor del nodo de una semana
@@ -901,9 +716,9 @@ class _AnilloDeMarca extends StatelessWidget {
 /// blanco con el borde azul y su halo, la futura en azul pálido.
 ///
 /// Y lo dicen con todas las letras —"SEM 7" y no un 7 suelto—. En esta
-/// pantalla conviven tres escaleras de números: semanas, rangos y
-/// monedas. Un número solo adentro de un círculo puede ser cualquiera de
-/// las tres, y lo que el usuario necesita saber al mirar adelante es a
+/// pantalla conviven dos escaleras de números: semanas y monedas. Un
+/// número solo adentro de un círculo puede ser cualquiera de las dos, y
+/// lo que el usuario necesita saber al mirar adelante es a
 /// qué SEMANA va a entrar. Tres letras lo resuelven sin colgarle una
 /// etiqueta al nodo: rotular los diez por fuera eran diez cajitas
 /// blancas flotando sobre el camino, y el ojo terminaba leyendo la
@@ -1191,15 +1006,12 @@ class _EtiquetaSemana extends StatelessWidget {
 /// Abajo y no al lado: con tres columnas en el ancho de un iPhone no
 /// queda lugar para poner nada a los costados del círculo.
 ///
-/// SOLO EL NÚMERO. Decía "+15 al Rango 3", en dos renglones y en los
-/// diez nodos: la misma frase diez veces, con el rango cambiando de a
-/// uno. Cómo se sube de rango lo explica ahora la tarjeta de arriba, una
-/// sola vez y con palabras; acá abajo lo único que hace falta es cuánto
-/// paga cada semana, que es lo que se compara de un nodo al otro.
+/// SOLO EL NÚMERO: lo único que hace falta acá es cuánto paga cada
+/// semana, que es lo que se compara de un nodo al otro.
 class _PieDelNodo extends StatelessWidget {
-  const _PieDelNodo({required this.paso, required this.cumplida});
+  const _PieDelNodo({required this.semana, required this.cumplida});
 
-  final PasoDelPrograma paso;
+  final SemanaObjetivos semana;
   final bool cumplida;
 
   /// El fondo que separa el texto de la cinta que pasa por detrás.
@@ -1224,7 +1036,12 @@ class _PieDelNodo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (paso.monedas <= 0) {
+    // Una semana cerrada dice lo que PAGÓ; las demás, lo que pagan si se
+    // cumplen, que es una proyección.
+    final cerrada = semana.estado == EstadoSemana.cerrada;
+    final monedas = cerrada ? semana.monedasGanadas : semana.monedas;
+
+    if (monedas <= 0) {
       return Center(
         heightFactor: 1,
         child: _sobreElFondo(
@@ -1241,17 +1058,17 @@ class _PieDelNodo extends StatelessWidget {
       );
     }
 
-    final futura = paso.semana.estado == EstadoSemana.futura;
+    final futura = semana.estado == EstadoSemana.futura;
 
     final fila = Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        MonedaAnimada(size: 14, apagado: paso.proyectado),
+        MonedaAnimada(size: 14, apagado: !cerrada),
         const SizedBox(width: 3),
         Flexible(
           child: Text(
-            '+${paso.monedas}',
+            '+$monedas',
             maxLines: 1,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(

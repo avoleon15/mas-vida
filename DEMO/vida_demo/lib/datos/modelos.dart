@@ -12,10 +12,6 @@
 // GET /api/v1/retos/estado. Los mocks de acá son la propuesta.
 // ============================================================
 
-// Los topes de la escalera y cuánto paga cada escalón viven en el motor
-// de reglas, no acá: este archivo solo lee datos y los expone.
-import '../reglas_rango.dart';
-
 /// Cómo llegó el dato de un día. Distinguir `sinPermiso` de un día con
 /// cero pasos es una regla dura: HealthKit nunca informa si el usuario
 /// negó el permiso de lectura, solo se infiere porque no vuelve nada.
@@ -382,10 +378,8 @@ class SaldoMonedas {
 
   /// Tope de monedas al mes, o null mientras no esté definido.
   ///
-  /// [PENDIENTE] Era 8, pero la escalera de rango puede pagar
-  /// 5 + 10 + 15 + 20 = 50 en un mes de cuatro semanas: el techo viejo
-  /// hacía imposible la propia mecánica. Queda null hasta que se acuerde
-  /// uno coherente — un número inventado acá terminaría en la
+  /// [PENDIENTE] Queda null hasta que se acuerde uno coherente con lo que
+  /// paga cada semana: un número inventado acá terminaría en la
   /// presentación como si fuera real.
   final int? techoMensual;
   final List<LoteMonedas> lotes;
@@ -413,12 +407,9 @@ class SaldoMonedas {
 
 /// UN objetivo de la semana.
 ///
-/// Los objetivos son SEMANALES: las metas mensuales ya no existen.
-///
-/// Un objetivo NO paga nada por sí solo. Lo que paga MONEDAS es cumplir
-/// los tres de la semana, porque eso sube un rango (ver
-/// `monedasPorSubirA` en reglas_rango.dart). Cumplir uno o dos no
-/// acredita nada ni se arrastra a la semana siguiente.
+/// Son DOS por semana: pasos y minutos de entrenamiento. Un objetivo NO
+/// paga nada por sí solo: lo que paga MONEDAS es cumplir los dos de la
+/// semana (ver [SemanaObjetivos.cumplida]).
 class ObjetivoSemanal {
   const ObjetivoSemanal({
     required this.id,
@@ -429,17 +420,17 @@ class ObjetivoSemanal {
     required this.completo,
   });
 
-  /// Identificador estable. Es lo que casa el objetivo con su definición
-  /// en el motor de reglas, nunca el nombre visible.
+  /// Identificador estable. Es lo que viaja en el JSON, nunca el nombre
+  /// visible.
   final String id;
 
   final String nombre;
   final int progreso;
 
-  /// Cuánto pide el objetivo en el rango de esa semana.
+  /// Cuánto pide el objetivo esa semana.
   ///
-  /// Null mientras la tabla de dificultad por rango no esté definida. La
-  /// UI muestra "pendiente", nunca un número inventado.
+  /// Null mientras la tabla de metas por semana no esté definida. La UI
+  /// muestra "En curso", nunca un número inventado.
   final int? meta;
 
   final String unidad;
@@ -468,20 +459,23 @@ enum EstadoSemana {
   futura,
 }
 
-/// Una semana con sus 3 objetivos.
+/// Una semana con sus dos objetivos.
 ///
-/// Los tres son de la MISMA semana y se evalúan de una sola vez, el
-/// domingo 23:59 (hora de Guatemala).
+/// Los dos son de la MISMA semana y se evalúan de una sola vez, el
+/// domingo 23:59 (hora de Guatemala). Al cerrar, todos pasan a la semana
+/// siguiente del programa, la hayan cumplido o no: el calendario avanza
+/// solo.
 class SemanaObjetivos {
   const SemanaObjetivos({
     required this.numero,
     required this.cierra,
     required this.estado,
     required this.objetivos,
+    required this.monedas,
     this.patrocinio,
   });
 
-  /// Número de semana dentro del mes: 1, 2, 3… Un mes puede tener 5.
+  /// Número de semana dentro del programa: 1, 2, 3…
   final int numero;
 
   /// Domingo 23:59 en que se evalúa.
@@ -490,6 +484,12 @@ class SemanaObjetivos {
   final EstadoSemana estado;
   final List<ObjetivoSemanal> objetivos;
 
+  /// MONEDAS que paga esta semana si se cumplen los dos objetivos.
+  ///
+  /// Las decide el SERVIDOR, semana por semana: la app no tiene ninguna
+  /// regla para calcularlas y no inventa una.
+  final int monedas;
+
   /// La marca aliada que compró ESTA semana, si alguna la compró.
   ///
   /// NO todas las semanas tienen: solo las que una alianza pagó por
@@ -497,25 +497,25 @@ class SemanaObjetivos {
   /// de terminado sin logo — nada puede cambiar de tamaño ni de lugar
   /// según si la semana está vendida.
   ///
-  /// Cumplir una semana patrocinada paga el cupón de esa marca en vez
-  /// del premio genérico del catálogo. Las MONEDAS del rango se pagan
-  /// igual: el patrocinio cambia el premio, no la mecánica.
+  /// Cumplir una semana patrocinada paga el cupón de esa marca ADEMÁS de
+  /// las [monedas]: el patrocinio suma un premio, no cambia la mecánica.
   final Patrocinio? patrocinio;
 
   /// Si esta semana la compró una marca.
   bool get tienePatrocinio => patrocinio != null;
 
-  /// Cuántos de los tres van cumplidos.
+  /// Cuántos objetivos van cumplidos.
   int get cumplidos => objetivos.where((o) => o.completo).length;
 
-  /// Cuántos faltan para completar la semana.
-  int get faltan => objetivos.length - cumplidos;
+  /// Si están los dos. Es la regla entera de lo que paga: no hay crédito
+  /// parcial ni sobrante que se arrastre a la semana siguiente.
+  bool get cumplida => cumplidos == objetivos.length;
 
-  /// Cumplir los TRES es lo único que sube de rango.
-  ///
-  /// Es la regla entera: no hay medidor intermedio, ni crédito parcial,
-  /// ni sobrante que se arrastre. Tres checks.
-  bool get subioDeRango => cumplidos == objetivos.length;
+  /// Lo que la semana YA PAGÓ: sus monedas si cerró cumplida, cero en
+  /// cualquier otro caso. Una semana en curso con los dos cumplidos
+  /// todavía no pagó — se evalúa el domingo 23:59.
+  int get monedasGanadas =>
+      estado == EstadoSemana.cerrada && cumplida ? monedas : 0;
 
   factory SemanaObjetivos.desdeJson(Map<String, dynamic> j) => SemanaObjetivos(
     numero: j['numero'] as int,
@@ -528,150 +528,30 @@ class SemanaObjetivos {
     objetivos: (j['objetivos'] as List)
         .map((o) => ObjetivoSemanal.desdeJson(o as Map<String, dynamic>))
         .toList(),
+    monedas: j['monedas'] as int,
     patrocinio: j['patrocinio'] == null
         ? null
         : Patrocinio.desdeJson(j['patrocinio'] as Map<String, dynamic>),
   );
 }
 
-/// Una semana del programa, con el rango en que deja y lo que paga.
-///
-/// Existe porque el monto de una semana NO se puede leer de su número:
-/// depende del rango con el que se llega a ella, y ese rango sale de
-/// haber recorrido todas las anteriores. Ver [ObjetivosSemana.recorrido].
-class PasoDelPrograma {
-  const PasoDelPrograma({
-    required this.semana,
-    required this.rangoAlCerrar,
-    required this.monedas,
-    required this.proyectado,
-  });
-
-  final SemanaObjetivos semana;
-
-  /// En qué rango queda el usuario al cerrar esta semana.
-  final int rangoAlCerrar;
-
-  /// MONEDAS que paga esta semana. Cero si no hizo subir de rango.
-  final int monedas;
-
-  /// True cuando la semana todavía no cerró, así que [rangoAlCerrar] y
-  /// [monedas] son el MEJOR CASO —asume que la cumple— y no un hecho.
-  ///
-  /// Toda pantalla que muestre un valor proyectado tiene que decir que lo
-  /// es. Mostrar una proyección como si fuera plata acreditada es
-  /// prometer algo que el usuario todavía no ganó.
-  final bool proyectado;
-}
-
-/// Bloque de "Objetivos de la semana" de Home: las semanas del mes en
-/// curso, cada una con sus 3 objetivos.
-///
-/// Reemplaza por completo al bloque viejo de metas mensuales, que ya no
-/// existe. Las reglas del movimiento de rango viven en
-/// `reglas_rango.dart`.
+/// Bloque de "Objetivos de la semana" de Home: las semanas del programa,
+/// cada una con sus dos objetivos.
 class ObjetivosSemana {
-  const ObjetivosSemana({required this.rangoActual, required this.semanas});
+  const ObjetivosSemana({required this.semanas});
 
-  /// Rango en la escalera. Paga MONEDAS, nunca puntos.
-  ///
-  /// Llega como `nivel_actual`, igual que en [EstadoRetos] y por el mismo
-  /// motivo: es la misma escalera y el JSON usa el nombre del contrato.
-  final int rangoActual;
-
-  /// Las semanas del programa.
-  ///
-  /// Hoy son [semanasDelPrograma], una por escalón de la escalera, pero
-  /// la app NO asume esa cantidad: renderiza las que vengan. Antes acá
-  /// decía "las semanas del mes, 4 o 5" — eso quedó del modelo viejo,
-  /// cuando el rango se reiniciaba cada mes.
+  /// Las semanas del programa. La app NO asume cuántas son: renderiza
+  /// las que vengan.
   final List<SemanaObjetivos> semanas;
 
-  /// El programa semana por semana: en qué rango deja cada una y cuánto
-  /// paga.
+  /// MONEDAS acuñadas en el programa con los objetivos.
   ///
-  /// **Semana y rango NO coinciden.** Fallar baja un rango, así que
-  /// alguien puede estar en la semana 5 subiendo apenas al rango 4. Por
-  /// eso el monto de una semana NO se puede sacar de su número: hay que
-  /// recorrerlas en orden y arrastrar el rango.
-  ///
-  /// Las semanas ya CERRADAS traen lo que pasó de verdad. Las que todavía
-  /// no cerraron traen una PROYECCIÓN de mejor caso: asume que el usuario
-  /// las cumple todas de acá en adelante. Esa proyección se recalcula
-  /// sola en cuanto alguien falla una semana, porque el rango del que
-  /// parte cambia — no hay ningún monto fijo por número de semana.
-  List<PasoDelPrograma> get recorrido {
-    final pasos = <PasoDelPrograma>[];
-    var rango = rangoMinimo;
-
-    for (final s in semanas) {
-      final cerrada = s.estado == EstadoSemana.cerrada;
-      // La proyección asume que la cumple. Es la única suposición honesta
-      // para algo que todavía no pasó: mostrar el mejor caso y decir que
-      // es el mejor caso.
-      final sube = cerrada ? s.subioDeRango : true;
-
-      final nuevo = sube
-          ? (rango + 1).clamp(rangoMinimo, rangoMaximo)
-          : (rango - 1).clamp(rangoMinimo, rangoMaximo);
-
-      pasos.add(
-        PasoDelPrograma(
-          semana: s,
-          rangoAlCerrar: nuevo,
-          monedas: nuevo > rango ? monedasPorSubirA(nuevo) : 0,
-          proyectado: !cerrada,
-        ),
-      );
-      rango = nuevo;
-    }
-
-    return pasos;
-  }
-
-  /// El paso del recorrido que le toca a [numeroDeSemana].
-  PasoDelPrograma? pasoDe(int numeroDeSemana) {
-    for (final p in recorrido) {
-      if (p.semana.numero == numeroDeSemana) return p;
-    }
-    return null;
-  }
-
-  /// Cuántas MONEDAS pagó CADA semana, indexadas por
-  /// [SemanaObjetivos.numero].
-  ///
-  /// Solo cuentan las semanas CERRADAS: lo proyectado va en cero. Una
-  /// semana en curso con los tres cumplidos todavía no pagó — se evalúa
-  /// el domingo 23:59, y hasta ese momento la plata no está acreditada.
-  Map<int, int> get monedasPorSemana => {
-    for (final p in recorrido) p.semana.numero: p.proyectado ? 0 : p.monedas,
-  };
-
-  /// En qué rango dejan al usuario las semanas ya cerradas.
-  ///
-  /// Es el mismo recorrido que [monedasPorSemana], y tiene que dar igual
-  /// que [rangoActual] — que es el número que manda el servidor. Si los
-  /// dos no coinciden, el mock (o la API) se está contradiciendo. Hay un
-  /// test que lo fija.
-  int get rangoSegunSemanas {
-    var rango = rangoMinimo;
-    for (final s in semanas) {
-      if (s.estado != EstadoSemana.cerrada) continue;
-      rango = s.subioDeRango
-          ? (rango + 1).clamp(rangoMinimo, rangoMaximo)
-          : (rango - 1).clamp(rangoMinimo, rangoMaximo);
-    }
-    return rango;
-  }
-
-  /// MONEDAS acuñadas en el período por subir de rango.
-  ///
-  /// NO es el saldo de la billetera: el saldo incluye monedas de meses
-  /// anteriores y descuenta lo gastado en Premios.
+  /// NO es el saldo de la billetera: el saldo incluye monedas de antes y
+  /// descuenta lo gastado en Premios.
   int get monedasGanadas =>
-      monedasPorSemana.values.fold(0, (suma, m) => suma + m);
+      semanas.fold(0, (suma, s) => suma + s.monedasGanadas);
 
-  /// La semana en curso, o null si el mes ya cerró.
+  /// La semana en curso, o null si el programa ya cerró.
   SemanaObjetivos? get enCurso {
     for (final s in semanas) {
       if (s.estado == EstadoSemana.enCurso) return s;
@@ -680,7 +560,6 @@ class ObjetivosSemana {
   }
 
   factory ObjetivosSemana.desdeJson(Map<String, dynamic> j) => ObjetivosSemana(
-    rangoActual: j['nivel_actual'] as int,
     semanas: (j['semanas'] as List)
         .map((s) => SemanaObjetivos.desdeJson(s as Map<String, dynamic>))
         .toList(),
@@ -1057,16 +936,137 @@ class Premio {
 
 /// Catálogo de premios con sus filtros.
 class Catalogo {
-  const Catalogo({required this.categorias, required this.premios});
+  Catalogo({
+    required this.categorias,
+    required this.premios,
+    List<CuponCanjeado>? cupones,
+  }) : cupones = cupones ?? [];
 
   final List<String> categorias;
   final List<Premio> premios;
+
+  /// Los cupones del usuario: los que compró en la tienda y los que ganó
+  /// por una semana o un podio patrocinado. Crece al canjear, por eso no
+  /// es `const`.
+  final List<CuponCanjeado> cupones;
 
   factory Catalogo.desdeJson(Map<String, dynamic> j) => Catalogo(
     categorias: (j['categorias'] as List).cast<String>(),
     premios: (j['premios'] as List)
         .map((p) => Premio.desdeJson(p as Map<String, dynamic>))
         .toList(),
+    cupones: ((j['mis_cupones'] as List?) ?? const [])
+        .map((c) => CuponCanjeado.desdeJson(c as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+// ---- Cupones canjeados ----
+
+/// De dónde salió un cupón. Todos viven en el mismo lugar —Premios › Mis
+/// cupones—, pero el usuario tiene que poder reconocer el que ganó sin
+/// gastar monedas.
+enum OrigenCupon {
+  /// Lo compró con monedas en la tienda.
+  tienda,
+
+  /// Lo ganó al cumplir una semana patrocinada.
+  semana,
+
+  /// Lo ganó en el podio de un ciclo de La Liga patrocinado.
+  liga;
+
+  static OrigenCupon desde(String? s) => switch (s) {
+    'semana' => OrigenCupon.semana,
+    'liga' => OrigenCupon.liga,
+    _ => OrigenCupon.tienda,
+  };
+}
+
+enum EstadoCupon {
+  activo,
+  usado,
+  vencido;
+
+  static EstadoCupon desde(String? s) => switch (s) {
+    'usado' => EstadoCupon.usado,
+    'vencido' => EstadoCupon.vencido,
+    _ => EstadoCupon.activo,
+  };
+}
+
+/// Un cupón que el usuario ya tiene: el código que se muestra en caja.
+///
+/// Un cupón canjeado caduca a los 60 DÍAS de canjeado (CLAUDE.md), aparte
+/// de las monedas. Igual que con los lotes de monedas, quien calcula el
+/// vencimiento y los días que faltan es el backend: acá solo se leen.
+class CuponCanjeado {
+  const CuponCanjeado({
+    required this.id,
+    required this.comercio,
+    required this.beneficio,
+    required this.codigo,
+    required this.origen,
+    required this.canjeado,
+    required this.vence,
+    required this.diasParaVencer,
+    required this.estado,
+    this.foto,
+    this.fondo,
+    this.costoMonedas,
+    this.ganadoEn,
+    this.usadoEl,
+  });
+
+  final String id;
+  final String comercio;
+
+  /// Lo que da el cupón, en palabras del comercio: "2x1 en sushi".
+  final String beneficio;
+
+  /// Lo que lee la caja. Hoy se dibuja como un QR de muestra.
+  final String codigo;
+
+  final OrigenCupon origen;
+
+  /// Fechas "AAAA-MM-DD", en hora de Guatemala.
+  final String canjeado;
+  final String vence;
+  final int diasParaVencer;
+  final EstadoCupon estado;
+
+  final String? foto;
+  final String? fondo;
+
+  /// Cuántas monedas costó. Null en los que se ganaron.
+  final int? costoMonedas;
+
+  /// Dónde se ganó, si no se compró: "Semana 1", "La Liga de agosto".
+  final String? ganadoEn;
+
+  final String? usadoEl;
+
+  bool get activo => estado == EstadoCupon.activo;
+
+  /// A una semana de vencer: es la única alerta real de un cupón, y va
+  /// en naranja.
+  bool get porVencer => activo && diasParaVencer <= 7;
+
+  factory CuponCanjeado.desdeJson(Map<String, dynamic> j) => CuponCanjeado(
+    id: j['id'] as String,
+    comercio: j['comercio'] as String,
+    beneficio: j['beneficio'] as String,
+    codigo: j['codigo'] as String,
+    origen: OrigenCupon.desde(j['origen'] as String?),
+    canjeado: j['canjeado'] as String,
+    vence: j['vence'] as String,
+    diasParaVencer: j['dias_para_vencer'] as int,
+    estado: EstadoCupon.desde(j['estado'] as String?),
+    foto: j['foto'] as String?,
+    fondo: j['fondo'] as String?,
+    costoMonedas: j['costo_monedas'] as int?,
+    ganadoEn: j['ganado_en'] as String?,
+    usadoEl: j['usado_el'] as String?,
   );
 }
 
@@ -1082,182 +1082,6 @@ enum Tendencia {
     'bajada' => Tendencia.bajada,
     _ => Tendencia.igual,
   };
-}
-
-/// Duelo activo. Los duelos NO otorgan monedas ni premios: son
-/// puramente competitivos y sociales.
-/// UN DUELO ES UN RETO CON META (decisión de Daniel, 22 de septiembre
-/// de 2026): los dos van por el mismo número de pasos y el mismo plazo,
-/// y gana el que llegue primero.
-///
-/// Antes eran dos porcentajes de superación sobre el promedio de cada
-/// uno. Era más justo en teoría —cada quien contra su propia historia—
-/// pero la tarjeta no dejaba ver qué estaba en juego: "+18% sobre tu
-/// promedio" no dice cuánto falta ni qué hay que hacer hoy. Con una meta
-/// común los dos números se leen solos.
-///
-/// OJO: esto es una comparación DIRECTA de pasos entre dos personas, que
-/// es lo que la regla vieja de CLAUDE.md evitaba a propósito (alguien
-/// que camina 3.000 al día no le gana nunca a alguien que camina
-/// 12.000). El duelo no paga monedas ni afecta el cashback, así que la
-/// asimetría no cuesta plata, pero el reto lo eligen los dos al armarlo
-/// y ahí es donde hay que dejar elegir una meta alcanzable.
-class Duelo {
-  const Duelo({
-    required this.activo,
-    required this.rivalHandle,
-    required this.diasRestantes,
-    required this.metaPasos,
-    required this.plazo,
-    required this.pasosPropios,
-    required this.pasosRival,
-    this.rivalNombre,
-  });
-
-  final bool activo;
-  final String rivalHandle;
-
-  /// El nombre del rival, si el servidor lo mandó.
-  ///
-  /// Nullable y con [rivalDicho] al lado: un duelo contra alguien que
-  /// todavía no es contacto puede llegar solo con el usuario, y en ese
-  /// caso la pantalla muestra el usuario en vez de un renglón vacío.
-  final String? rivalNombre;
-
-  /// Cómo se nombra al rival en pantalla: el nombre si vino, el usuario
-  /// si no.
-  String get rivalDicho => rivalNombre ?? rivalHandle;
-
-  /// Cuántos días le quedan al reto. NÚMERO y no texto: con el número se
-  /// puede además calcular a qué ritmo hay que ir para llegar, que es lo
-  /// único que la tarjeta puede decirle al usuario que haga hoy.
-  final int diasRestantes;
-
-  /// Los pasos que hay que juntar. Es lo que se retaron.
-  final int metaPasos;
-
-  /// En cuánto tiempo ("en una semana"). Viene del servidor porque el
-  /// plazo lo eligen los dos al armar el duelo.
-  final String plazo;
-
-  final int pasosPropios;
-  final int pasosRival;
-
-  /// El plazo, en palabras.
-  String get tiempoDicho => switch (diasRestantes) {
-    <= 0 => 'Cierra hoy',
-    1 => 'Último día',
-    _ => '$diasRestantes días restantes',
-  };
-
-  /// Cuánto le falta a cada uno. Nunca negativo: pasada la meta, falta
-  /// cero.
-  int get faltanPropios => (metaPasos - pasosPropios).clamp(0, metaPasos);
-  int get faltanRival => (metaPasos - pasosRival).clamp(0, metaPasos);
-
-  /// Qué fracción de la meta lleva cada uno, de 0 a 1.
-  double get avancePropio =>
-      metaPasos <= 0 ? 0 : (pasosPropios / metaPasos).clamp(0.0, 1.0);
-  double get avanceRival =>
-      metaPasos <= 0 ? 0 : (pasosRival / metaPasos).clamp(0.0, 1.0);
-
-  /// Cuántos pasos de ventaja le llevás. Negativo si va ganando el otro.
-  int get ventaja => pasosPropios - pasosRival;
-
-  /// A cuántos pasos por día tenés que ir para llegar a la meta.
-  ///
-  /// Null cuando ya llegaste o cuando el reto cierra hoy: en los dos
-  /// casos un promedio diario no le dice nada a nadie.
-  int? get ritmoNecesario {
-    if (faltanPropios <= 0 || diasRestantes <= 0) return null;
-    return (faltanPropios / diasRestantes).ceil();
-  }
-
-  factory Duelo.desdeJson(Map<String, dynamic> j) => Duelo(
-    activo: j['activo'] as bool,
-    rivalHandle: j['rival_handle'] as String,
-    rivalNombre: j['rival_nombre'] as String?,
-    diasRestantes: (j['dias_restantes'] as num).toInt(),
-    metaPasos: (j['meta_pasos'] as num).toInt(),
-    plazo: j['plazo'] as String,
-    pasosPropios: (j['pasos_propios'] as num).toInt(),
-    pasosRival: (j['pasos_rival'] as num).toInt(),
-  );
-}
-
-class DueloHistorial {
-  const DueloHistorial({
-    required this.rival,
-    required this.ganado,
-    this.nombre,
-  });
-
-  /// El usuario del rival ("@mery_run").
-  final String rival;
-
-  /// Su nombre, si vino. El historial se lee para reconocer contra
-  /// quién jugaste, y un usuario suelto no siempre alcanza.
-  final String? nombre;
-
-  final bool ganado;
-
-  /// Cómo se nombra en pantalla: el nombre si vino, el usuario si no.
-  String get dicho => nombre ?? rival;
-
-  factory DueloHistorial.desdeJson(Map<String, dynamic> j) => DueloHistorial(
-    rival: j['rival'] as String,
-    nombre: j['nombre'] as String?,
-    ganado: j['ganado'] as bool,
-  );
-}
-
-/// Una conexión. De otra persona solo se exponen racha, nivel y monedas
-/// — NUNCA sus pasos ni su historial crudo.
-class Conexion {
-  const Conexion({
-    required this.nombre,
-    required this.handle,
-    required this.rachaSemanas,
-    required this.nivel,
-    required this.monedasTotales,
-  });
-
-  final String nombre;
-  final String handle;
-  final int rachaSemanas;
-  final int nivel;
-  final int monedasTotales;
-
-  factory Conexion.desdeJson(Map<String, dynamic> j) => Conexion(
-    nombre: j['nombre'] as String,
-    handle: j['handle'] as String,
-    rachaSemanas: j['racha_semanas'] as int,
-    nivel: j['nivel'] as int,
-    monedasTotales: j['monedas_totales'] as int,
-  );
-}
-
-/// Una solicitud de amistad, recibida o enviada.
-///
-/// De alguien que TODAVÍA no es tu contacto solo se sabe el nombre, el
-/// usuario y cuántos amigos comparten. Nada de rachas, niveles ni
-/// actividad: eso se gana al aceptar, no al pedir.
-class Solicitud {
-  const Solicitud({
-    required this.nombre,
-    required this.handle,
-    required this.amigosEnComun,
-  });
-
-  final String nombre;
-  final String handle;
-  final int amigosEnComun;
-
-  factory Solicitud.desdeJson(Map<String, dynamic> j) => Solicitud(
-    nombre: j['nombre'] as String,
-    handle: j['handle'] as String,
-    amigosEnComun: j['amigos_en_comun'] as int? ?? 0,
-  );
 }
 
 /// Una marca aliada que paga por aparecer.
@@ -1356,28 +1180,27 @@ class Patrocinio {
 
 /// Cada cuánto cierra un ranking y se reparten los premios.
 ///
-/// Son DOS ciclos distintos y no se pueden unificar: la liga local corre
-/// por trimestre y las competencias que arma el usuario con su gente
-/// corren por mes (decisión de Daniel, revisión de UI del 9 de
-/// septiembre de 2026).
+/// Hoy hay uno solo: La Liga y las competencias que arma el usuario con
+/// su gente corren las dos por MES, del día 1 al último día del mes en
+/// hora de Guatemala (decisión de Alvaro, 22 de septiembre de 2026). La
+/// liga trimestral de antes es del modelo viejo. El enum se queda para
+/// que el ciclo siga viniendo del backend y no quede fijo en la UI.
 ///
-/// Ninguno de los dos es el ciclo SEMANAL de los retos, que es otra
-/// mecánica y vive en `reglas_rango.dart`. Si algún día se tocan, se
-/// tocan ahí, no acá.
+/// No es el ciclo SEMANAL de los objetivos, que es otra
+/// mecánica y vive en [SemanaObjetivos]. Si algún día se tocan, se tocan
+/// ahí, no acá.
 enum CicloRanking {
-  mes('mensual', 'este mes'),
-  trimestre('trimestral', 'este trimestre');
+  mes('mensual', 'este mes');
 
   const CicloRanking(this.adjetivo, this.cuando);
 
-  /// Cómo se llama el ciclo: "mensual", "trimestral".
+  /// Cómo se llama el ciclo: "mensual".
   final String adjetivo;
 
   /// Cómo se dice el período en curso dentro de una frase: "este mes".
   final String cuando;
 
-  static CicloRanking desde(String? s) =>
-      s == 'trimestre' ? CicloRanking.trimestre : CicloRanking.mes;
+  static CicloRanking desde(String? s) => CicloRanking.mes;
 }
 
 class RankingPersona {
@@ -1391,7 +1214,7 @@ class RankingPersona {
   final String nombre;
 
   /// Puntos acumulados en el ciclo del grupo (ver [GrupoRanking.ciclo]):
-  /// del mes en una competencia personal, del trimestre en la liga local.
+  /// del mes, tanto en una competencia personal como en la liga.
   ///
   /// Antes eran los de la SEMANA, y era un bug: ningún ranking del
   /// producto corre por semana. Lo semanal son los retos, que no son
@@ -1509,11 +1332,11 @@ class GrupoRanking {
   final String? zona;
 
   /// Cuándo arrancó el ciclo en curso. Con [cierra] arma el rango que se
-  /// le muestra al usuario ("del 1 de julio al 30 de septiembre"), que es
-  /// lo que hace entender que la liga dura un trimestre y no un mes.
+  /// le muestra al usuario ("del 1 al 30 de septiembre"), que es lo que
+  /// hace entender que la liga dura el mes y no una semana.
   ///
   /// Las dos fechas las manda el backend en hora de Guatemala: el ciclo
-  /// va del día 1 del primer mes al último día del último, y el teléfono
+  /// va del día 1 al último día del mes, y el teléfono
   /// NUNCA las calcula. Alguien de viaje tiene que ver el mismo cierre.
   final DateTime? arranca;
 
@@ -1652,27 +1475,10 @@ class GrupoRanking {
   };
 }
 
+/// Lo que hay en Social: el ranking y nada más. Los amigos, las
+/// solicitudes y los duelos se sacaron el 25 de septiembre de 2026.
 class DatosSociales {
-  DatosSociales({
-    required this.duelo,
-    required this.historialDuelos,
-    required this.conexiones,
-    required this.grupos,
-    required this.solicitudesRecibidas,
-    required this.solicitudesEnviadas,
-  });
-
-  final Duelo duelo;
-  final List<DueloHistorial> historialDuelos;
-
-  /// Tus amigos. MUTABLE: aceptar una solicitud agrega uno.
-  final List<Conexion> conexiones;
-
-  /// Quién te pidió ser tu amigo. MUTABLE: aceptar o rechazar la saca.
-  final List<Solicitud> solicitudesRecibidas;
-
-  /// A quién le pediste vos. MUTABLE: cancelar la saca.
-  final List<Solicitud> solicitudesEnviadas;
+  DatosSociales({required this.grupos});
 
   /// Los grupos de ranking. Es una lista MUTABLE a propósito: crear o
   /// unirse a un grupo la modifica en el acto.
@@ -1698,28 +1504,14 @@ class DatosSociales {
   }
 
   factory DatosSociales.desdeJson(Map<String, dynamic> j) {
-    final duelos = j['duelos'] as Map<String, dynamic>;
     // Los datos del usuario se escriben una sola vez y cada grupo los
     // hereda: así sus puntos no quedan repetidos (y desincronizables) en
     // cada ranking.
     final yo = j['yo'] as Map<String, dynamic>?;
 
     return DatosSociales(
-      duelo: Duelo.desdeJson(duelos['activo'] as Map<String, dynamic>),
-      historialDuelos: (duelos['historial'] as List)
-          .map((d) => DueloHistorial.desdeJson(d as Map<String, dynamic>))
-          .toList(),
-      conexiones: (j['conexiones'] as List)
-          .map((c) => Conexion.desdeJson(c as Map<String, dynamic>))
-          .toList(),
       grupos: (j['grupos'] as List)
           .map((g) => GrupoRanking.desdeJson(g as Map<String, dynamic>, yo: yo))
-          .toList(),
-      solicitudesRecibidas: ((j['solicitudes_recibidas'] as List?) ?? const [])
-          .map((s) => Solicitud.desdeJson(s as Map<String, dynamic>))
-          .toList(),
-      solicitudesEnviadas: ((j['solicitudes_enviadas'] as List?) ?? const [])
-          .map((s) => Solicitud.desdeJson(s as Map<String, dynamic>))
           .toList(),
     );
   }

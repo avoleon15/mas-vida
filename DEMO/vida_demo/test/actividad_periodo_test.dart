@@ -201,8 +201,8 @@ void main() {
       await t.tap(find.text('Mes'));
       await t.pump();
 
-      // La semana es la unidad en la que se mueve el rango, así que es
-      // la que dice si el mes viene bien o mal.
+      // La semana es la unidad de los objetivos, así que es la que dice
+      // si el mes viene bien o mal.
       expect(find.text('Semana 1'), findsOneWidget);
       expect(find.text('Semana 2'), findsOneWidget);
       // Y ya no la lista de sesiones una por una.

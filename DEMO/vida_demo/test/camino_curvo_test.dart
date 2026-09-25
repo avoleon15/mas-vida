@@ -18,8 +18,8 @@ import 'ayudas.dart';
 //     lado. Con la amplitud en cero el trazo vuelve a ser una línea
 //     recta con esquinas de 90°, que es de donde se venía.
 //   · QUE CADA CÍRCULO DIGA QUÉ SEMANA ES, con todas las letras. Un
-//     número suelto puede ser la semana, el rango o las monedas: las
-//     tres escaleras viven en esta pantalla.
+//     número suelto puede ser la semana o las monedas: las dos
+//     escaleras viven en esta pantalla.
 //   · QUE NO VUELVAN LAS TARJETAS. CLAUDE.md pide UNA sola cosa
 //     levantada por pantalla, y acá esa cosa es el camino.
 // ============================================================
@@ -107,9 +107,8 @@ void main() {
     testWidgets('las semanas que no corren llevan el rótulo SEM', (t) async {
       await montarCamino(t);
 
-      // "SEM 7" y no un 7 suelto: en esta pantalla hay números de semana,
-      // de rango y de monedas, y adentro de un círculo los tres se ven
-      // igual. Lo que el usuario necesita saber al mirar adelante es a
+      // "SEM 7" y no un 7 suelto: en esta pantalla hay números de semana
+      // y de monedas, y adentro de un círculo los dos se ven igual. Lo que el usuario necesita saber al mirar adelante es a
       // qué SEMANA va a entrar.
       final quietas = objetivos.semanas
           .where((s) => s.estado != EstadoSemana.enCurso)
@@ -146,29 +145,6 @@ void main() {
   });
 
   group('Una sola cosa levantada, y es el camino', () {
-    testWidgets('el rango ya no viene adentro de una tarjeta', (t) async {
-      await montarCamino(t);
-
-      // Era un bloque de azulNiebla con radio propio arriba del camino.
-      // Con una superficie compitiendo, el recorrido dejaba de ser lo
-      // único que se mira al entrar.
-      // El disco de la insignia también es azulNiebla y ese se queda: lo
-      // que no puede volver es un RECTÁNGULO redondeado de ese tono
-      // envolviendo el renglón entero.
-      final cajas = t
-          .widgetList<Container>(
-            find.descendant(
-              of: find.byKey(llaveRenglonRango),
-              matching: find.byType(Container),
-            ),
-          )
-          .map((c) => c.decoration)
-          .whereType<BoxDecoration>()
-          .where((d) => d.borderRadius != null);
-
-      expect(cajas.map((d) => d.color), isNot(contains(AppColors.azulNiebla)));
-    });
-
     testWidgets('lo que paga la semana no va en una pastilla blanca', (
       t,
     ) async {
@@ -177,11 +153,11 @@ void main() {
       // Diez pastillas blancas flotando sobre el camino eran diez
       // tarjetitas más. El fondo que corta la cinta ahora es del color
       // del fondo de pantalla: hace el mismo trabajo sin verse.
-      final paga = objetivos.recorrido.firstWhere((p) => p.monedas > 0);
+      final monedas = objetivos.enCurso!.monedas;
       final fondo = t.widget<Container>(
         find
             .ancestor(
-              of: find.text('+${paga.monedas}').first,
+              of: find.text('+$monedas').first,
               matching: find.byType(Container),
             )
             .first,

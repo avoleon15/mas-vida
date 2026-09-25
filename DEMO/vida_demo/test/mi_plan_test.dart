@@ -173,7 +173,9 @@ void main() {
   ) async {
     await montar(tester);
 
-    expect(find.text('Tu proyección al siguiente nivel'), findsOneWidget);
+    // En el nivel 3 del mock no hay siguiente alcanzable: el bloque es
+    // "Tu nivel del año" y no la proyección al nivel 4.
+    expect(find.text('Tu nivel del año'), findsOneWidget);
     expect(find.text('Calendario de pagos'), findsOneWidget);
 
     for (final faja in fajas) {
@@ -345,14 +347,18 @@ void main() {
     expect(find.textContaining('Cashback aplicado'), findsNothing);
   });
 
-  testWidgets('la proyeccion dice cuanto falta y que pagaria el nivel 4', (
+  testWidgets('en el nivel 3 no promete el nivel 4, que no se alcanza', (
     tester,
   ) async {
     await montar(tester);
-    // 11,240 de 12,000: faltan 760 para el nivel 4.
-    expect(find.textContaining('760 pts', findRichText: true), findsOneWidget);
-    // 20% de Q18,000.
-    expect(find.textContaining('Q3,600', findRichText: true), findsOneWidget);
+    // El nivel 4 arranca en 15,000 y la actividad topa en 12,000: en el
+    // piloto no se llega. Nada de "te faltan" ni del 20% de Q18,000.
+    expect(find.textContaining('Te faltan', findRichText: true), findsNothing);
+    expect(find.textContaining('Q3,600', findRichText: true), findsNothing);
+    expect(
+      find.textContaining('el nivel más alto que da la actividad física'),
+      findsOneWidget,
+    );
     // Nunca promete un nivel por una regresion que no existe.
     expect(find.textContaining('A tu ritmo'), findsNothing);
   });

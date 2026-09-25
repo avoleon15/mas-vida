@@ -201,13 +201,6 @@ class _HistorialSemanas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Cuántas monedas pagó CADA semana. El cálculo vive en el modelo y no
-    // acá: el monto depende del rango al que llevó esa semana, que solo
-    // se sabe recorriendo todas las anteriores en orden, y esa misma
-    // cuenta la necesitan el total de la hoja y la pantalla de Hoy. Tres
-    // copias de un recorrido cronológico se desincronizan solas — ya
-    // pasó: esta hoja saltaba la semana en curso y el modelo no.
-    final pagoPorSemana = objetivos.monedasPorSemana;
     final semanas = objetivos.semanas;
 
     // De la más reciente a la más vieja: el historial se lee para atrás.
@@ -231,10 +224,7 @@ class _HistorialSemanas extends StatelessWidget {
     return _Tarjeta(
       children: [
         for (var i = 0; i < conMonedas.length; i++) ...[
-          _FilaSemana(
-            semana: conMonedas[i],
-            monedas: pagoPorSemana[conMonedas[i].numero] ?? 0,
-          ),
+          _FilaSemana(semana: conMonedas[i]),
           if (i != conMonedas.length - 1) const _Separador(),
         ],
       ],
@@ -243,16 +233,15 @@ class _HistorialSemanas extends StatelessWidget {
 }
 
 class _FilaSemana extends StatelessWidget {
-  const _FilaSemana({required this.semana, required this.monedas});
+  const _FilaSemana({required this.semana});
 
   final SemanaObjetivos semana;
 
-  /// MONEDAS que pagó ESA semana. Solo pagan las que hicieron subir de
-  /// rango, y el monto sale del escalón al que llevaron.
-  final int monedas;
-
   @override
   Widget build(BuildContext context) {
+    // MONEDAS que pagó ESA semana: las suyas si cerró con los dos
+    // objetivos, cero en cualquier otro caso.
+    final monedas = semana.monedasGanadas;
     final cumplidos = semana.objetivos.where((o) => o.completo).toList();
     final estiloNota = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: AppColors.textSecondary,
@@ -277,14 +266,13 @@ class _FilaSemana extends StatelessWidget {
                 Text('No cumpliste ningún objetivo', style: estiloNota)
               else
                 // Qué objetivos cumpliste. Sin monto al lado: un objetivo
-                // suelto no paga nada, ni monedas ni ninguna otra cosa.
-                // Lo que paga es cumplir los tres, y eso se dice abajo.
+                // suelto no paga nada. Lo que paga es cumplir los dos, y
+                // eso se dice abajo.
                 for (final o in cumplidos)
                   Text('${o.nombre} · cumplido', style: estiloNota),
-              if (semana.subioDeRango)
+              if (monedas > 0)
                 Text(
-                  'Cumpliste los tres: subiste de rango y por eso pagó '
-                  '$monedas monedas',
+                  'Cumpliste los dos: por eso pagó $monedas monedas',
                   style: estiloNota?.copyWith(
                     color: AppColors.accentSecondary,
                     fontWeight: FontWeight.w700,
@@ -292,8 +280,7 @@ class _FilaSemana extends StatelessWidget {
                 )
               else if (semana.estado == EstadoSemana.cerrada)
                 Text(
-                  'No cumpliste los tres: bajaste de rango y no hubo '
-                  'monedas',
+                  'No cumpliste los dos: no hubo monedas',
                   style: estiloNota,
                 ),
             ],

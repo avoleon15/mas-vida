@@ -134,7 +134,7 @@ class AppColors {
   static const Color nivel4 = Color(0xFF012096);
 
   // Los tres tramos del anillo de pasos de Home. NO son niveles de
-  // cashback ni la liga de duelos: son solo la lectura visual de en qué
+  // cashback: son solo la lectura visual de en qué
   // escalón de la tabla de pasos va el usuario HOY, y se reinician cada
   // día.
   //

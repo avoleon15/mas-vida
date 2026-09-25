@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../datos/modelos.dart';
-import '../reglas_rango.dart' show enHoraDeGuatemala;
+import '../hora_guatemala.dart';
 import '../theme.dart';
 import 'moneda_animada.dart';
 
@@ -26,10 +26,10 @@ const _mesesDelAnio = [
   'diciembre',
 ];
 
-/// El período que corre en [grupo], dicho con fechas: "Del 1 de julio al
-/// 30 de septiembre". Null si el grupo no trae las dos fechas.
+/// El período que corre en [grupo], dicho con fechas: "Del 1 al 30 de
+/// septiembre". Null si el grupo no trae las dos fechas.
 ///
-/// Existe porque el nombre del ciclo no alcanza: "este trimestre" no dice
+/// Existe porque el nombre del ciclo no alcanza: "este mes" no dice
 /// cuánto queda ni desde cuándo se está compitiendo, y la liga se venía
 /// leyendo como si cerrara cada semana.
 ///

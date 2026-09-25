@@ -64,7 +64,7 @@ class _HojaInvitarState extends State<_HojaInvitar> {
       // tres meses, así que prometer una semana sería mentirle a quien
       // recibe la invitación.
       'Te invito a "${grupo.nombre}" en +Vida. Entrá con el código '
-      '${grupo.codigoInvitacion} y competí conmigo.';
+      '${grupo.codigoInvitacion} y compite conmigo.';
 
   /// Copia el código y COMPRUEBA que haya quedado.
   ///
@@ -176,8 +176,8 @@ class _HojaInvitarState extends State<_HojaInvitar> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Tu sistema no nos dejó copiar. Mantené presionado '
-                        'el código para seleccionarlo, o usá Compartir.',
+                        'Tu sistema no nos dejó copiar. Mantén presionado '
+                        'el código para seleccionarlo, o usa Compartir.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.textSecondary,
                           height: 1.35,

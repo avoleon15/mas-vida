@@ -199,8 +199,8 @@ class RecordsScreen extends StatelessWidget {
         unidad: mejorRacha == 1 ? 'semana' : 'semanas',
         titulo: 'Tu racha más larga',
         detalle: resumen.rachaSemanas == mejorRacha
-            ? 'la que llevás ahora'
-            : 'hoy llevás ${resumen.rachaSemanas}',
+            ? 'la que llevas ahora'
+            : 'hoy llevas ${resumen.rachaSemanas}',
       ),
     );
 

@@ -5,7 +5,7 @@
   "techo_anual": 12000,
   "tope_anual_aplicado": false,
   "nivel": 3,
-  "_nota_nivel": "Nivel 3 = 10.000–11.999 pts → 10% de cashback. Con 11.240 pts faltan 760 para el nivel 4, cuyo piso son 12.000 (corregido el 17 de septiembre de 2026; antes este mock decia 15.000+ y que el nivel 4 quedaba fuera de alcance). La tabla que manda es `niveles` en lib/reglas_puntos.dart.",
+  "_nota_nivel": "Nivel 3 = 10.000–14.999 pts → 10% de cashback. El nivel 4 arranca en 15.000 (confirmado por Alvaro el 19 de septiembre de 2026) y con el techo de actividad de 12.000 queda fuera de alcance en el piloto: consecuencia aceptada, no un bug. La tabla que manda es `niveles` en lib/reglas_puntos.dart.",
   "cashback": {
     "porcentaje": 10,
     "proyectado_q": 1800,
@@ -79,15 +79,11 @@
   },
   "monedas_ganadas_anio": 165,
   "objetivos_semana": {
-    "_comentario": "OBJETIVOS SEMANALES. Reemplazan por completo a las metas mensuales, que ya no existen. Son 3 por semana, los tres de la MISMA semana (lunes 00:00 a domingo 23:59, hora de Guatemala), y se evaluan una sola vez el domingo. Cumplir los 3 sube un rango; no cumplir los 3 baja uno. Un objetivo suelto no acredita nada ni se arrastra a la semana siguiente: son tres checks y nada mas. SUBIR DE RANGO es lo unico que acuna MONEDAS: 5 al rango 1, 10 al 2, 15 al 3, y asi de 5 en 5 hasta 50 al rango 10. Piso rango 0, techo rango 10, un movimiento por semana.",
-    "_nota_sin_xp": "Cada objetivo NO trae campo xp, y no hay que volver a agregarlo. Existio un medidor de XP (100 por rango, repartido 40/35/25) que no decidia nada: el movimiento siempre salio de cumplidos == 3. Ademas la UI arrastraba el sobrante entre semanas y el motor no, asi que la pantalla mostraba una regla que el backend no aplicaba.",
-    "_nota_sin_reinicio_mensual": "El rango YA NO se reinicia al empezar mes nuevo. Estas 10 semanas van del 6 de septiembre al 8 de noviembre: cruzan dos veces de mes, asi que con el reinicio nadie habria pasado del rango 4 y la escalera de 10 era inalcanzable. El programa se recorre entero.",
-    "_todo_dificultad": "TODO: la tabla de dificultad por rango NO esta definida en ninguna fuente; la define Luis en la tarea L7. Las metas de abajo son ILUSTRATIVAS y viven solo aca, en el mock. En el motor (reglas_rango.dart) metaPorRango sigue VACIO a proposito: lo que no se puede inventar es la regla, no el dato de prueba. La UI muestra la meta que le manda el servidor; cuando no viene ninguna, no inventa un numero.",
-    "_todo_objetivos": "TODO: cuales son los 3 objetivos es PROVISIONAL. Entran como datos, asi que cambiarlos no toca el motor de reglas.",
-    "_nota_patrocinio": "Solo ALGUNAS semanas traen patrocinio (aca la 1, la 3, la 6 y la 8). La 3 es la EN CURSO a proposito: es la que sale en el titulo de la pantalla y en la card animada de arriba, asi que sin ella ese bloque no se puede ver en la demo. Que la mayoria no tenga marca es el caso normal y el camino tiene que verse igual de terminado sin ella. Cumplir una semana patrocinada paga el cupon de esa marca ADEMAS de las MONEDAS del rango. logo y fondo se copian del catalogo de Premios; acento va aparte porque el fondo de Montanos es negro. PLACEHOLDER: Montanos y Ookii son de ejemplo, Diego las sustituye. Cuando exista el endpoint de Luis esto llega de la API.",
-    "_nota_semanas": "El programa son 10 semanas, una por escalon de la escalera. Aun asi la app no asume esa cantidad: renderiza las que vengan. Las semanas 4 a 10 estan en futura y con todo en cero a proposito: no hay historial real para ellas y no se inventa progreso.",
-    "_nota_nombre": "nivel_actual, igual que en retos_semanales y por el mismo motivo: es la misma escalera y el JSON usa el nombre del contrato. El modelo Dart la expone como rangoActual, y ahora va de 0 a 10.",
-    "nivel_actual": 2,
+    "_comentario": "OBJETIVOS SEMANALES. Son 2 por semana, los dos de la MISMA semana (lunes 00:00 a domingo 23:59, hora de Guatemala): pasos y minutos de entrenamiento. Se evaluan una sola vez el domingo. Cumplir LOS DOS paga las monedas de esa semana; cumplir uno solo no paga nada ni se arrastra. Al cerrar, todos pasan a la semana siguiente del programa, la hayan cumplido o no.",
+    "_nota_monedas": "monedas es lo que paga CADA semana si se cumplen los dos objetivos. Lo decide el servidor semana por semana; la app no tiene regla para calcularlo. Los montos de aca son de ejemplo.",
+    "_todo_metas": "TODO: la tabla de metas por semana NO esta definida (la define Luis). Las metas de abajo son ILUSTRATIVAS y viven solo aca, en el mock. La UI muestra la meta que manda el servidor; cuando no viene ninguna, no inventa un numero.",
+    "_nota_patrocinio": "Solo ALGUNAS semanas traen patrocinio (aca la 1, la 3, la 6 y la 8). La 3 es la EN CURSO a proposito: es la que sale en el titulo de la pantalla y en la card animada de arriba, asi que sin ella ese bloque no se puede ver en la demo. Que la mayoria no tenga marca es el caso normal y el camino tiene que verse igual de terminado sin ella. Cumplir una semana patrocinada paga el cupon de esa marca ADEMAS de las MONEDAS de la semana. logo y fondo se copian del catalogo de Premios; acento va aparte porque el fondo de Montanos es negro. PLACEHOLDER: Montanos y Ookii son de ejemplo, Diego las sustituye. Cuando exista el endpoint de Luis esto llega de la API.",
+    "_nota_semanas": "La app no asume cuantas semanas tiene el programa: renderiza las que vengan. Las semanas 4 a 10 estan en futura y con todo en cero a proposito: no hay historial real para ellas y no se inventa progreso.",
     "semanas": [
       {
         "numero": 1,
@@ -105,6 +101,7 @@
           "acento": "#2F7A6E",
           "cupon": "2x1 en sushi de Ookii"
         },
+        "monedas": 5,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -115,19 +112,11 @@
             "completo": true
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 95,
             "meta": 60,
-            "completo": true
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 4,
-            "meta": 2,
             "completo": true
           }
         ]
@@ -136,6 +125,7 @@
         "numero": 2,
         "cierra": "2026-09-13T23:59:59-06:00",
         "estado": "cerrada",
+        "monedas": 10,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -146,19 +136,11 @@
             "completo": true
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 88,
             "meta": 75,
-            "completo": true
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 3,
-            "meta": 3,
             "completo": true
           }
         ]
@@ -180,6 +162,7 @@
           "acento": "#8C5A3C",
           "cupon": "Entrada gratis en Montanos"
         },
+        "monedas": 10,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -190,19 +173,11 @@
             "completo": true
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 48,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 1,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -211,6 +186,7 @@
         "numero": 4,
         "cierra": "2026-09-27T23:59:59-06:00",
         "estado": "futura",
+        "monedas": 10,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -221,19 +197,11 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -242,6 +210,7 @@
         "numero": 5,
         "cierra": "2026-10-04T23:59:59-06:00",
         "estado": "futura",
+        "monedas": 15,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -252,19 +221,11 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -285,6 +246,7 @@
           "acento": "#2F7A6E",
           "cupon": "Postre gratis en Ookii"
         },
+        "monedas": 15,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -295,19 +257,11 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -316,6 +270,7 @@
         "numero": 7,
         "cierra": "2026-10-18T23:59:59-06:00",
         "estado": "futura",
+        "monedas": 15,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -326,19 +281,11 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -360,6 +307,7 @@
           "acento": "#8C5A3C",
           "cupon": "Postre gratis en Montanos"
         },
+        "monedas": 20,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -370,19 +318,11 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -391,6 +331,7 @@
         "numero": 9,
         "cierra": "2026-11-01T23:59:59-06:00",
         "estado": "futura",
+        "monedas": 20,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -401,19 +342,11 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
@@ -422,6 +355,7 @@
         "numero": 10,
         "cierra": "2026-11-08T23:59:59-06:00",
         "estado": "futura",
+        "monedas": 20,
         "objetivos": [
           {
             "id": "pasos_semana",
@@ -432,52 +366,41 @@
             "completo": false
           },
           {
-            "id": "intensidad_semana",
-            "nombre": "Minutos de intensidad",
+            "id": "minutos_entrenamiento",
+            "nombre": "Minutos de entrenamiento",
             "unidad": "minutos",
             "progreso": 0,
             "meta": 90,
-            "completo": false
-          },
-          {
-            "id": "dias_ritmo_alto",
-            "nombre": "Días con ritmo cardíaco alto",
-            "unidad": "días",
-            "progreso": 0,
-            "meta": 3,
             "completo": false
           }
         ]
       }
     ],
-    "_todo_xp": "Una semana perfecta paga 100 XP y 100 XP llenan un rango: 10 rangos, 10 semanas, un rango por semana. Reparto 40/35/25 entre los tres objetivos (definido por Daniel). Lo que no se puede romper es que los tres sumen 100: si no, subir de rango se vuelve imposible.",
-    "_nota_coherencia": "La cuenta del mock cierra: semana 1 y 2 cumplidas enteras suben del rango 0 al 2 y pagan 5 + 10 = 15 monedas, que es lo que muestra la barra. La semana 3 va en curso con 40 de 100 XP. Si se editan estas semanas hay que reajustar nivel_actual o la pantalla miente.",
-    "_nota_meta": "meta es cuanto pide ese objetivo en el rango con el que se ENTRA a esa semana, y avance es progreso/meta. Los dos tienen que quedar consistentes: si se edita uno hay que recalcular el otro, o la pantalla dice \"faltan 42 min\" al lado de un porcentaje que no cuadra.",
     "_nota_fotos": "PENDIENTE: Diego consigue 3 fotos por aliado. Hasta entonces cada patrocinio repite TRES VECES la unica foto que hay en el catalogo de Premios, asi que el cintillo de la semana en curso rota entre tres fotos iguales y el movimiento no se nota. La lista vive aca y NO se arma en el widget: cuando lleguen las fotos reales solo cambia este JSON (y despues, el endpoint de Luis)."
   },
   "monedas": {
-    "saldo": 150,
-    "ganadas_este_mes": 15,
+    "saldo": 34,
+    "ganadas_este_mes": 21,
     "_nota_valor": "TODO: falta cuánto vale una moneda en quetzales. Depende de las alianzas comerciales y no debe mostrarse en ninguna pantalla hasta que exista.",
     "_nota_caducidad": "Las monedas caducan a los 90 DIAS de acunadas (revision de UI del 9 de septiembre de 2026; antes eran 6 meses). En cada lote 'caducan' es 'acunadas' + 90 dias y 'dias_para_caducar' se cuenta contra el 8 de septiembre de 2026, que es el hoy de este mock. Si se edita un lote hay que rehacer las dos cosas o la pantalla dice un plazo que no cuadra con la fecha.",
     "lotes": [
       {
+        "cantidad": 3,
+        "acunadas": "2026-07-01",
+        "caducan": "2026-09-29",
+        "dias_para_caducar": 21
+      },
+      {
         "cantidad": 10,
-        "acunadas": "2026-06-22",
-        "caducan": "2026-09-20",
-        "dias_para_caducar": 12
+        "acunadas": "2026-08-01",
+        "caducan": "2026-10-30",
+        "dias_para_caducar": 52
       },
       {
-        "cantidad": 60,
-        "acunadas": "2026-07-15",
-        "caducan": "2026-10-13",
-        "dias_para_caducar": 35
-      },
-      {
-        "cantidad": 65,
-        "acunadas": "2026-08-02",
-        "caducan": "2026-10-31",
-        "dias_para_caducar": 53
+        "cantidad": 6,
+        "acunadas": "2026-09-01",
+        "caducan": "2026-11-30",
+        "dias_para_caducar": 83
       },
       {
         "cantidad": 5,
@@ -492,8 +415,8 @@
         "dias_para_caducar": 95
       }
     ],
-    "_nota_saldo": "El saldo es la suma de los lotes. Los dos ultimos son los ascensos de ESTE programa (5 por subir al rango 1, 10 por subir al 2) y tienen que cuadrar con las semanas: si se editan las semanas hay que rehacerlos o la hoja de monedas deja de cuadrar con el historial. Los tres primeros son de antes y no salen de estas 10 semanas: el saldo de la billetera arrastra lo viejo y descuenta lo gastado en Premios, que es justo lo que ganadas_este_mes no hace.",
-    "_todo_techo": "PENDIENTE: techo_mensual estaba en 8, pero la escalera puede pagar 5+10+15+20 = 50 en un mes de cuatro semanas. El techo viejo hacia imposible la propia escalera. Se saca hasta que se defina uno coherente; no se inventa un numero aca.",
+    "_nota_saldo": "El saldo es la suma de los lotes. Los dos ultimos son las monedas de las semanas 1 y 2 de ESTE programa (5 y 10, el campo monedas de cada una) y tienen que cuadrar con las semanas: si se editan las semanas hay que rehacerlos o la hoja de monedas deja de cuadrar con el historial. Los tres primeros son premios de La Liga (3.er lugar de junio, 1.o de julio y 2.o de agosto: 3, 10 y 6 monedas, que se acunan el dia 1 del mes siguiente) y no salen de estas 10 semanas. Antes el saldo era 150, por encima del TOPE DE 100 monedas acumuladas, y los lotes viejos de 60 y 65 no podian salir de ningun lado: el saldo de la billetera arrastra lo viejo y descuenta lo gastado en Premios, que es justo lo que ganadas_este_mes no hace.",
+    "_todo_techo": "PENDIENTE: techo_mensual estaba en 8, y eso no alcanzaba ni para lo que pagan cuatro semanas del programa. Se saca hasta que se defina uno coherente; no se inventa un numero aca.",
     "_nota_para_probar": "El saldo esta alto A PROPOSITO: los premios cuestan de 15 a 75 monedas y con 15 no se podia canjear casi nada, asi que no habia forma de probar la compra ni la pantalla de canje exitoso. El lote que caduca el 20 de septiembre esta a 12 dias para poder ver tambien el aviso de proximo a caducar, que se prende a los 15."
   }
 }

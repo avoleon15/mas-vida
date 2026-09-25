@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/chip_monedas.dart';
+import '../widgets/mis_cupones.dart';
 import '../widgets/moneda_animada.dart';
 import '../widgets/placeholder_imagen.dart';
 import '../widgets/refresco_vida.dart';
@@ -86,8 +87,15 @@ List<Premio> destacadosPrimero(List<Premio> premios) {
   return [...destacados, ...premios.where((p) => !p.destacado)];
 }
 
+/// Las dos vistas de Premios: la tienda y los cupones que ya tienes.
+enum VistaPremios { tienda, cupones }
+
 class PremiosScreen extends StatefulWidget {
-  const PremiosScreen({super.key});
+  const PremiosScreen({super.key, this.vistaInicial});
+
+  /// Con qué vista abre. Null lee el argumento de la ruta: el canje
+  /// exitoso abre Premios directo en "Mis cupones".
+  final VistaPremios? vistaInicial;
 
   @override
   State<PremiosScreen> createState() => _PremiosScreenState();
@@ -96,6 +104,14 @@ class PremiosScreen extends StatefulWidget {
 class _PremiosScreenState extends State<PremiosScreen> {
   String _categoriaSeleccionada = 'Todos';
   String _busqueda = '';
+  VistaPremios? _vista;
+
+  VistaPremios _vistaActual(BuildContext context) =>
+      _vista ??
+      widget.vistaInicial ??
+      (ModalRoute.of(context)?.settings.arguments == VistaPremios.cupones
+          ? VistaPremios.cupones
+          : VistaPremios.tienda);
 
   /// Los premios que pasan la categoría elegida y el buscador.
   ///
@@ -136,6 +152,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                 valueListenable: datosRecargados,
                 builder: (context, _, _) {
                   final premiosFiltrados = _premiosFiltrados;
+                  final vista = _vistaActual(context);
                   return CustomScrollView(
                     physics: fisicaConRefresco,
                     slivers: [
@@ -148,17 +165,39 @@ class _PremiosScreenState extends State<PremiosScreen> {
                             children: [
                               _buildTituloYSaldo(context),
                               const SizedBox(height: 18),
-                              _Buscador(
-                                texto: _busqueda,
-                                onChanged: (t) => setState(() => _busqueda = t),
+                              _SelectorVista(
+                                vista: vista,
+                                cuponesActivos: cuponesActivos(
+                                  Datos.i.catalogo.cupones,
+                                ).length,
+                                onChanged: (v) => setState(() => _vista = v),
                               ),
-                              const SizedBox(height: 16),
-                              _buildChipsCategorias(context),
+                              if (vista == VistaPremios.tienda) ...[
+                                const SizedBox(height: 16),
+                                _Buscador(
+                                  texto: _busqueda,
+                                  onChanged: (t) =>
+                                      setState(() => _busqueda = t),
+                                ),
+                                const SizedBox(height: 16),
+                                _buildChipsCategorias(context),
+                              ],
                             ],
                           ),
                         ),
                       ),
-                      if (premiosFiltrados.isEmpty)
+                      if (vista == VistaPremios.cupones)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                          sliver: SliverToBoxAdapter(
+                            child: MisCupones(
+                              cupones: Datos.i.catalogo.cupones,
+                              onIrALaTienda: () =>
+                                  setState(() => _vista = VistaPremios.tienda),
+                            ),
+                          ),
+                        )
+                      else if (premiosFiltrados.isEmpty)
                         SliverToBoxAdapter(child: _buildSinResultados(context))
                       else
                         SliverPadding(
@@ -183,8 +222,17 @@ class _PremiosScreenState extends State<PremiosScreen> {
         // El MISMO `sectionTitle` que las otras cuatro pantallas. Era un
         // `headlineSmall` en gris, así que Premios titulaba distinto que
         // el resto y se leía como una pantalla de otra app.
-        Text('PREMIOS', style: AppTheme.sectionTitle),
-        const Spacer(),
+        // Expanded + FittedBox: con la letra de iOS grande, el título
+        // y el saldo no entraban en la misma fila y se desbordaban. El
+        // título se achica; el saldo, que es un dato, no.
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('PREMIOS', style: AppTheme.sectionTitle),
+          ),
+        ),
+        const SizedBox(width: 8),
         ChipMonedas(cantidad: monedasUsuario),
         // La "i" va PEGADA al chip de monedas: lo que explica es de qué
         // se trata ese saldo.
@@ -214,16 +262,16 @@ class _PremiosScreenState extends State<PremiosScreen> {
           child: Column(
             children: [
               Text(
-                'Tenés $monedasUsuario monedas para gastar en Premios.',
+                'Tienes $monedasUsuario monedas para gastar en Premios.',
                 style: const TextStyle(height: 1.35),
               ),
               const SizedBox(height: 10),
               Text(
                 lote == null
-                    ? 'Las monedas duran 90 días desde que las ganás.'
+                    ? 'Las monedas duran 90 días desde que las ganas.'
                     : '${lote.cantidad} de ellas vencen en '
                           '${lote.diasParaCaducar} días. Cada moneda dura 90 '
-                          'días desde que la ganás.',
+                          'días desde que la ganas.',
                 style: const TextStyle(height: 1.35),
               ),
             ],
@@ -779,6 +827,99 @@ class _BuscadorState extends State<_Buscador> {
           else
             const SizedBox(width: 14),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// Tienda / Mis cupones.
+// ============================================================
+
+/// Llave del selector, para los tests.
+const Key llaveSelectorPremios = ValueKey('selector-premios');
+
+/// El selector de arriba de Premios. El control segmentado de iOS, con
+/// los colores de +Vida: fondo azul pálido y el segmento elegido en
+/// blanco con el texto en azul de marca (seleccionar es SIEMPRE azul).
+///
+/// "Mis cupones" lleva cuántos hay por usar: es lo que dice, sin entrar,
+/// que ahí hay algo tuyo esperando.
+class _SelectorVista extends StatelessWidget {
+  const _SelectorVista({
+    required this.vista,
+    required this.cuponesActivos,
+    required this.onChanged,
+  });
+
+  final VistaPremios vista;
+  final int cuponesActivos;
+  final ValueChanged<VistaPremios> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    TextStyle? estilo(VistaPremios v) =>
+        Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: v == vista ? AppColors.accent : AppColors.textSecondary,
+          fontWeight: v == vista ? FontWeight.w700 : FontWeight.w500,
+        );
+
+    return SizedBox(
+      width: double.infinity,
+      child: CupertinoSlidingSegmentedControl<VistaPremios>(
+        key: llaveSelectorPremios,
+        groupValue: vista,
+        backgroundColor: AppColors.azulBruma,
+        thumbColor: AppColors.card,
+        padding: const EdgeInsets.all(3),
+        onValueChanged: (v) {
+          if (v == null) return;
+          HapticFeedback.selectionClick();
+          onChanged(v);
+        },
+        children: {
+          VistaPremios.tienda: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('Tienda', style: estilo(VistaPremios.tienda)),
+          ),
+          VistaPremios.cupones: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            // Con la letra de iOS grande, "Mis cupones" y el contador no
+            // entran en medio control: se achican juntos en vez de
+            // desbordar.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Mis cupones', style: estilo(VistaPremios.cupones)),
+                  if (cuponesActivos > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      constraints: const BoxConstraints(minWidth: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.accent,
+                        borderRadius: BorderRadius.circular(AppRadios.pildora),
+                      ),
+                      child: Text(
+                        '$cuponesActivos',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        },
       ),
     );
   }

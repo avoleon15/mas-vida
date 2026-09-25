@@ -64,7 +64,11 @@ void main() {
   testWidgets('al abrir la app la gráfica crece desde la base', (t) async {
     await t.pumpWidget(_pantalla());
 
-    expect(_alturasLinea(t), everyElement(0.0), reason: 'la línea arranca en 0');
+    expect(
+      _alturasLinea(t),
+      everyElement(0.0),
+      reason: 'la línea arranca en 0',
+    );
 
     await t.pump(const Duration(milliseconds: 400));
     for (final y in _alturasLinea(t)) {
@@ -101,11 +105,11 @@ void main() {
     await t.pumpWidget(const MaterialApp(home: SizedBox()));
     await t.pumpWidget(_pantalla());
 
-    expect(
-      _alturasLinea(t),
-      [12000.0, 9000.0, 8000.0],
-      reason: 'al volver a la pantalla la gráfica ya está dibujada',
-    );
+    expect(_alturasLinea(t), [
+      12000.0,
+      9000.0,
+      8000.0,
+    ], reason: 'al volver a la pantalla la gráfica ya está dibujada');
   });
 
   testWidgets('el número y la gráfica terminan juntos', (t) async {

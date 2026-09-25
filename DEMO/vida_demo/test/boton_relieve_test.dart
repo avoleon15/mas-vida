@@ -30,13 +30,13 @@ void main() {
   ) async {
     await _montar(
       tester,
-      BotonRelieve(label: 'Nuevo duelo', compacto: true, onPressed: () {}),
+      BotonRelieve(label: 'Crear', compacto: true, onPressed: () {}),
     );
 
     final tamano = tester.getSize(find.byType(BotonRelieve));
     expect(tamano.width, greaterThan(60));
     expect(tamano.height, greaterThan(30));
-    expect(find.text('Nuevo duelo'), findsOneWidget);
+    expect(find.text('Crear'), findsOneWidget);
   });
 
   testWidgets('presionarlo no le cambia la altura', (tester) async {
