@@ -1,6 +1,9 @@
 from django.db import models
 
 class Ledger(models.Model):
+
+    id = models.AutoField(primary_key=True) 
+
     usuario = models.ForeignKey(
         "users.Usuario",
         on_delete=models.PROTECT
@@ -23,11 +26,12 @@ class Ledger(models.Model):
         blank=True
     )
 
-
     tipo = models.CharField(
         max_length=50
     )
     fecha = models.DateField()
+
+    creado_en = models.DateField(auto_now_add=True)
 
     version_regla = models.ForeignKey(
         "VersionRegla",
