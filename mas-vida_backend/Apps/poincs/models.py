@@ -3,7 +3,7 @@ from django.db import models
 class Ledger(models.Model):
     usuario = models.ForeignKey(
         "users.Usuario",
-        on_delete=models.CASCADE
+        on_delete=models.PROTECT
     )
 
     puntos = models.IntegerField()
