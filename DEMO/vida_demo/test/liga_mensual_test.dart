@@ -3,7 +3,6 @@ import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/hora_guatemala.dart';
 import 'package:vida_demo/screens/ranking_grupo_screen.dart';
-import 'package:vida_demo/screens/social_screen.dart';
 
 import 'ayudas.dart';
 
@@ -21,9 +20,11 @@ import 'ayudas.dart';
 // ============================================================
 
 Future<void> _abrirLiga(WidgetTester tester) async {
-  await montarPantalla(tester, const SocialScreen());
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Liga local'));
+  // La tabla de La Liga, que es donde viven su período y su marca.
+  await montarPantalla(
+    tester,
+    RankingGrupoScreen(grupo: Datos.i.social.ligaLocal!),
+  );
   await tester.pumpAndSettle();
 }
 

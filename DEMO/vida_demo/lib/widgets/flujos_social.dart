@@ -51,21 +51,24 @@ DateTime cierreDeCompetencia({DateTime? desde}) {
   );
 }
 
-/// Crear una competencia nueva.
+/// Crear una competencia nueva. Devuelve la competencia creada, o null si
+/// el usuario se arrepintió.
+///
+/// Devuelve la competencia y no un "sí": lo siguiente que hace Social es
+/// abrir la hoja para compartir SU código, sin que el usuario tenga que ir
+/// a buscarla.
 ///
 /// Pregunta explícitamente si se muestran los puntos, porque es una
 /// decisión de privacidad y no puede quedar en un default silencioso:
 /// mostrar los puntos de alguien es mostrar su nivel de actividad.
-Future<bool> mostrarCrearGrupo(BuildContext context) async {
-  final creado = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
-    builder: (_) => const _CrearGrupo(),
-  );
-  return creado ?? false;
-}
+Future<GrupoRanking?> mostrarCrearGrupo(BuildContext context) =>
+    showModalBottomSheet<GrupoRanking>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
+      builder: (_) => const _CrearGrupo(),
+    );
 
 class _CrearGrupo extends StatefulWidget {
   const _CrearGrupo();
@@ -90,37 +93,35 @@ class _CrearGrupoState extends State<_CrearGrupo> {
     if (!_valido) return;
     HapticFeedback.selectionClick();
     final nombre = _nombre.text.trim();
-    Datos.i.social.grupos.insert(
-      // Antes de la liga local, que siempre va al final.
-      Datos.i.social.deConocidos.length,
-      GrupoRanking(
-        id: nombre.toLowerCase().replaceAll(' ', '_'),
-        nombre: nombre,
-        tipo: TipoGrupo.conocidos,
-        mostrarPuntos: _mostrarPuntos,
-        // Todo lo que arma el usuario corre por mes: es el default del
-        // modelo y no hay pantalla que lo cambie.
-        ciclo: CicloRanking.mes,
-        arranca: DateTime.now(),
-        cierra: cierreDeCompetencia(),
-        // Arranca solo con el usuario: los demás entran con el código.
-        miembros: [
-          RankingPersona(
-            nombre: Datos.i.perfil.nombre,
-            // Los puntos del mes del usuario. Antes se cargaban los de la
-            // semana, que era el ciclo equivocado.
-            puntosPeriodo: Datos.i.resumen.puntosMes,
-            tendencia: Tendencia.igual,
-            esUsuario: true,
-          ),
-        ],
-        creadoPorMi: true,
-      ),
+    final grupo = GrupoRanking(
+      id: nombre.toLowerCase().replaceAll(' ', '_'),
+      nombre: nombre,
+      tipo: TipoGrupo.conocidos,
+      mostrarPuntos: _mostrarPuntos,
+      // Todo lo que arma el usuario corre por mes: es el default del
+      // modelo y no hay pantalla que lo cambie.
+      ciclo: CicloRanking.mes,
+      arranca: DateTime.now(),
+      cierra: cierreDeCompetencia(),
+      // Arranca solo con el usuario: los demás entran con el código.
+      miembros: [
+        RankingPersona(
+          nombre: Datos.i.perfil.nombre,
+          // Los puntos del mes del usuario. Antes se cargaban los de la
+          // semana, que era el ciclo equivocado.
+          puntosPeriodo: Datos.i.resumen.puntosMes,
+          tendencia: Tendencia.igual,
+          esUsuario: true,
+        ),
+      ],
+      creadoPorMi: true,
     );
+    // Antes de La Liga, que siempre va al final.
+    Datos.i.social.grupos.insert(Datos.i.social.deConocidos.length, grupo);
     // Sin await: el grupo ya está en pantalla y guardar no puede hacer
     // esperar al usuario.
     AlmacenSocial.guardar(Datos.i.social.grupos);
-    Navigator.of(context).pop(true);
+    Navigator.of(context).pop(grupo);
   }
 
   @override
@@ -171,8 +172,8 @@ class _CrearGrupoState extends State<_CrearGrupo> {
               const SizedBox(height: 4),
               Text(
                 _mostrarPuntos
-                    ? 'Todos van a ver cuántos puntos hace cada uno. Elegilo '
-                          'solo si se conocen entre sí.'
+                    ? 'Todos van a ver cuántos puntos hace cada uno. '
+                          'Elígelo solo si se conocen entre sí.'
                     : 'Solo se ve la posición en la tabla, no los puntos de '
                           'nadie.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -309,7 +310,8 @@ class _UnirseGrupoState extends State<_UnirseGrupo> {
       titulo: 'Unirse a una competencia',
       children: [
         Text(
-          'Pedile el código de 6 letras a quien creó la competencia.',
+          'Pídele el código de 6 letras a quien creó la competencia. '
+          'No hace falta ser su amigo en la app: con el código entras.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

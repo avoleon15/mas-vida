@@ -4,6 +4,7 @@ import '../datos/modelos.dart';
 import '../hora_guatemala.dart';
 import '../theme.dart';
 import 'moneda_animada.dart';
+import 'numero_animado.dart' show milesConComa;
 
 // ============================================================
 // Piezas de ranking que comparten la pantalla Social y la pantalla de un
@@ -156,7 +157,7 @@ class PremioPodio extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              '$puesto.o',
+              '$puesto.º',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -364,7 +365,7 @@ class _Barra extends StatelessWidget {
               if (puntos != null) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '$puntos',
+                  milesConComa(puntos!),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.card,
                     fontWeight: FontWeight.w800,
@@ -480,7 +481,7 @@ class FilaRanking extends StatelessWidget {
           ),
           if (verPuntos) ...[
             Text(
-              '${persona.puntosPeriodo}',
+              milesConComa(persona.puntosPeriodo),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -579,7 +580,13 @@ class ResumenGrupo extends StatelessWidget {
             children: [
               // La posición es el dato principal: por eso va grande y
               // sola. Lo demás la acompaña.
-              Text('#${indice + 1}', style: AppTheme.display(40)),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.bottomLeft,
+                  child: Text('${indice + 1}.º', style: AppTheme.display(40)),
+                ),
+              ),
               const SizedBox(width: 6),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -601,7 +608,7 @@ class ResumenGrupo extends StatelessWidget {
             //
             // El período sale del ciclo del grupo y no de un texto fijo:
             // decía "esta semana" en una competencia que dura un mes.
-            '${persona.puntosPeriodo} pts ${grupo.ciclo.cuando}',
+            '${milesConComa(persona.puntosPeriodo)} pts ${grupo.ciclo.cuando}',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),

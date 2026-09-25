@@ -9,7 +9,12 @@ import '../datos/modelos.dart';
 import '../theme.dart';
 
 // ============================================================
-// INVITAR AMIGOS A UN GRUPO.
+// INVITAR A UNA COMPETENCIA.
+//
+// Con un CÓDIGO, nada más: quien lo recibe lo escribe en +Vida y entra.
+// No hay solicitudes ni amigos (se sacaron el 25 de septiembre de 2026).
+// "Compartir" abre la hoja nativa de iOS, que es la que trae WhatsApp,
+// Mensajes, Instagram y cualquier app que el usuario tenga.
 //
 // Vive adentro del grupo y no en el menú general: el código es DE ESTE
 // grupo, así que solo tiene sentido cuando ya estás parado en él. Antes
@@ -17,20 +22,32 @@ import '../theme.dart';
 // saber a cuál de tus grupos estabas invitando.
 // ============================================================
 
-void mostrarInvitarAlGrupo(BuildContext context, GrupoRanking grupo) {
+/// Abre la hoja con el código de [grupo] para compartirlo.
+///
+/// [recienCreada] cambia solo el título: justo después de crear la
+/// competencia, lo que sigue es invitar a la gente.
+void mostrarInvitarAlGrupo(
+  BuildContext context,
+  GrupoRanking grupo, {
+  bool recienCreada = false,
+}) {
   HapticFeedback.selectionClick();
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
-    builder: (_) => _HojaInvitar(grupo: grupo),
+    builder: (_) => _HojaInvitar(grupo: grupo, recienCreada: recienCreada),
   );
 }
 
+/// Llave del botón Compartir, para los tests.
+const Key llaveCompartirCodigo = ValueKey('compartir-codigo');
+
 class _HojaInvitar extends StatefulWidget {
-  const _HojaInvitar({required this.grupo});
+  const _HojaInvitar({required this.grupo, required this.recienCreada});
 
   final GrupoRanking grupo;
+  final bool recienCreada;
 
   @override
   State<_HojaInvitar> createState() => _HojaInvitarState();
@@ -59,12 +76,13 @@ class _HojaInvitarState extends State<_HojaInvitar> {
     super.dispose();
   }
 
+  /// Lo que llega por WhatsApp o donde se comparta. Dice CÓMO entrar,
+  /// paso por paso: quien lo recibe no tiene por qué saber dónde se
+  /// escribe un código.
   String get _mensaje =>
-      // Ya no dice "esta semana": una competencia puede durar hasta
-      // tres meses, así que prometer una semana sería mentirle a quien
-      // recibe la invitación.
-      'Te invito a "${grupo.nombre}" en +Vida. Entrá con el código '
-      '${grupo.codigoInvitacion} y compite conmigo.';
+      'Te invito a "${grupo.nombre}" en +Vida. Abre la app, entra a '
+      'Social, toca "Crear o unirme" y escribe el código '
+      '${grupo.codigoInvitacion}.';
 
   /// Copia el código y COMPRUEBA que haya quedado.
   ///
@@ -106,7 +124,7 @@ class _HojaInvitarState extends State<_HojaInvitar> {
     await SharePlus.instance.share(
       ShareParams(
         text: _mensaje,
-        subject: 'Unite a ${grupo.nombre} en +Vida',
+        subject: 'Únete a ${grupo.nombre} en +Vida',
         // En iPad la hoja de compartir necesita un ancla o revienta.
         sharePositionOrigin: caja == null
             ? null
@@ -142,7 +160,9 @@ class _HojaInvitarState extends State<_HojaInvitar> {
                 ),
               ),
               Text(
-                'Invitar amigos',
+                widget.recienCreada
+                    ? '¡${grupo.nombre} está lista!'
+                    : 'Invitar a ${grupo.nombre}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w800,
@@ -150,7 +170,9 @@ class _HojaInvitarState extends State<_HojaInvitar> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Pasales este código y entran directo a ${grupo.nombre}.',
+                'Comparte el código por WhatsApp o donde quieras. Quien '
+                'lo escriba en +Vida entra directo, sin agregarse como '
+                'amigos.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.textSecondary,
                   height: 1.35,
@@ -203,6 +225,7 @@ class _HojaInvitarState extends State<_HojaInvitar> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _BotonAccion(
+                      key: llaveCompartirCodigo,
                       icono: CupertinoIcons.share,
                       label: 'Compartir',
                       relleno: true,
@@ -264,6 +287,7 @@ class _Codigo extends StatelessWidget {
 
 class _BotonAccion extends StatelessWidget {
   const _BotonAccion({
+    super.key,
     required this.icono,
     required this.label,
     required this.relleno,

@@ -253,7 +253,7 @@ void main() {
       await montar(t, const SocialScreen());
       // Social es solo el ranking desde el 25 de septiembre de 2026.
       expect(find.text('SOCIAL'), findsOneWidget);
-      expect(find.text('Liga local'), findsOneWidget);
+      expect(find.textContaining('LA LIGA'), findsOneWidget);
       // Nada de la pantalla vieja: ni la pestaña Ranking, ni duelos, ni
       // solicitudes. (Un grupo PUEDE llamarse "Amigos": es una
       // competencia entre amigos, parte del ranking.)

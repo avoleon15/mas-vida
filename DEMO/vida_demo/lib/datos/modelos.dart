@@ -1284,8 +1284,7 @@ class GrupoRanking {
     required bool mostrarPuntos,
     required this.miembros,
     this.ciclo = CicloRanking.mes,
-    this.nivelActividad,
-    this.zona,
+    this.franjaEdad,
     this.arranca,
     this.cierra,
     this.premiosMonedas = const [],
@@ -1315,21 +1314,18 @@ class GrupoRanking {
 
   /// Cada cuánto cierra este ranking.
   ///
-  /// La liga local corre por TRIMESTRE; las competencias que arma el
-  /// usuario, por MES y sin opción de cambiarlo. El default es mensual
-  /// porque es lo que aplica a todo lo que crea el usuario; la liga trae
-  /// el suyo en el JSON.
+  /// Todo corre por MES: La Liga del 1 al último día del mes, y las
+  /// competencias que arma el usuario, un mes desde que se crean.
   final CicloRanking ciclo;
 
-  /// Solo en ligas de desconocidos: contra qué nivel de actividad se
-  /// arma la liga, para que compita gente parecida.
-  final String? nivelActividad;
-
-  /// Solo en ligas de desconocidos: la zona contra la que se compite.
+  /// Solo en La Liga: la franja de edad del grupo, dicha como la manda
+  /// el backend ("30 a 39 años"). La Liga sortea cada mes a gente de la
+  /// misma franja de 10 años; la calcula el servidor con la fecha de
+  /// nacimiento, nunca el teléfono.
   ///
-  /// Es el área declarada de la liga, NUNCA la ubicación de nadie: la app
-  /// no comparte ubicación de personas.
-  final String? zona;
+  /// Reemplaza a la zona y al nivel de actividad de antes: La Liga ya no
+  /// se arma por zona (CLAUDE.md, modelo viejo).
+  final String? franjaEdad;
 
   /// Cuándo arrancó el ciclo en curso. Con [cierra] arma el rango que se
   /// le muestra al usuario ("del 1 al 30 de septiembre"), que es lo que
@@ -1428,8 +1424,7 @@ class GrupoRanking {
         // todo lo que crea el usuario.
         (j['ciclo'] ?? liga['ciclo']) as String?,
       ),
-      nivelActividad: liga['nivel_actividad'] as String?,
-      zona: liga['zona'] as String?,
+      franjaEdad: liga['franja_edad'] as String?,
       arranca: liga['arranca'] == null
           ? null
           : DateTime.tryParse(liga['arranca'] as String),
@@ -1456,15 +1451,13 @@ class GrupoRanking {
     'mostrar_puntos': _mostrarPuntos,
     'ciclo': ciclo.name,
     'miembros': miembros.map((m) => m.aJson()).toList(),
-    if (nivelActividad != null ||
-        zona != null ||
+    if (franjaEdad != null ||
         arranca != null ||
         cierra != null ||
         premiosMonedas.isNotEmpty ||
         patrocinio != null)
       'liga': {
-        if (nivelActividad != null) 'nivel_actividad': nivelActividad,
-        if (zona != null) 'zona': zona,
+        if (franjaEdad != null) 'franja_edad': franjaEdad,
         if (arranca != null) 'arranca': arranca!.toIso8601String(),
         if (cierra != null) 'cierra': cierra!.toIso8601String(),
         if (premiosMonedas.isNotEmpty) 'premios_monedas': premiosMonedas,

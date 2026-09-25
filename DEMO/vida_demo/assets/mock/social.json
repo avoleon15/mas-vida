@@ -1,9 +1,10 @@
 {
   "_comentario": [
-    "Mock de la pantalla Social, que desde el 25 de septiembre de 2026 es solo el ranking. Dos bloques: yo y grupos. Los amigos, las solicitudes y los duelos se sacaron de la app.",
-    "En un grupo de tipo 'desconocidos' los puntos NUNCA se muestran, solo la posicion.",
-    "puntos_periodo son los puntos del CICLO de ese grupo: del mes, tanto en una competencia con conocidos como en la liga local. La clave vieja se llamaba puntos_semana y ningun ranking corre por semana: lo semanal son los retos, que es otra mecanica.",
-    "Los grupos que el usuario crea o a los que se une NO viven aca: se guardan aparte, en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
+    "Mock de la pantalla Social: La Liga y Mis competencias. Sin amigos, solicitudes ni duelos (sacados el 25 de septiembre de 2026).",
+    "Mis competencias (tipo 'conocidos') se arman con un codigo: quien crea la competencia lo comparte por WhatsApp o cualquier app, y quien lo escribe entra. No hay que agregarse como amigos.",
+    "La Liga (tipo 'desconocidos') la arma la app: cada mes sortea a la gente en grupos de hasta 30 personas de la misma franja de edad de 10 anios. Sus puntos NUNCA se muestran, solo la posicion.",
+    "puntos_periodo son los puntos del MES en curso.",
+    "Los grupos que el usuario crea NO viven aca: se guardan en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
   ],
   "yo": {
     "nombre": "Diego",
@@ -91,12 +92,11 @@
     },
     {
       "id": "liga_local",
-      "nombre": "Liga local",
+      "nombre": "La Liga",
       "tipo": "desconocidos",
       "mostrar_puntos": false,
       "liga": {
-        "nivel_actividad": "Intermedio",
-        "zona": "Zona 10, Guatemala",
+        "franja_edad": "30 a 39 años",
         "ciclo": "mes",
         "arranca": "2026-09-01T00:00:00-06:00",
         "cierra": "2026-09-30T23:59:59-06:00",
@@ -110,12 +110,12 @@
           "logo": "assets/img/premios/restaurantes/ookii.webp",
           "cupon": "2x1 en sushi de Ookii"
         },
-        "_nota_ciclo": "La liga corre por MES: del dia 1 al ultimo dia del mes, en hora de Guatemala (UTC-6, sin horario de verano). Decision de Alvaro del 22 de septiembre de 2026; antes corria por trimestre, y antes de eso cerraba un domingo (semanal), que era un bug. El ciclo SEMANAL de los retos es otra cosa y no se toca. Las competencias que arma el usuario con su gente corren por MES.",
+        "_nota_ciclo": "La Liga corre por MES: del dia 1 al ultimo dia del mes, en hora de Guatemala. Se arma por franja de edad de 10 anios, no por zona (la zona es del modelo viejo).",
         "_nota_patrocinio": "PLACEHOLDER: Ookii es un ejemplo, la alianza real todavia no esta cerrada (Diego la sustituye cuando cierre). El logo sale del catalogo de Premios para no meter un asset nuevo por algo provisional. Cuando exista el endpoint de Luis esto llega de la API y este bloque se borra."
       },
       "miembros": [
         {
-          "nombre": "Daniel pinol",
+          "nombre": "Daniel Piñol",
           "puntos_periodo": 3200,
           "tendencia": "subida"
         },
@@ -130,23 +130,48 @@
           "tendencia": "subida"
         },
         {
-          "_nota": "El usuario trae SU PROPIO puntos_periodo solo aca: la liga y las competencias con conocidos corren las dos por mes, pero son rankings distintos y el backend manda el puntaje de cada uno por separado. Tiene que quedar entre el 3.o (2400) y el 5.o (1500) o la tabla deja de estar ordenada.",
+          "_nota": "Los puntos del usuario en La Liga. Tiene que quedar entre el 3.o (2400) y el 5.o (1500) o la tabla deja de estar ordenada.",
           "es_usuario": true,
           "puntos_periodo": 2100
         },
         {
-          "nombre": "Alexander Lopez",
+          "nombre": "Alexander López",
           "puntos_periodo": 1500,
           "tendencia": "bajada"
         },
         {
-          "nombre": "Sofia Bilbao",
+          "nombre": "Sofía Bilbao",
           "puntos_periodo": 1150,
           "tendencia": "igual"
         },
         {
-          "nombre": "Daniela De Leon",
+          "nombre": "Andrea Castillo",
+          "puntos_periodo": 1020,
+          "tendencia": "subida"
+        },
+        {
+          "nombre": "Pablo Estrada",
+          "puntos_periodo": 940,
+          "tendencia": "bajada"
+        },
+        {
+          "nombre": "Daniela De León",
           "puntos_periodo": 780,
+          "tendencia": "bajada"
+        },
+        {
+          "nombre": "Mariana Cifuentes",
+          "puntos_periodo": 610,
+          "tendencia": "igual"
+        },
+        {
+          "nombre": "José Barrios",
+          "puntos_periodo": 450,
+          "tendencia": "subida"
+        },
+        {
+          "nombre": "Lucía Morales",
+          "puntos_periodo": 300,
           "tendencia": "bajada"
         }
       ]

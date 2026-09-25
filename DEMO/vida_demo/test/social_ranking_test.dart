@@ -1,25 +1,32 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/screens/ranking_grupo_screen.dart';
 import 'package:vida_demo/screens/social_screen.dart';
+import 'package:vida_demo/widgets/avatar_usuario.dart';
 import 'package:vida_demo/widgets/ranking_widgets.dart';
 
 import 'ayudas.dart';
 
 // ============================================================
-// La pestaña Ranking separa dos mundos que NO se pueden mezclar: los
-// grupos privados y la liga local con desconocidos.
+// SOCIAL: La Liga arriba y Mis competencias debajo, en una sola pantalla
+// (rediseño del 25 de septiembre de 2026). Sin amigos ni solicitudes: a
+// una competencia se entra con un código.
 //
-// Estos tests fijan esa separación y la regla de privacidad de los
-// puntos, que es lo que no se puede romper sin exponer a alguien.
+// Lo que no se puede romper: que los puntos de la gente de La Liga nunca
+// se vean, y que la distancia al podio se diga en PUESTOS y no en puntos.
 // ============================================================
 
-Future<void> _montar(WidgetTester tester) async {
-  // Social es solo el ranking: ya no hay pestaña que tocar.
-  await montarPantalla(tester, const SocialScreen());
-  await tester.pumpAndSettle();
+GrupoRanking get _liga => Datos.i.social.ligaLocal!;
+
+Future<void> _montar(WidgetTester t) async {
+  t.view.physicalSize = const Size(390, 1400);
+  t.view.devicePixelRatio = 1;
+  addTearDown(t.view.reset);
+  await montarPantalla(t, const SocialScreen());
+  await t.pump();
 }
 
 void main() {
@@ -28,100 +35,168 @@ void main() {
     await Datos.cargar();
   });
 
-  group('Ranking separa grupos de la liga local', () {
-    testWidgets('la liga local no aparece entre mis grupos', (tester) async {
-      await _montar(tester);
+  group('Una sola pantalla', () {
+    testWidgets('no hay pestañas: La Liga y Mis competencias juntas', (
+      t,
+    ) async {
+      await _montar(t);
+      expect(find.byKey(llaveTarjetaLiga), findsOneWidget);
+      expect(find.text('MIS COMPETENCIAS'), findsOneWidget);
+      for (final g in Datos.i.social.deConocidos) {
+        expect(find.text(g.nombre), findsOneWidget, reason: g.nombre);
+      }
+      // Nada de la estructura vieja.
+      expect(find.text('Liga local'), findsNothing);
+      expect(find.textContaining('TU SEMANA'), findsNothing);
+    });
 
-      // Los grupos de conocidos sí están en la lista.
-      expect(find.text('Familia'), findsOneWidget);
-      expect(find.text('Oficina'), findsOneWidget);
-
-      // La liga NO. No se puede buscar su nombre, porque el segmento se
-      // llama igual: se busca lo que solo sale en su tarjeta.
-      final liga = Datos.i.social.ligaLocal!;
-      expect(find.text(liga.zona!), findsNothing);
-      // Y hay exactamente una fila por grupo privado, ni una de más.
+    testWidgets('La Liga va arriba de Mis competencias', (t) async {
+      await _montar(t);
       expect(
-        find.byIcon(CupertinoIcons.chevron_right),
-        findsNWidgets(Datos.i.social.deConocidos.length),
+        t.getTopLeft(find.byKey(llaveTarjetaLiga)).dy,
+        lessThan(t.getTopLeft(find.text('MIS COMPETENCIAS')).dy),
+      );
+    });
+  });
+
+  group('La Liga', () {
+    testWidgets('dice el puesto, de cuántos y la franja de edad', (t) async {
+      await _montar(t);
+      expect(find.text('${_liga.posicionUsuario}.º'), findsOneWidget);
+      expect(find.text('de ${_liga.miembros.length}'), findsOneWidget);
+      expect(find.text(_liga.franjaEdad!), findsOneWidget);
+      // Ya no se arma por zona.
+      expect(find.textContaining('Zona'), findsNothing);
+    });
+
+    testWidgets('la pista marca dónde vas con tu foto', (t) async {
+      await _montar(t);
+      expect(
+        find.descendant(
+          of: find.byType(PistaLiga),
+          matching: find.byType(AvatarUsuario),
+        ),
+        findsOneWidget,
       );
     });
 
-    testWidgets('la liga local vive en su propio segmento', (tester) async {
-      await _montar(tester);
+    testWidgets('lo que falta para el podio se dice en puestos', (t) async {
+      await _montar(t);
+      final faltan = _liga.posicionUsuario - _liga.premiosMonedas.length;
+      expect(
+        find.text(
+          faltan == 1
+              ? 'A 1 puesto del podio'
+              : 'A $faltan puestos del podio',
+        ),
+        findsOneWidget,
+      );
+    });
 
-      await tester.tap(find.text('Liga local'));
-      await tester.pumpAndSettle();
-
-      final liga = Datos.i.social.ligaLocal!;
-      expect(find.text(liga.nombre), findsWidgets);
-      // Y ahí ya no se listan los grupos privados.
-      expect(find.text('Familia'), findsNothing);
+    testWidgets('tocarla abre la tabla', (t) async {
+      await _montar(t);
+      await t.tap(find.byKey(llaveTarjetaLiga));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 500));
+      expect(find.byType(RankingGrupoScreen), findsOneWidget);
     });
   });
 
-  group('Lista de grupos', () {
-    testWidgets('cada grupo abre su propia tabla', (tester) async {
-      await _montar(tester);
-
-      // La tarjeta de resumen empuja la lista fuera de la pantalla de
-      // prueba (800x600): hay que traer la fila a la vista antes.
-      await tester.ensureVisible(find.text('Familia'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Familia'));
-      await tester.pumpAndSettle();
-
+  group('Mis competencias', () {
+    testWidgets('cada competencia abre su tabla', (t) async {
+      await _montar(t);
+      await t.tap(find.text('Familia'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 500));
       expect(find.byType(RankingGrupoScreen), findsOneWidget);
     });
 
-    testWidgets('el buscador filtra por nombre', (tester) async {
-      await _montar(tester);
+    testWidgets('crear o unirse ofrece las dos cosas, sin solicitudes', (
+      t,
+    ) async {
+      await _montar(t);
+      await t.tap(find.byKey(llaveCrearOUnirse));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.text('Crear una competencia'), findsOneWidget);
+      expect(find.text('Unirme con un código'), findsOneWidget);
+      expect(find.textContaining('olicitud'), findsNothing);
+    });
 
-      // El buscador solo aparece cuando hay suficientes grupos como para
-      // necesitarlo; con los del mock todavía no.
-      if (find.byType(CupertinoSearchTextField).evaluate().isEmpty) {
-        expect(Datos.i.social.deConocidos.length, lessThan(5));
-        return;
-      }
+    testWidgets('crear una competencia abre el código para compartir', (
+      t,
+    ) async {
+      await _montar(t);
+      await t.tap(find.byKey(llaveCrearOUnirse));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.tap(find.text('Crear una competencia'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
 
-      await tester.enterText(find.byType(CupertinoSearchTextField), 'fami');
-      await tester.pumpAndSettle();
+      await t.enterText(find.byType(EditableText).first, 'Los del gym');
+      await t.pump();
+      await t.tap(find.text('Crear competencia'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
 
-      expect(find.text('Familia'), findsOneWidget);
-      expect(find.text('Oficina'), findsNothing);
+      // Lo que sigue a crear es invitar, sin ir a buscar dónde.
+      expect(find.text('¡Los del gym está lista!'), findsOneWidget);
+      expect(find.text('Compartir'), findsOneWidget);
+
+      Datos.i.social.grupos.removeWhere((g) => g.nombre == 'Los del gym');
     });
   });
 
-  group('Podio', () {
-    testWidgets('los tres primeros salen en el podio y no en la tabla', (
-      tester,
+  group('La tabla', () {
+    testWidgets('en La Liga solo se ven los puntos propios', (t) async {
+      t.view.physicalSize = const Size(390, 2000);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await montarPantalla(t, RankingGrupoScreen(grupo: _liga));
+      await t.pump();
+
+      for (final otro in _liga.miembros.where((m) => !m.esUsuario)) {
+        expect(
+          find.textContaining('${otro.puntosPeriodo}'),
+          findsNothing,
+          reason: 'se filtraron los puntos de ${otro.nombre}',
+        );
+      }
+    });
+
+    testWidgets('dice TABLA DEL MES, no de la semana', (t) async {
+      await montarPantalla(t, RankingGrupoScreen(grupo: _liga));
+      await t.pump();
+      expect(find.text('TABLA DEL MES'), findsOneWidget);
+      expect(find.textContaining('SEMANA'), findsNothing);
+    });
+
+    testWidgets('los tres primeros van en el podio y no en la tabla', (
+      t,
     ) async {
       final grupo = Datos.i.social.deConocidos.firstWhere(
         (g) => g.miembros.length > 3,
       );
-
-      await montarPantalla(tester, RankingGrupoScreen(grupo: grupo));
-      await tester.pumpAndSettle();
+      t.view.physicalSize = const Size(390, 2000);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await montarPantalla(t, RankingGrupoScreen(grupo: grupo));
+      await t.pump();
 
       expect(find.byType(PodioRanking), findsOneWidget);
-      // Del 4.o para abajo: ni una fila de más, ni el podio repetido.
       expect(
         find.byType(FilaRanking),
         findsNWidgets(grupo.miembros.length - 3),
       );
-      // Y cada uno del podio aparece UNA sola vez.
-      for (final p in grupo.miembros.take(3)) {
-        expect(find.text(p.esUsuario ? 'Tú' : p.nombre), findsOneWidget);
-      }
     });
   });
 
   group('Privacidad de los puntos', () {
-    test('una liga de desconocidos nunca muestra puntos', () {
-      // Aunque el JSON diga que sí: el tipo manda.
+    test('La Liga nunca muestra puntos, aunque el JSON diga que sí', () {
       final liga = GrupoRanking(
         id: 'x',
-        nombre: 'Liga',
+        nombre: 'La Liga',
         tipo: TipoGrupo.desconocidos,
         mostrarPuntos: true,
         miembros: const [],
@@ -129,7 +204,7 @@ void main() {
       expect(liga.mostrarPuntos, isFalse);
     });
 
-    test('un grupo de conocidos respeta lo que eligió quien lo creó', () {
+    test('una competencia respeta lo que eligió quien la creó', () {
       GrupoRanking conocidos({required bool ver}) => GrupoRanking(
         id: 'x',
         nombre: 'Oficina',
@@ -137,28 +212,8 @@ void main() {
         mostrarPuntos: ver,
         miembros: const [],
       );
-
       expect(conocidos(ver: true).mostrarPuntos, isTrue);
       expect(conocidos(ver: false).mostrarPuntos, isFalse);
-    });
-
-    testWidgets('en la liga solo se ven los puntos propios', (tester) async {
-      final liga = Datos.i.social.ligaLocal!;
-
-      await montarPantalla(tester, RankingGrupoScreen(grupo: liga));
-      await tester.pumpAndSettle();
-
-      final yo = liga.miembros.firstWhere((m) => m.esUsuario);
-      expect(find.text('${yo.puntosPeriodo}'), findsOneWidget);
-
-      // Los de los demás no están en ningún lado.
-      for (final otro in liga.miembros.where((m) => !m.esUsuario)) {
-        expect(
-          find.text('${otro.puntosPeriodo}'),
-          findsNothing,
-          reason: 'se filtraron los puntos de ${otro.nombre}',
-        );
-      }
     });
   });
 }
