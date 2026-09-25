@@ -15,7 +15,7 @@ class PolizaVinculada(models.Model):
     insurer = models.CharField(max_length=100)
     policy_start_date = models.DateField()
     birth_date_confirmado = models.DateField(
-        null=True
+        null=True,
         blank=True
     )
     estado_verificación = models.CharField(
