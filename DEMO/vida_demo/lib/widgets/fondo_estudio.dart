@@ -32,18 +32,11 @@ class FondoEstudio extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF16262E),
-            Color(0xFF0D1619),
-            Color(0xFF0A1013),
-          ],
+          colors: [Color(0xFF16262E), Color(0xFF0D1619), Color(0xFF0A1013)],
           stops: [0.0, 0.55, 1.0],
         ),
       ),
-      child: CustomPaint(
-        painter: _PintorFondo(),
-        child: child,
-      ),
+      child: CustomPaint(painter: _PintorFondo(), child: child),
     );
   }
 }
@@ -54,14 +47,14 @@ class _PintorFondo extends CustomPainter {
     final centro = Offset(size.width / 2, size.height / 2);
     final rect = Offset.zero & size;
 
-    // 1) Halo verde detrás del celular: da la sensación de que el
+    // 1) Halo azul detrás del celular: da la sensación de que el
     // dispositivo está iluminado y lo despega del fondo.
     final radioHalo = size.shortestSide * 0.78;
     final halo = Paint()
       ..shader = RadialGradient(
         colors: [
-          AppColors.accentSecondary.withValues(alpha: 0.13),
-          AppColors.accentSecondary.withValues(alpha: 0.04),
+          AppColors.accent.withValues(alpha: 0.10),
+          AppColors.accent.withValues(alpha: 0.03),
           Colors.transparent,
         ],
         stops: const [0.0, 0.45, 1.0],
@@ -74,10 +67,7 @@ class _PintorFondo extends CustomPainter {
     final radioAzul = size.shortestSide * 0.55;
     final haloAzul = Paint()
       ..shader = RadialGradient(
-        colors: [
-          AppColors.accent.withValues(alpha: 0.10),
-          Colors.transparent,
-        ],
+        colors: [AppColors.accent.withValues(alpha: 0.10), Colors.transparent],
       ).createShader(Rect.fromCircle(center: centroAzul, radius: radioAzul));
     canvas.drawCircle(centroAzul, radioAzul, haloAzul);
 
@@ -95,10 +85,7 @@ class _PintorFondo extends CustomPainter {
     // 4) Viñeta: oscurece las esquinas para que la vista caiga al centro.
     final vineta = Paint()
       ..shader = RadialGradient(
-        colors: [
-          Colors.transparent,
-          Colors.black.withValues(alpha: 0.38),
-        ],
+        colors: [Colors.transparent, Colors.black.withValues(alpha: 0.38)],
         stops: const [0.55, 1.0],
       ).createShader(rect);
     canvas.drawRect(rect, vineta);

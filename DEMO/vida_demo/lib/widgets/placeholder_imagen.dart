@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../theme.dart';
 
 /// Placeholder visual reutilizable para donde iría una foto/logo real de
@@ -27,6 +29,131 @@ class PlaceholderImagen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// El logo de un comercio, con el placeholder de reserva.
+///
+/// Una sola pieza para las dos pantallas de Premios: si el premio no
+/// trae imagen, o el archivo no está en assets todavía, se ve el
+/// placeholder rayado en vez de un hueco gris o un error rojo. Así se
+/// pueden ir agregando los comercios de a uno sin tocar código.
+///
+/// Aguanta las dos formas en que llegan los logos: mapa de bits (JPG,
+/// PNG, WebP) y SVG. Se elige por la extensión del archivo, no por un
+/// campo del catálogo — el JSON ya dice la ruta y agregar otro campo
+/// sería pedir dos veces el mismo dato.
+class FotoComercio extends StatelessWidget {
+  const FotoComercio({
+    super.key,
+    required this.ruta,
+    required this.texto,
+    this.fondo,
+    this.margen = 18,
+  });
+
+  /// Ruta del asset, o null si el premio todavía no tiene imagen.
+  final String? ruta;
+
+  /// Qué dice el placeholder cuando no hay imagen.
+  final String texto;
+
+  /// Color detrás del logo, en hex "#RRGGBB". Blanco si no viene.
+  final String? fondo;
+
+  /// Aire alrededor del logo. Sin esto los logos anchos tocan los bordes
+  /// de la tarjeta y se leen como un banner, no como una marca.
+  final double margen;
+
+  /// El hex del catálogo convertido a color, o blanco si viene mal
+  /// escrito. Un hex malo en el JSON no puede tumbar el catálogo entero.
+  Color get _color {
+    final hex = fondo?.replaceFirst('#', '');
+    if (hex == null || hex.length != 6) return Colors.white;
+    final valor = int.tryParse(hex, radix: 16);
+    return valor == null ? Colors.white : Color(0xFF000000 | valor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ruta = this.ruta;
+    if (ruta == null || ruta.isEmpty) {
+      return PlaceholderImagen(texto: texto);
+    }
+
+    // El fondo lo pone el catálogo, no la tarjeta: la mayoría de los
+    // logos viene con fondo blanco o transparente, pero los que son
+    // blancos sobre negro necesitan el suyo o desaparecen.
+    return ColoredBox(
+      color: _color,
+      child: Padding(
+        padding: EdgeInsets.all(margen),
+        child: ruta.toLowerCase().endsWith('.svg')
+            ? SvgPicture.asset(
+                ruta,
+                // contain igual que el mapa de bits: un logo vectorial
+                // tampoco se recorta.
+                fit: BoxFit.contain,
+                // Mientras el SVG se parsea la tarjeta no puede quedar
+                // en blanco: se ve el mismo placeholder que si faltara.
+                placeholderBuilder: (_) => PlaceholderImagen(texto: texto),
+              )
+            : LayoutBuilder(
+                // El LayoutBuilder está solo para saber DE QUÉ TAMAÑO se
+                // va a dibujar el logo, que es lo que necesita
+                // `cacheWidth` de abajo. Va adentro del Padding a
+                // propósito: así mide la caja real del logo, ya sin el
+                // margen.
+                builder: (context, restricciones) {
+                  final ancho = restricciones.maxWidth;
+
+                  // Flutter decodifica el archivo COMPLETO en memoria si
+                  // no se le dice a qué tamaño lo va a dibujar. Un logo
+                  // de 3000x1800 son 21 MB de RAM aunque la tarjeta lo
+                  // pinte de 130 px de ancho — y en Premios hay 27
+                  // tarjetas.
+                  //
+                  // `cacheWidth` va en píxeles FÍSICOS, no lógicos, por
+                  // eso se multiplica por el devicePixelRatio: en un
+                  // iPhone 3x, 130 px lógicos son 390 reales, y decodificar
+                  // a 130 se vería borroso.
+                  //
+                  // Nunca agranda: `Image.asset` envuelve esto en un
+                  // ResizeImage que no hace upscaling, así que un logo de
+                  // 249 px de ancho se decodifica a 249 aunque acá se pida
+                  // más.
+                  final anchoDecodificado = ancho.isFinite && ancho > 0
+                      ? (ancho * MediaQuery.devicePixelRatioOf(context))
+                            .round()
+                      : null;
+
+                  return Image.asset(
+                    ruta,
+                    cacheWidth: anchoDecodificado,
+                    // contain, NUNCA cover: son logos, no fotos de local. Con
+                    // cover se recorta la marca y quedan medias palabras.
+                    fit: BoxFit.contain,
+                    // Los logos son chicos (algunos de 100 px de ancho) y se
+                    // estiran a la tarjeta. Sin esto Flutter los suaviza tanto
+                    // que se ven borrosos.
+                    filterQuality: FilterQuality.medium,
+                    // El archivo puede no estar todavía: el catálogo tiene que
+                    // seguir funcionando mientras se consiguen los logos.
+                    errorBuilder: (_, error, _) {
+                      // Pero que caiga al placeholder EN SILENCIO es lo
+                      // que hizo que un clon desactualizado se viera
+                      // igual que un catálogo sano: nadie supo qué
+                      // archivo faltaba. En debug, la consola lo dice.
+                      if (kDebugMode) {
+                        debugPrint('No se pudo cargar el logo: $ruta ($error)');
+                      }
+                      return PlaceholderImagen(texto: texto);
+                    },
+                  );
+                },
+              ),
       ),
     );
   }
