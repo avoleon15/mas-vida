@@ -19,7 +19,7 @@ class Muestra(models.Model):
     inicio = models.DateTimeField()
     fin = models.DateTimeField()
     cantidad = models.PositiveIntegerField(
-          validators=[MaxValueValidator(3000)]
+          validators=[MaxValueValidator(30000)]
     )
 
     fuente_bundle = models.CharField(
@@ -61,7 +61,7 @@ class Muestra(models.Model):
                 ),
                 models.CheckConstraint(
                       condition=Q(cantidad__lte=3000),
-                      name='ck_muestra_cantidad_max_3000'
+                      name='ck_muestra_cantidad_max_30000'
                 )
             ]
 
