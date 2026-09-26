@@ -1,16 +1,10 @@
 from django.db import models
 from django.db.models import Q
 from django.core.validators import MaxValueValidator, MinValueValidator
+from Apps.core.models import ModeloBase,UserIdBase
 
-class Muestra(models.Model):
 
-    id = models.AutoField(primary_key=True)
-
-    usuario = models.ForeignKey(
-        "users.Usuario",
-        on_delete=models.PROTECT
-        
-    )
+class Muestra(UserIdBase):
 
     external_id = models.CharField(
         max_length=255

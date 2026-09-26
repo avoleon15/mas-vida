@@ -1,12 +1,10 @@
 from django.db import models
-from Apps.users.models import Usuario
+from Apps.core.models import ModeloBase
 
 # Create your models here.
-class PolizaVinculada(models.Model):
-    id = models.AutoField(primary_key=True)
-
+class PolizaVinculada(ModeloBase):
     usuario = models.OneToOneField(
-        Usuario,
+        'users.Usuario',
         on_delete=models.PROTECT,
         db_column='usuario_id',
     )

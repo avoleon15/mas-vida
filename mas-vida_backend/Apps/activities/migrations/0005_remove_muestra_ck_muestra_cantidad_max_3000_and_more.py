@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RemoveConstraint(
             model_name='muestra',
-            name='ck_muestra_cantidad_max_3000',
+            name='ck_muestra_cantidad_max_30000',
         ),
         migrations.AlterField(
             model_name='muestra',
@@ -23,6 +23,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='muestra',
-            constraint=models.CheckConstraint(condition=models.Q(('cantidad__lte', 3000)), name='ck_muestra_cantidad_max_30000'),
+            constraint=models.CheckConstraint(condition=models.Q(('cantidad__lte', 30000)), name='ck_muestra_cantidad_max_30000'),
         ),
     ]

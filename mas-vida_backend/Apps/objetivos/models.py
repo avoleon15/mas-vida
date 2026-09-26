@@ -1,23 +1,16 @@
 from django.db import models
 from django.core.validators import MaxLengthValidator, MinLengthValidator
+from Apps.core.models import ModeloBase, UserIdBase
 
 # Create your models here.
-class ObjetivoSemanal(models.Model):
-
-    id = models.AutoField(primary_key=True)
+class ObjetivoSemanal(ModeloBase):
     fecha_inicio = models.DateField(unique=True)
     fecha_fin = models.DateField()
     meta_pasos = models.PositiveIntegerField()
     meta_workouts = models.PositiveBigIntegerField()
 
 
-class CumplimientoSemanal(models.Model):
-    id = models.AutoField(primary_key=True)
-    usuario = models.ForeignKey(
-        'users.Usuario',
-        on_delete=models.PROTECT,
-    )
-
+class CumplimientoSemanal(UserIdBase):
     objetivo_semanal = models.ForeignKey(
         "ObjetivoSemanal",
         on_delete=models.PROTECT
@@ -36,8 +29,7 @@ class CumplimientoSemanal(models.Model):
         ]
 
 
-class Season(models.Model):
-    id = models.AutoField(primary_key=True)
+class Season(ModeloBase):
     numero = models.PositiveIntegerField(
         validators=[
         MinLengthValidator(1),
@@ -49,12 +41,7 @@ class Season(models.Model):
     fecha_fin = models.DateField()
 
 
-class ProgresoObjetivoUsuario(models.Model):
-    id = models.AutoField(primary_key=True)
-    usuario =  models.ForeignKey(
-        "users.Usuario",
-        on_delete=models.PROTECT
-    )
+class ProgresoObjetivoUsuario(UserIdBase):
     sesion = models.ForeignKey(
         "Season",
         on_delete=models.PROTECT 

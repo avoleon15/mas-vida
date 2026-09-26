@@ -1,20 +1,14 @@
 from django.db import models
 from django.db import models
+from Apps.core.models import ModeloBase, UserIdBase
 
 
-class Ledger(models.Model):
+class Ledger(UserIdBase):
     class TipoLedger(models.TextChoices):
         PASOS = "pasos", "Pasos"
         INTENSIDAD = "intensidad", "Intensidad"
         CHEQUEO_MEDICO = "chequeo_medico", "Chequeo médico"
         AJUSTE_MANUAL = "ajuste_manual", "Ajuste manual"
-
-    id = models.AutoField(primary_key=True)
-
-    usuario = models.ForeignKey(
-        "users.Usuario",
-        on_delete=models.PROTECT,
-    )
 
     puntos = models.IntegerField()
 
@@ -22,7 +16,6 @@ class Ledger(models.Model):
         max_length=50,
         choices=TipoLedger.choices,
     )
-
     fecha = models.DateField()
 
     creado_en = models.DateTimeField(auto_now_add=True)
@@ -59,7 +52,7 @@ class Ledger(models.Model):
         return f"{self.usuario} - {self.puntos} pts - {self.tipo}"
 
 
-class VersionRegla(models.Model):
+class VersionRegla(ModeloBase):
     version = models.PositiveIntegerField(
         unique=True
     )

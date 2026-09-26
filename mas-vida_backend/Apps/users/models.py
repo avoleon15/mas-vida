@@ -1,10 +1,9 @@
 from django.conf import settings
 from django.db import models
+from Apps.core.models import ModeloBase
 
 
-class Usuario(models.Model):
-    id = models.AutoField(primary_key=True)
-
+class Usuario(ModeloBase):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
