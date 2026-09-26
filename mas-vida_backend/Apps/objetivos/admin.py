@@ -1,3 +1,16 @@
 from django.contrib import admin
+from .models import (
+    ObjetivoSemanal,
+    CumplimientoSemanal,
+    Season,
+    ProgresoObjetivoUsuario,
+    MetaPorPasosObjetivo,
+)
 
-# Register your models here.
+admin.site.register([
+    ObjetivoSemanal,
+    CumplimientoSemanal,
+    Season,
+    ProgresoObjetivoUsuario,
+    MetaPorPasosObjetivo,
+])

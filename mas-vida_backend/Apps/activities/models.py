@@ -204,39 +204,39 @@ class Sesion(models.Model):
           return f"{self.usuario} - {self.tipo_actividad} - {self.duracion_min}"
 
 
-    class ResumenDiario(models.Model):
-        id =models.AutoField(primary_key=True)
-        usuario = models.ForeignKey(
-                    "users.Usuario",
-                    on_delete=models.PROTECT
-                    )
-        fecha = models.DateField()
-        pasos_totales_dia = models.IntegerField()
-        workouts_cantidad = models.IntegerField(
-            null=True,
-            blank=True
-        )
-        workouts_duracion_total_min = models.IntegerField(
-            null=True,
-            blank=True
-        )
-        workouts_fc_promedio = models.IntegerField(
-            null=True,
-            blank=True
-        )
-        workouts_fc_maxima = models.IntegerField(
-            null=True,
-            blank=True
-        )
-        puntos_dia = models.IntegerField()
+class ResumenDiario(models.Model):
+    id =models.AutoField(primary_key=True)
+    usuario = models.ForeignKey(
+                "users.Usuario",
+                on_delete=models.PROTECT
+                )
+    fecha = models.DateField()
+    pasos_totales_dia = models.IntegerField()
+    workouts_cantidad = models.IntegerField(
+        null=True,
+        blank=True
+    )
+    workouts_duracion_total_min = models.IntegerField(
+        null=True,
+        blank=True
+    )
+    workouts_fc_promedio = models.IntegerField(
+        null=True,
+        blank=True
+    )
+    workouts_fc_maxima = models.IntegerField(
+        null=True,
+        blank=True
+    )
+    puntos_dia = models.IntegerField()
 
-        class Meta:
-             constraints = [
-                  models.UniqueConstraint(
-                       fields=['usuario', 'fecha'],
-                       name='uq_resumen_diario_usuario_fecha',
-                  ),
-             ]
+    class Meta:
+            constraints = [
+                models.UniqueConstraint(
+                    fields=['usuario', 'fecha'],
+                    name='uq_resumen_diario_usuario_fecha',
+                ),
+            ]
 
-              
+            
 
