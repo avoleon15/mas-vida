@@ -133,7 +133,7 @@ class MuestraBPM(models.Model):
 
             models.CheckConstraint(
                   condition=Q(bpm__gte=30, bpm__lte=230),
-                  name='ck_muestra_cantidad_max_3000'
+                  name='ck_muestra_cantidad_max_230'
             )
             
         ]
