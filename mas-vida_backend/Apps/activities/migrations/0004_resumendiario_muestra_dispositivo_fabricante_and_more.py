@@ -84,7 +84,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='muestra',
             name='cantidad',
-            field=models.PositiveIntegerField(validators=[django.core.validators.MaxValueValidator(3000)]),
+            field=models.PositiveIntegerField(validators=[django.core.validators.MaxValueValidator(30000)]),
         ),
         migrations.AlterField(
             model_name='muestra',
@@ -113,7 +113,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='muestra',
-            constraint=models.CheckConstraint(condition=models.Q(('cantidad__lte', 3000)), name='ck_muestra_cantidad_max_3000'),
+            constraint=models.CheckConstraint(condition=models.Q(('cantidad__lte', 30000)), name='ck_muestra_cantidad_max_30000'),
         ),
         migrations.AddConstraint(
             model_name='muestrabpm',
