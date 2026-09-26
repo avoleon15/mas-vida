@@ -60,7 +60,7 @@ class Muestra(models.Model):
                     name="unique_muestra_usuario_external_id"
                 ),
                 models.CheckConstraint(
-                      condition=Q(cantidad__lte=3000),
+                      condition=Q(cantidad__lte=30000),
                       name='ck_muestra_cantidad_max_30000'
                 )
             ]
