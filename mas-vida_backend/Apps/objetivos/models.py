@@ -1,5 +1,5 @@
 from django.db import models
-from django.core.validators import MaxLengthValidator, MinLengthValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from Apps.core.models import ModeloBase, UserIdBase
 
 # Create your models here.
@@ -32,8 +32,8 @@ class CumplimientoSemanal(UserIdBase):
 class Season(ModeloBase):
     numero = models.PositiveIntegerField(
         validators=[
-        MinLengthValidator(1),
-        MaxLengthValidator(4),
+        MinValueValidator(1),
+        MaxValueValidator(4),
         ]
     )
     anio = models.PositiveIntegerField()
@@ -62,8 +62,8 @@ class MetaPorPasosObjetivo(models.Model):
     objetivo_numero = models.PositiveIntegerField(
         primary_key=True,
         validators=[
-            MinLengthValidator(1),
-            MaxLengthValidator(13)
+            MinValueValidator(1),
+            MaxValueValidator(13)
         ]
         )
     meta_pasos = models.PositiveIntegerField()

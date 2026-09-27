@@ -42,7 +42,14 @@ INSTALLED_APPS = [
 
     "rest_framework",
     "corsheaders",
-     "Apps.coins", "Apps.goals", "Apps.policies","Apps.rewards","Apps.activities","Apps.poincs",'Apps.users.apps.UsersConfig'
+    "Apps.coins",
+    "Apps.policies",
+    "Apps.rewards",
+    "Apps.activities",
+    "Apps.poincs",
+    'Apps.users.apps.UsersConfig',
+    'Apps.liga',
+    'Apps.Objetivos',
 ]
 
 REST_FRAMEWORK = {

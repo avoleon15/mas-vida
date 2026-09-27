@@ -1,7 +1,7 @@
 from django.db import models
 from django.db.models import Q
 from django.core.validators import MaxValueValidator, MinValueValidator
-from Apps.core.models import ModeloBase,UserIdBase
+from Apps.core.models import UserIdBase
 
 
 class Muestra(UserIdBase):

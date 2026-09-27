@@ -1,5 +1,5 @@
 from django.db import models
-from django.core.validators import MaxLengthValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from Apps.core.models import ModeloBase, UserIdBase
 
 
@@ -16,7 +16,9 @@ class LigaMensual(ModeloBase):
 class TramoPremio(ModeloBase):
     orden = models.PositiveIntegerField(unique=True)
     percentil_hasta = models.DecimalField(
-        validators = MaxLengthValidator(1)
+        max_digits=5,
+        decimal_places=2,
+        validators = (MinValueValidator(1), MaxValueValidator(100)),
     )
     premio_descripcion = models.CharField()
     monedas = models.PositiveIntegerField(
@@ -24,6 +26,17 @@ class TramoPremio(ModeloBase):
         blank=True
 
     )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    percentil_hasta__gte=0,
+                    percentil_hasta__lte=100,
+                ),
+                name="ck_tramo_percentil_hasta_0_100",
+            ),
+        ]
     
 class DesgloseLigaMensual(UserIdBase):
     liga_mensual = models.ForeignKey(
@@ -32,10 +45,17 @@ class DesgloseLigaMensual(UserIdBase):
     )
     pasos_acumulados_mes = models.PositiveIntegerField()
     posicion_final = models.PositiveIntegerField(null=True, blank=True)
-    percentil = models.DecimalField(null=True, blank=True)
+    percentil = models.DecimalField(
+        null=True, 
+        blank=True,
+        max_digits=5,
+        decimal_places=2,
+        validators=(MinValueValidator(1), MaxValueValidator(100)),
+        )
     tramo_premio = models.ForeignKey(
         TramoPremio,
         null=True, blank=True,
+        on_delete=models.PROTECT
     )
 
     class Meta:
@@ -43,8 +63,16 @@ class DesgloseLigaMensual(UserIdBase):
             models.UniqueConstraint(
                 fields=["usuario", "liga_mensual"],
                 name='uq_usuario_liga_mensual'
-            )
-        ]
+            ),
+        models.CheckConstraint(
+            condition=(
+                models.Q(percentil__isnull=True)
+                | models.Q(percentil__gte=0, percentil__lte=100)
+            ),
+            name="ck_desglose_percentil_0_100",
+        ),
+    ]
+        
 
 class LigaAmigos(ModeloBase):
     creador_usuario = models.ForeignKey(
@@ -64,10 +92,11 @@ class MiembroLigaAmigos(UserIdBase):
     fecha_union = models.DateField()
 
     class Meta:
+        constraints = [
         models.UniqueConstraint(
             fields=["usuario", "liga_amigos"],
             name='uq_usuario_liga_amigos'
-        )
+        )]
     
 
 
