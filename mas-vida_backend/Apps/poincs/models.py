@@ -1,44 +1,58 @@
 from django.db import models
+from django.db import models
+from Apps.core.models import ModeloBase, UserIdBase
 
-class Ledger(models.Model):
-    usuario = models.ForeignKey(
-        "users.Usuario",
-        on_delete=models.CASCADE
-    )
+
+class Ledger(UserIdBase):
+    class TipoLedger(models.TextChoices):
+        PASOS = "pasos", "Pasos"
+        INTENSIDAD = "intensidad", "Intensidad"
+        CHEQUEO_MEDICO = "chequeo_medico", "Chequeo médico"
+        AJUSTE_MANUAL = "ajuste_manual", "Ajuste manual"
 
     puntos = models.IntegerField()
 
+    tipo = models.CharField(
+        max_length=50,
+        choices=TipoLedger.choices,
+    )
+    fecha = models.DateField()
+
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    version_regla = models.ForeignKey(
+        "VersionRegla",
+        on_delete=models.PROTECT,
+    )
+
     puntos_pasos = models.PositiveIntegerField(
         null=True,
-        blank=True
+        blank=True,
     )
 
     puntos_intensidad = models.PositiveIntegerField(
         null=True,
-        blank=True
+        blank=True,
     )
 
     tope_diario_aplicado = models.BooleanField(
         null=True,
-        blank=True
+        blank=True,
     )
 
-
-    tipo = models.CharField(
-        max_length=50
-    )
-    fecha = models.DateField()
-
-    version_regla = models.ForeignKey(
-        "VersionRegla",
-        on_delete=models.PROTECT
-    )
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "fecha", "tipo", "version_regla"],
+                name="uq_ledger_usuario_fecha_tipo_version",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.usuario} - {self.puntos} pts - {self.tipo}"
 
 
-class VersionRegla(models.Model):
+class VersionRegla(ModeloBase):
     version = models.PositiveIntegerField(
         unique=True
     )
