@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "Apps.poincs",
     'Apps.users.apps.UsersConfig',
     'Apps.liga',
-    'Apps.Objetivos',
+    'Apps.objetivos',
 ]
 
 REST_FRAMEWORK = {

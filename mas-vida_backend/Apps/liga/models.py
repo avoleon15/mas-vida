@@ -20,7 +20,7 @@ class TramoPremio(ModeloBase):
         decimal_places=2,
         validators = (MinValueValidator(1), MaxValueValidator(100)),
     )
-    premio_descripcion = models.CharField()
+    premio_descripcion = models.CharField(max_length=255)
     monedas = models.PositiveIntegerField(
         null=True,
         blank=True
@@ -79,9 +79,9 @@ class LigaAmigos(ModeloBase):
     "users.Usuario",
     on_delete=models.PROTECT,
     )
-    nombre = models.CharField()
+    nombre = models.CharField(max_length=255)
     mes = models.DateField()
-    codigo_invitacion = models.CharField()
+    codigo_invitacion = models.CharField(max_length=255)
 
 class MiembroLigaAmigos(UserIdBase):
     liga_amigos = models.ForeignKey(
