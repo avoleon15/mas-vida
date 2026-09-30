@@ -157,7 +157,10 @@ LOGGING = {
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Hora de Guatemala: es la que decide cuándo empieza y termina un día (vigencia
+# de una póliza, fecha de nacimiento futura, cierres semanales y mensuales).
+# Las fechas con hora se siguen guardando en UTC en la base de datos.
+TIME_ZONE = 'America/Guatemala'
 
 USE_I18N = True
 
