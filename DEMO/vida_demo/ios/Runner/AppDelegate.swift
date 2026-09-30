@@ -19,10 +19,10 @@ private let canalHealthKit = "com.assures.masvida/healthkit"
     registrarCanalHealthKit(engineBridge)
   }
 
-  /// Registra los 2 únicos métodos del contrato (ver contrato-v3_1.md):
-  /// `solicitarPermisos` y `sincronizar`. Todo lo demás (dashboard, niveles,
-  /// retos) es HTTP directo de Flutter contra la API de Luis — nunca pasa
-  /// por acá.
+  /// Registra los 3 únicos métodos del contrato (ver contrato-tecnico.md):
+  /// `solicitarPermisos`, `sincronizar` y `actualizarSesion`. Todo lo demás
+  /// (dashboard, niveles, retos) es HTTP directo de Flutter contra la API de
+  /// Luis — nunca pasa por acá.
   private func registrarCanalHealthKit(_ engineBridge: FlutterImplicitEngineBridge) {
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "HealthKitBridge") else {
       assertionFailure("No se pudo obtener el registrar de Flutter para HealthKitBridge")
@@ -72,6 +72,26 @@ private let canalHealthKit = "com.assures.masvida/healthkit"
             result(["estado": "sin_acceso_a_salud", "detalle": detalle])
           case .errorPermanente(let detalle):
             result(["estado": "error_permanente", "detalle": detalle])
+          }
+
+        // Le entrega a Swift el token de la sesión: `{ "token": String? }`, con
+        // `null` cuando se cierra la sesión. El token nunca se devuelve ni se
+        // escribe en logs; `detalle` es texto técnico sin el token.
+        case "actualizarSesion":
+          guard let argumentos = call.arguments as? [String: Any] else {
+            result(FlutterError(
+              code: "ARGUMENTOS_INVALIDOS",
+              message: "actualizarSesion espera { \"token\": String? }",
+              details: nil
+            ))
+            break
+          }
+          // `null` llega como NSNull: `as? String` lo vuelve nil.
+          switch HealthKitManager.shared.actualizarSesion(token: argumentos["token"] as? String) {
+          case .ok:
+            result(["estado": "ok"])
+          case .errorAlmacenamiento(let detalle):
+            result(["estado": "error_almacenamiento", "detalle": detalle])
           }
 
         default:
