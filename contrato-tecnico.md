@@ -4,6 +4,17 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 30 sep 2026** (autenticación): quién manda los datos lo decide
+el servidor con un **token**, no con un `usuario_id` dentro del JSON. Sección
+nueva "Autenticación (token)"; `usuario_id` sale del JSON #1; el MethodChannel
+pasa de 2 a 3 métodos (`actualizarSesion`); y Swift conserva los días
+pendientes cuando no hay sesión.
+
+**Actualizado el 23 sep 2026** (demo 1): objetivo semanal fijo e igual para
+todos, La Liga con un solo grupo y premios por percentil, Tus Ligas sin
+póliza y sin premios, duelos 1 contra 1 eliminados. Todo "reto semanal" pasa a
+llamarse **objetivo semanal**.
+
 *Este es el documento **vivo** de este dominio. Reemplaza a `contrato-v2.md`,
 `contrato-v3_1.md`, `contrato-v3_2.md`, `contrato-v3_4.md` y `contrato-v4.md`
 como referencia — esos archivos no se borran, pero dejan de actualizarse: su
@@ -29,11 +40,88 @@ nosotros. **El mismo principio aplica a `tipo_dispositivo` (ver más abajo):
 el teléfono manda los campos crudos de `HKDevice`, nunca la categoría ya
 resuelta.**
 
+**Lo mismo aplica a la identidad:** el teléfono nunca dice quién es. Quién manda
+los datos lo decide el servidor a partir del token que él mismo entregó al
+iniciar sesión — jamás a partir de un `usuario_id` (ni de ningún otro
+identificador) que venga dentro de la petición. Razón: un identificador que el
+cliente escribe en la petición lo puede cambiar cualquiera, y con él se mandarían
+datos (y puntos, y cashback) a nombre de otra persona.
+
+---
+
+## Autenticación (token)
+
+**Quién es el usuario lo decide el servidor, a partir de un token.** No de un
+campo dentro del JSON.
+
+### Cómo funciona
+
+1. La persona se registra o inicia sesión desde Flutter, por HTTP (`POST
+   /api/v1/registro` o `POST /api/v1/login`). El servidor responde con su
+   `token`.
+2. Desde ese momento **toda petición a `/api/v1/*`** lleva el encabezado:
+
+   ```
+   Authorization: Token <clave>
+   ```
+
+   La palabra es `Token` (así la espera Django REST Framework), no `Bearer`.
+3. El servidor busca a quién pertenece ese token y trabaja con ese usuario.
+   Nunca toma la identidad del cuerpo de la petición.
+
+**No piden token:** `POST /api/v1/registro`, `POST /api/v1/login` y
+`GET /api/health/`. Todo lo demás sí.
+
+### Registro y login
+
+| Petición | Cuerpo | Respuesta |
+|---|---|---|
+| `POST /api/v1/registro` | `{ "username": string, "password": string, "birth_date": "YYYY-MM-DD" }` | `201` `{ "token": string, "username": string, "usuario_id": string }` |
+| `POST /api/v1/login` | `{ "username": string, "password": string }` | `200` `{ "token": string }` |
+
+Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
+contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
+(credenciales incorrectas en el login).
+
+### Reglas del token
+
+- Hay **un token por cuenta** y **no caduca** por ahora (ver "Puntos
+  abiertos").
+- Se trata como una contraseña: nunca se escribe en logs ni en mensajes de
+  error, y nunca viaja dentro del cuerpo de una petición.
+- Flutter guarda su propia copia para sus llamadas HTTP. A Swift se la entrega
+  con `actualizarSesion` (ver "MethodChannel"); Swift guarda la suya en su
+  Keychain y la usa para enviar el `sync`.
+
+### `usuario_id`
+
+Identificador **público** de la persona: un UUID que genera el servidor al
+registrarse y que devuelve en la respuesta del registro. Sirve para mostrar y
+compartir (hoy la app lo muestra en Perfil y lo usa como código para agregar
+amigos). **No identifica a quien manda datos y no viaja en ninguna petición.**
+
+No confundir con la columna interna `usuario_id` de las tablas del servidor
+(`(usuario_id, external_id)`, `(usuario_id, fecha)`), que es la referencia a la
+fila del usuario y no tiene relación con este campo.
+
+### Respuestas de error de autenticación
+
+| Situación | Código | Cuerpo |
+|---|---|---|
+| Falta el encabezado | `401` | `{ "detail": "..." }` y el encabezado `WWW-Authenticate: Token` |
+| Token inválido | `401` | `{ "detail": "..." }` |
+| Token válido pero la cuenta no tiene perfil de usuario | `403` | `{ "mensaje": "..." }` |
+
+Los textos salen en inglés y pueden cambiar: los clientes deciden **siempre por
+el código de estado**, nunca por el texto.
+
 ---
 
 ## JSON #1 — Request: iOS → Backend
 
 `POST /api/v1/sync`
+
+Requiere `Authorization: Token <clave>` (ver "Autenticación (token)").
 
 Se manda **el día completo cada vez**, no solo lo nuevo desde el último sync.
 La idempotencia por `external_id` (constraint único del lado de Luis) hace
@@ -41,7 +129,6 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 
 ```json
 {
-  "usuario_id": "usr_8f3a1c2e",
   "fecha": "2026-09-03",
   "zona_horaria": "America/Guatemala",
   "pasos": [
@@ -106,7 +193,6 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 
 | Campo | Tipo | Obligatorio | Notas |
 |---|---|---|---|
-| `usuario_id` | string | sí | id interno del usuario, no el HealthKit userID. **Hoy es un placeholder hardcodeado** — ver "Puntos abiertos" |
 | `fecha` | string (YYYY-MM-DD) | sí | día calendario en la zona horaria del usuario, no en UTC |
 | `zona_horaria` | string (IANA) | sí | ej. `America/Guatemala`. Define dónde cae la medianoche para el corte de la semana |
 | `pasos[]` | array | sí (puede ir vacío) | una entrada por muestra de `HKQuantitySample` de tipo `.stepCount` |
@@ -135,6 +221,10 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 | `frecuencia_cardiaca[].dispositivo_nombre` / `.dispositivo_modelo` / `.dispositivo_fabricante` | string, nullable | no | **nuevo** — mismo criterio que pasos[] |
 | `sincronizado_en` | string (ISO 8601) | sí | cuándo el teléfono armó el payload |
 | `app_version` | string | sí | para invalidar syncs de versiones viejas |
+
+**`usuario_id` ya no va en este JSON (30 sep 2026).** El servidor saca al usuario
+del token (ver "Autenticación (token)"). **Transición:** una versión vieja de la
+app que todavía lo mande no se rechaza: el servidor lo ignora.
 
 **Alcance:** se manda el día completo cada vez, no solo lo nuevo — idempotencia
 por `external_id` hace seguro reenviar todo. **Fuera de alcance:** sueño.
@@ -235,20 +325,53 @@ alcanzable solo por actividad — Nivel 4 (15.000+) queda fuera de alcance en el
 piloto. Consecuencia aceptada y documentada, no un bug.
 
 **`nivel` (anual, cashback) ≠ objetivo semanal.** Dos conceptos completamente
-distintos con nombres que se prestan a confusión — por eso el reto semanal ya
+distintos con nombres que se prestan a confusión — por eso el objetivo semanal ya
 no usa la palabra "nivel" en ningún lado: en código y en respuestas de API
 nunca deben compartir el mismo nombre de campo.
 
+### Errores de `POST /api/v1/sync`
+
+Swift decide **por el código de estado**, nunca por el texto:
+
+| Código | Cuándo | Qué hace Swift |
+|---|---|---|
+| `200` | Guardado | Confirma el día |
+| `400` | Payload inválido | Error permanente: no se reintenta |
+| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar) y el día queda pendiente; **no corta los demás días** ni saca el día de la cola |
+| `403` | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
+| `408`, `429`, `5xx` | Tiempo agotado, demasiadas peticiones o caída del servidor | Se reintenta (el día va a la cola) |
+| `422` | `fuera_de_ventana` | Ver "Ventana de aceptación de datos rezagados" |
+
+Las filas de `400`, `403`, `408`, `429` y `5xx` describen lo que Swift hace hoy; la
+de `401` es nueva.
+
 ---
 
-## Mecánica de retos semanales (fuera del payload de sync)
+## Mecánica de objetivos semanales (fuera del payload de sync)
+
+*Antes "mecánica de retos semanales" — el nombre "reto" ya no existe, todo es
+objetivo semanal.*
 
 Por dificultad progresiva, no por meta de puntos. **No hay rachas diarias** —
 si aparecen en algún doc de pantallas, es material viejo. La progresión
 numérica (1, 2, 3...) se llama **objetivo semanal** — nunca "nivel", para no
 confundirla con el nivel anual de cashback del JSON #2.
 
-### Cómo se mueve el objetivo semanal
+### Demo 1 (temporal, acordado 23 sep) — objetivo fijo, igual para todos
+
+Para el demo 1 **todos los usuarios tienen el mismo objetivo cada semana**,
+hardcodeado. No hay progresión entre objetivos.
+
+- **Duración siempre igual:** lunes 00:00 a domingo 23:59.
+- **Dos componentes:** (a) **pasos totales de la semana** y (b) **cantidad de
+  workouts**. Ejemplo: "30.000 pasos y mínimo 1 workout".
+- Se cumple al alcanzar **ambas** métricas dentro de la semana.
+- **No se sube ni se congela objetivo** en el demo. La sección "Diseño
+  completo" de abajo y las seasons **se mantienen como diseño**.
+- Los valores (meta de pasos y de workouts) viven en una tabla/config
+  hardcodeada del backend, editable a mano — sin cálculo.
+
+### Diseño completo — cómo se mueve el objetivo semanal (se mantiene; vuelve después del demo)
 
 - Todos arrancan en **objetivo semanal 1** al inicio de cada season.
 - Completar la meta de la semana → sube al **siguiente objetivo** la semana
@@ -271,7 +394,7 @@ calendario iguales para todos:
 | 4 | 1 de octubre | 31 de diciembre |
 
 - Afectan **únicamente** el objetivo semanal — no tocan puntos anuales,
-  cashback, ni la liga mensual.
+  cashback, ni La Liga.
 - Al cerrar una season, todos vuelven a **objetivo 1**, sin importar dónde
   llegaron.
 - Cada season queda en el historial del usuario, con el **objetivo máximo**
@@ -284,8 +407,7 @@ calendario iguales para todos:
 
 ### Ciclos y cortes
 
-- Ciclo semanal: **lunes 00:00 a domingo 23:59** — separado del ciclo de la
-  liga mensual (día 1 al último día del mes calendario, premiada en monedas).
+- Ciclo semanal: **lunes 00:00 a domingo 23:59** — separado del ciclo de La Liga (día 1 al último día del mes calendario, premiada en monedas).
 - **El objetivo de la semana nueva se fija de inmediato al arrancar, lunes
   00:00**, con los datos que hay hasta el corte del domingo 23:59. El usuario
   no ve ningún estado intermedio — la semana nueva ya aparece corriendo con
@@ -309,15 +431,71 @@ no se pierde progreso acumulado, solo una semana de avance.
 por season), no en cada sync — incluirlo repetiría el mismo dato sin
 necesidad. Daniel lo consulta por HTTP directo: `GET /api/v1/retos/estado`
 (tickets L11 y D12), que también debe devolver la season actual, su fecha de
-cierre, y el historial de seasons pasadas.
+cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
+"retos" — ver "Puntos abiertos".*
+
+**Respuesta de `GET /api/v1/retos/estado` (demo 1):**
+
+```json
+{
+  "objetivo": {
+    "meta_pasos": 30000,
+    "meta_workouts": 1,
+    "fecha_inicio": "2026-09-21",
+    "fecha_fin": "2026-09-27"
+  },
+  "progreso": {
+    "pasos_acumulados": 12400,
+    "workouts_acumulados": 0,
+    "cumplido": false
+  },
+  "season": { "numero": 3, "fecha_cierre": "2026-09-30" },
+  "historial_seasons": []
+}
+```
+
+El `objetivo` es **el mismo para todos los usuarios** esa semana; `progreso`
+es del usuario que pregunta. `historial_seasons` viene vacío en el demo (no
+hay objetivo máximo que registrar mientras no haya progresión).
+
+---
+
+## La Liga y Tus Ligas (fuera del payload de sync)
+
+Detalle de reglas en `reglas-puntaje-vivo.md` sección 5 — acá solo lo que
+toca el contrato.
+
+**La Liga (demo 1, temporal):**
+
+- **Un solo grupo** con todos los usuarios con póliza vinculada y verificada.
+  Sin franja de edad ni sub-ligas (diseño futuro).
+- Ciclo: día 1 al último día del mes calendario. Qué cuenta: suma de
+  `pasos_totales_dia` del mes (el valor ya deduplicado).
+- **Premios por percentil** de la posición final: el corte de cada tramo es
+  `max(1, floor(N × percentil_acumulado))`. Tramos de partida: top 3% /
+  siguiente 7% (hasta 10%) / 10%–25% / "y así" (por definir). Luis calcula
+  posición, percentil y tramo **una sola vez, al cierre del mes**.
+
+**Tus Ligas:** grupos que crea o a los que se une el usuario. Ranking mensual
+de pasos entre miembros, **sin premios y sin exigir póliza** (cambia el 23
+sep; antes exigían póliza).
+
+**Duelos 1 contra 1:** eliminados del demo 1 — no construir endpoints ni
+pantallas. Los endpoints de La Liga y de Tus Ligas: por definir con Luis y
+Daniel.
 
 ---
 
 ## MethodChannel (Swift ↔ Flutter)
 
-2 métodos, nada más. Todo lo que no sea leer HealthKit va por HTTP directo de
-Daniel contra la API de Luis — nada de dashboard, objetivos, retos ni
+3 métodos, nada más: dos leen y envían HealthKit (`solicitarPermisos` y
+`sincronizar`) y uno entrega la sesión (`actualizarSesion`). Todo lo demás va por
+HTTP directo de Daniel contra la API de Luis — nada de dashboard, objetivos ni
 historial pasa por acá.
+
+*Hasta el 29 sep eran 2. El tercero se agregó para que Swift pueda enviar el
+`sync` con el token sin depender de cómo una librería de Flutter guarda sus
+datos.*
 
 ```dart
 final bridge = HealthKitBridge();
@@ -384,19 +562,53 @@ Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 `sincronizado_en` solo viene con `estado: ok` — leer como `String?`. `detalle`
 es texto técnico para logs, nunca mostrárselo crudo al usuario.
 
+**Sin token, o token rechazado (`401`):** no es `error_permanente`. Swift no pierde
+datos: el día queda pendiente y se envía cuando haya sesión. Qué estado ve
+Flutter en ese caso está por definir (ver "Puntos abiertos").
+
+### `actualizarSesion`
+
+Le entrega a Swift el token de la sesión actual, o le avisa que se cerró. Swift
+lo guarda en su propio Keychain y lo manda como `Authorization` en cada envío.
+
+Flutter lo llama:
+1. **Al iniciar sesión o registrarse**, con el token.
+2. **Al cerrar sesión**, con `null`.
+3. **Cada vez que abre la app**, con el token actual (o `null` si no hay
+   sesión). Así la copia de Swift no se desincroniza, ni siquiera después de
+   reinstalar: el Keychain sobrevive a desinstalar la app.
+
+Entrada: `{ "token": string? }` — `null` significa "no hay sesión".
+
+Salida: `{ "estado": string, "detalle": string? }`
+
+| `estado` | Qué significa |
+|---|---|
+| `ok` | Guardado (o borrado, si vino `null`) |
+| `error_almacenamiento` | No se pudo escribir en el Keychain: el token no quedó guardado |
+
+- Es **idempotente**: mandar el mismo token dos veces no cambia nada.
+- **No hay forma de leer el token desde Flutter** (no existe un método para
+  eso). Flutter conserva su propia copia y, al cerrar sesión, borra **las dos**.
+- Swift lo guarda con acceso "después del primer desbloqueo", para poder enviar
+  aunque el teléfono esté bloqueado. **Nunca se escribe en logs.**
+
 ### Backfill de los últimos 7 días
 
 Cuando `solicitarPermisos` confirma acceso, el lado nativo dispara
 automáticamente el sync de los últimos 7 días, **una sola vez por
-instalación** — no bloquea la respuesta de `solicitarPermisos`, no expone un
-tercer método. Solo se dispara con acceso confirmado (si no, la bandera de
+instalación** — no bloquea la respuesta de `solicitarPermisos` y no tiene un
+método propio. Solo se dispara con acceso confirmado (si no, la bandera de
 "ya hecho" se quemaría con cero datos guardados). Los días que fallen por red
 quedan en la cola de reintentos y drenan solos al volver a primer plano.
+**Si en ese momento no hay sesión, el backfill no se da por hecho** (la bandera de
+"ya hecho" no se enciende) y se reintenta cuando la haya.
 
 ### Wrapper
 
-`lib/datos/healthkit_bridge.dart` expone los dos métodos tipados
-(`EstadoPermisos`, `EstadoSync`, `TiposVisibles`). Es la **frontera del
+`lib/datos/healthkit_bridge.dart` expone los tres métodos tipados
+(`EstadoPermisos`, `EstadoSync`, `TiposVisibles` y el resultado de
+`actualizarSesion`). Es la **frontera del
 contrato**, no UI — lo mantiene Alvaro junto con el lado Swift. Daniel lo
 consume, no lo edita: si le falta algo ahí, es un cambio de contrato.
 
@@ -462,10 +674,10 @@ Un `4xx` genérico haría que el cliente descarte el día **y aborte el
 procesamiento de los días siguientes** — con motivo identificable, descarta
 ese día y sigue con el resto.
 
-**Frontera de ciclo — decidido:** un ciclo ya cerrado (liga mensual u
+**Frontera de ciclo — decidido:** un ciclo ya cerrado (La Liga u
 objetivo semanal) es **inmutable**. Un dato del 29 de septiembre que llega el
 10 de octubre entra igual a la base (cae dentro de los 14 días) y suma al
-historial y al acumulado anual, pero **no reabre ni recalcula** la liga de
+historial y al acumulado anual, pero **no reabre ni recalcula** La Liga de
 septiembre ni ningún objetivo semanal ya evaluado — porque ya cerró. Son dos
 reglas distintas:
 
@@ -520,14 +732,24 @@ con reposo no lo hace tan bien como el máximo/promedio de la sesión.
 sin pedir un endpoint por vista. El endpoint no fija ninguna ventana: recibe
 `desde`/`hasta` y devuelve esas filas, nada más. Qué fechas calcula Daniel
 para "semanal" y "mensual" (decidido: lunes–domingo alineado al objetivo
-semanal, mes calendario alineado a la liga) es una decisión de UI — vive en
+semanal, mes calendario alineado a La Liga) es una decisión de UI — vive en
 el dominio de pantallas, no acá.
 
 ---
 
 ## Notas para Luis (backend)
 
-- **Idempotencia (L4):** constraint único en `(usuario_id, external_id)` para
+- **Identidad desde el token (30 sep):** el usuario sale de `request.user`.
+  Cualquier `usuario_id` que venga en el cuerpo se ignora (no se rechaza, para no
+  romper versiones viejas de la app). **Prueba obligatoria de suplantación:** con
+  el token de A y el `usuario_id` de B en el cuerpo, los datos quedan a nombre de
+  A.
+- **Códigos de error coherentes:** fecha inválida en `sync` debe dar `400` (hoy
+  da `404`). Una cuenta sin perfil de usuario da `403` en todos los endpoints (hoy
+  `sync` da `403` pero `historial` da `404`).
+- **Nunca registrar el token ni el encabezado `Authorization`** en logs.
+- **Idempotencia (L4):** constraint único en `(usuario_id, external_id)` (la
+  columna interna, no un campo del JSON) para
   pasos, sesiones y frecuencia cardíaca. Reenviar una muestra ya guardada
   nunca debe duplicar una fila.
 - **Nunca sumar `pasos[].cantidad` de fuentes distintas sin dedup** — ni para
@@ -572,7 +794,7 @@ el dominio de pantallas, no acá.
   cada día es una llamada independiente con su propio `fecha`.
 - **Ventana de aceptación (L14):** 14 días, no 3. Rechazo por antigüedad
   devuelve `422` con `{"error": "fuera_de_ventana"}`, no un `400` genérico.
-- **Frontera de ciclo:** un ciclo ya cerrado (liga mensual, objetivo semanal)
+- **Frontera de ciclo:** un ciclo ya cerrado (La Liga, objetivo semanal)
   es inmutable — un dato tardío dentro de la ventana de 14 días se guarda
   para historial/acumulado anual, pero nunca recalcula un ciclo ya cerrado.
 - **Ráfagas de usuario nuevo:** cada usuario que concede permisos dispara 7
@@ -585,14 +807,28 @@ el dominio de pantallas, no acá.
   mediodía, y el usuario no ve ningún estado intermedio. Sigue existiendo una
   corrida a las **12:00 del lunes**, pero esa ya no cambia el objetivo — solo
   acepta datos atrasados para el acumulado anual y el historial. El motor de
-  retos necesita **dos corridas programadas** (00:00 y 12:00), no un cálculo
+  objetivos necesita **dos corridas programadas** (00:00 y 12:00), no un cálculo
   en vivo al cierre del domingo.
-- **Retos (L11) — reescribir el ticket, no solo ampliarlo:** objetivo semanal
-  que se congela en vez de bajar; seasons trimestrales en fechas fijas (el
-  reinicio a objetivo 1 ocurre el día exacto de la season, sin esperar al
-  lunes siguiente, aunque parta una semana a la mitad); historial de seasons
-  con objetivo máximo alcanzado por season; y las dos corridas programadas
-  (00:00 fija el objetivo, 12:00 solo corrige historial/acumulado).
+- **Objetivos semanales (L11) — reescribir el ticket (demo 1):** un
+  objetivo **fijo e igual para todos** (meta de pasos totales de la semana +
+  meta de workouts), **hardcodeado**, lunes–domingo. Cumplido = ambas
+  métricas alcanzadas. Sin subir ni congelar objetivo en el demo; el
+  mecanismo completo (progresión que se congela en vez de bajar, tabla de
+  dificultad, historial de seasons con objetivo máximo) **queda como diseño
+  para después, pero las seasons se mantienen** en el modelo y en la
+  respuesta del endpoint (el reinicio ocurre el día exacto de la season). Se
+  mantienen las dos corridas programadas (00:00 fija el objetivo, 12:00 solo
+  corrige historial/acumulado). Un **workout** = una fila de `Sesion` de la
+  semana (`sesiones[]` ya exige ≥30 min continuos) — si además debe ser
+  "intenso" por FC, es un punto abierto.
+- **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
+  vinculada y verificada. Al cierre del mes calcular una vez posición,
+  percentil y tramo de premio de cada participante
+  (`max(1, floor(N × percentil_acumulado))`) y guardarlos. Tabla de tramos y
+  premios en configuración — por definir con Diego. Sin franja de edad ni
+  sub-ligas (diseño futuro).
+- **Tus Ligas:** grupos que crea/une el usuario; ranking mensual de pasos;
+  **sin premios y sin exigir póliza**. **Duelos 1 contra 1: no construir.**
 - **Endpoint de resumen para el dashboard (decidido):** tabla `resumen_diario`
   (`usuario_id` + `fecha`), upsert en cada sync con lo que el sync ya calcula
   — `pasos_totales_dia`, agregado de `sesiones[]` del día (cantidad, duración
@@ -606,7 +842,21 @@ el dominio de pantallas, no acá.
 ## Notas para Daniel (Flutter)
 
 - Todo lo que no sea leer HealthKit va por HTTP directo contra la API de
-  Luis — el MethodChannel es solo `solicitarPermisos` y `sincronizar`.
+  Luis — el MethodChannel es solo `solicitarPermisos`, `sincronizar` y
+  `actualizarSesion`.
+- **Sesión (30 sep):** hacen falta las pantallas de registro e inicio de sesión
+  (`POST /api/v1/registro`, `POST /api/v1/login`). Guardá el token en
+  almacenamiento seguro (Keychain) para tus propias llamadas HTTP, con el
+  encabezado `Authorization: Token <clave>`.
+- **`actualizarSesion`:** llamalo al iniciar sesión (con el token), al cerrar sesión
+  (con `null`) y **cada vez que se abre la app** (con el token actual, o `null`).
+  Al cerrar sesión borrá tu copia **y** avisale a Swift.
+- **Orden de pantallas:** primero la sesión y después `solicitarPermisos`. El
+  backfill de 7 días arranca al conceder el permiso y necesita sesión.
+- **Si una llamada HTTP responde `401`:** limpiá la sesión, llamá
+  `actualizarSesion(null)` y llevá a la persona a iniciar sesión.
+- `usuario_id` viene en la respuesta del registro y es solo un nombre público;
+  no lo mandes en ninguna petición.
 - Los booleanos `concedido` y `ok` no existen — todo se lee desde `estado`.
 - `solicitarPermisos` trae un mapa `tipos` (`pasos`, `ritmo_cardiaco`,
   `entrenamientos`). `estado: concedido` solo garantiza que se ven pasos —
@@ -637,10 +887,16 @@ el dominio de pantallas, no acá.
 - El **objetivo semanal** no viene en la respuesta del sync — pedirlo aparte
   con `GET /api/v1/retos/estado`. No confundirlo con `nivel` (el anual, de
   cashback) que sí viene en la respuesta del sync.
-- **Retos (D12):** sin animación de "bajaste de objetivo" — ahora se congela.
-  Mostrar en qué season está el usuario y cuánto falta para que cierre. Hay
-  historial de seasons pasadas con objetivo máximo alcanzado (material para
-  una pantalla de logros, si se quiere).
+- **Objetivos semanales (D12) — demo 1:** el objetivo es **el mismo para
+  todos**: meta de pasos + meta de workouts de la semana, con el progreso del
+  usuario en cada una. **Sin rango, sin subir/bajar, sin congelamiento, sin
+  animación de cambio de objetivo.** Mostrar en qué season está el usuario y
+  cuánto falta para que cierre (las seasons se mantienen). La progresión
+  completa vuelve después del demo — no construir hoy.
+- **La Liga:** un solo grupo, todos los usuarios con póliza verificada,
+  premios por percentil (el servidor calcula posición y tramo). Sin franjas
+  de edad ni sub-ligas. **Tus Ligas:** cualquiera se une (con o sin póliza),
+  sin premios. **Duelos 1 contra 1: eliminar.**
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia
   después** — no hace falta construir ningún estado de "evaluando" ni
   pantalla de carga especial entre domingo y lunes al mediodía.
@@ -651,14 +907,52 @@ el dominio de pantallas, no acá.
 
 ---
 
+## Notas para Alvaro (iOS)
+
+- **Token (30 sep):** `ApiClient` manda `Authorization: Token <clave>` en
+  `POST /api/v1/sync`. El token lo entrega Flutter con `actualizarSesion`; Swift lo
+  guarda en su propio Keychain (acceso "después del primer desbloqueo") y **nunca
+  lo escribe en logs**.
+- **Sin token:** no enviar. El día queda pendiente. Aplica a los tres caminos de
+  envío: el sync de hoy, la cola de reintentos y el backfill.
+- **`401`:** no es error permanente. El día queda pendiente y **no se corta el
+  procesamiento de los demás días** (hoy un `4xx` saca el día de la cola y aborta el
+  resto).
+- **Quitar `usuario_id` del payload** y la constante `"alvaro-001"`.
+- **`actualizarSesion(null)`:** borra el token del Keychain.
+
+---
+
 ## Puntos abiertos
 
-- **`usuario_id` sigue siendo un placeholder hardcodeado** — el login real
-  (L10/D6) todavía no existe. Falta definir si los datos del piloto temprano
-  se migran, se descartan, o si el login llega antes de que importe.
+- **Logout en el servidor:** hoy no existe un endpoint que borre el token. Como
+  hay un token por cuenta, borrarlo cerraría la sesión en **todos** los
+  dispositivos de esa persona. Mientras tanto, cerrar sesión en la app solo borra
+  las copias locales (`actualizarSesion(null)`).
+- **Qué estado ve Flutter cuando Swift no tiene sesión:** reusar `encolado` (no
+  cambia `sincronizar`) o agregar un estado nuevo (cambia el contrato).
+- **Cola y backfill al cerrar sesión o entrar otra cuenta:** HealthKit pertenece
+  al teléfono, no a la cuenta. Sin una regla, los días pendientes de una cuenta se
+  subirían a nombre de la siguiente. Propuesta: al cerrar sesión, Swift vacía la
+  cola y reinicia la bandera del backfill.
+- **Caducidad y renovación del token:** hoy no caduca. Las plataformas grandes usan
+  tokens de vida corta con uno de renovación. Conviene también exigir HTTPS fuera
+  de pruebas locales.
+- **`Token` o `Bearer` en el encabezado:** se dejó `Token` porque es lo que espera
+  Django REST Framework; `Bearer` es el estándar de OAuth 2.0 y se puede configurar
+  más adelante.
 - **Días vacíos:** emparejar los tres caminos de envío frente a un día sin
   actividad (ver "Días sin actividad").
 - **Tipo de dispositivo:** Alvaro confirmó su parte (Swift) el 20 sep; falta
   que Luis confirme la regla `desconocido → telefono` y agregue las tres
   columnas + la función de derivación antes de dar esto por cerrado. Ver
   "Puntos abiertos" en `decision-tipo-dispositivo.md`.
+- **Metas hardcodeadas del objetivo semanal (demo 1):** cuántos pasos y
+  cuántos workouts, y si un workout debe ser "intenso" por FC o basta con que
+  exista la sesión.
+- **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
+  y qué premio le toca a cada tramo (Diego).
+- **Endpoints de La Liga y de Tus Ligas:** sin especificar.
+- **Nombre del path `GET /api/v1/retos/estado`:** conserva "retos" aunque el
+  concepto ya se llama objetivo semanal. Decidir con Luis si se renombra
+  (p. ej. `/objetivos/estado`) antes de que Daniel lo consuma.
