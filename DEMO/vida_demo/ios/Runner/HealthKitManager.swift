@@ -32,6 +32,31 @@ private let logSalud = Logger(
     category: "HealthKit"
 )
 
+/// Hardware que generó una muestra (`HKDevice`): nombre, modelo y fabricante.
+///
+/// Se manda al servidor tal cual, sin decidir nada acá: el servidor deriva si
+/// es teléfono, reloj o anillo (ver "Tipo de dispositivo" en el contrato).
+/// `nil` cuando HealthKit no lo trae o viene vacío — el servidor nunca
+/// descarta una muestra por eso; la trata como teléfono.
+struct DatosDispositivo: Equatable {
+    let nombre: String?
+    let modelo: String?
+    let fabricante: String?
+
+    init(_ dispositivo: HKDevice?) {
+        nombre = Self.limpiar(dispositivo?.name)
+        modelo = Self.limpiar(dispositivo?.model)
+        fabricante = Self.limpiar(dispositivo?.manufacturer)
+    }
+
+    /// Un texto vacío o de puros espacios no dice nada: se manda como nulo.
+    private static func limpiar(_ texto: String?) -> String? {
+        guard let recortado = texto?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !recortado.isEmpty else { return nil }
+        return recortado
+    }
+}
+
 /// Estadísticas de ritmo cardíaco (bpm) para un rango de fechas.
 struct HeartRateStats {
     let promedio: Double?
@@ -572,14 +597,18 @@ final class HealthKitManager {
         }
 
         return muestras.map { muestra in
-            PasoMuestra(
+            let dispositivo = DatosDispositivo(muestra.device)
+            return PasoMuestra(
                 external_id: muestra.uuid.uuidString,
                 inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
                 fin: FormatoFechas.iso8601.string(from: muestra.endDate),
                 cantidad: Int(muestra.quantity.doubleValue(for: .count()).rounded()),
                 fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
                 fuente_nombre: muestra.sourceRevision.source.name,
-                fuente_version: muestra.sourceRevision.version
+                fuente_version: muestra.sourceRevision.version,
+                dispositivo_nombre: dispositivo.nombre,
+                dispositivo_modelo: dispositivo.modelo,
+                dispositivo_fabricante: dispositivo.fabricante
             )
         }
     }
@@ -638,13 +667,17 @@ final class HealthKitManager {
         }
 
         return muestras.map { muestra in
-            FrecuenciaCardiacaMuestra(
+            let dispositivo = DatosDispositivo(muestra.device)
+            return FrecuenciaCardiacaMuestra(
                 external_id: muestra.uuid.uuidString,
                 inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
                 fin: FormatoFechas.iso8601.string(from: muestra.endDate),
                 bpm: Int(muestra.quantity.doubleValue(for: unidad).rounded()),
                 fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
-                fuente_nombre: muestra.sourceRevision.source.name
+                fuente_nombre: muestra.sourceRevision.source.name,
+                dispositivo_nombre: dispositivo.nombre,
+                dispositivo_modelo: dispositivo.modelo,
+                dispositivo_fabricante: dispositivo.fabricante
             )
         }
     }
@@ -679,6 +712,7 @@ final class HealthKitManager {
             // pendiente de confirmar con Luis cómo debe tratar el backend
             // este caso (igual que en el spike original).
             let fc = try? await fetchFrecuenciaCardiaca(desde: workout.startDate, hasta: workout.endDate)
+            let dispositivo = DatosDispositivo(workout.device)
             sesiones.append(
                 SesionMuestra(
                     external_id: workout.uuid.uuidString,
@@ -689,7 +723,10 @@ final class HealthKitManager {
                     fc_promedio: Int((fc?.promedio ?? 0).rounded()),
                     fc_maxima: Int((fc?.maximo ?? 0).rounded()),
                     fuente_bundle: workout.sourceRevision.source.bundleIdentifier,
-                    fuente_nombre: workout.sourceRevision.source.name
+                    fuente_nombre: workout.sourceRevision.source.name,
+                    dispositivo_nombre: dispositivo.nombre,
+                    dispositivo_modelo: dispositivo.modelo,
+                    dispositivo_fabricante: dispositivo.fabricante
                 )
             )
         }
