@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+from services.points import AGE_BONUS_MINIMUM, AGE_BONUS_POINTS
+
 GAP_MAX = 15
 H_INTENSITY = 0.70
 MID_INTENSITY = 0.60
@@ -8,8 +10,6 @@ POINTS_30_MIN_60_PERCENT = 50
 POINTS_30_MIN_70_PERCENT = 100
 POINTS_60_MIN_60_PERCENT = 100
 POINTS_90_MIN_60_PERCENT = 150
-AGE_BONUS_MINIMUM = 65
-AGE_BONUS_POINTS = 25
 
 def fcm(edad: int) -> int:
     if edad < 0:
