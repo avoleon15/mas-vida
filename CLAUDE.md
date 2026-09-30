@@ -747,17 +747,6 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 **Perfil y Configuración + Consentimiento aseguradora** — diseñadas en
 Stitch, pendiente pasar a Flutter
 
-<<<<<<< HEAD
-**Registro / login / recuperar contraseña** — el backend ya tiene `POST
-/api/v1/registro` y `POST /api/v1/login`; las **pantallas de Flutter no existen
-todavía** (recuperar contraseña tampoco: falta elegir un proveedor de correo).
-Cuenta base: usuario + contraseña + **fecha de nacimiento** (obligatoria, no
-puede ser futura); el email queda para más adelante. El servidor genera el
-`usuario_id`, un nombre público que no identifica a quien manda datos. Vincular
-póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
-seguro, lo manda en cada request HTTP y se lo entrega a Swift con
-`actualizarSesion`.
-=======
 **Permiso de Apple Salud** (`lib/screens/permisos_salud_screen.dart`,
 ruta `/permisos-salud`) — construida el 24 de septiembre de 2026. Antes
 del diálogo de iOS explica con palabras de todos los días para qué sirve
@@ -771,10 +760,15 @@ tiene reloj", no un permiso negado — se dice como algo normal, y el
 camino a Ajustes va solo para quien SÍ usa reloj. En la UI la app se
 llama "Salud", que es su nombre en un iPhone en español.
 
-**Registro / login / recuperar contraseña** — no existen todavía. Cuenta base:
-email + contraseña + **fecha de nacimiento** (obligatoria). Vincular póliza es
-un segundo paso, aparte. Token en almacenamiento seguro, en cada request HTTP.
->>>>>>> origin/dev
+**Registro / login / recuperar contraseña** — el backend ya tiene `POST
+/api/v1/registro` y `POST /api/v1/login`; las **pantallas de Flutter no existen
+todavía** (recuperar contraseña tampoco: falta elegir un proveedor de correo).
+Cuenta base: usuario + contraseña + **fecha de nacimiento** (obligatoria, no
+puede ser futura); el email queda para más adelante. El servidor genera el
+`usuario_id`, un nombre público que no identifica a quien manda datos. Vincular
+póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
+seguro, lo manda en cada request HTTP y se lo entrega a Swift con
+`actualizarSesion`.
 
 ## Datos que se comparten con la aseguradora
 
