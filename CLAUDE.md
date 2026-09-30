@@ -11,8 +11,13 @@ confirmarlo primero.
 **Actualizado 22 de septiembre de 2026.** Esta versión parte de la de Daniel
 (rama `D7-correcion-2-ui`, 21 sep) y corrige las reglas de negocio que chocaban
 con los documentos vivos del proyecto. Todo lo de UI y diseño de Daniel quedó
-igual. Fuente de verdad de reglas de negocio (en el proyecto de Claude del
-equipo, no en este repo): `contrato-tecnico-vivo.md`, `reglas-puntaje-vivo.md`,
+igual. **Actualizado el 30 de septiembre de 2026 (autenticación por token):**
+la identidad sale del token, el MethodChannel pasa a 3 métodos.
+
+**Contrato entre capas (iOS ↔ backend ↔ Flutter), en este repo:**
+`contrato-tecnico.md`. Es el documento oficial: se actualiza ahí y no en copias.
+Fuente de verdad de las demás reglas de negocio (en el proyecto de Claude del
+equipo, no en este repo): `reglas-puntaje-vivo.md`,
 `arquitectura-cuentas-vivo.md`, `modelo-de-negocio-vivo.md`,
 `esquema-base-datos-vivo.md`. Si este archivo y esos documentos no coinciden en
 una regla de negocio, mandan esos documentos.
@@ -755,9 +760,15 @@ tiene reloj", no un permiso negado — se dice como algo normal, y el
 camino a Ajustes va solo para quien SÍ usa reloj. En la UI la app se
 llama "Salud", que es su nombre en un iPhone en español.
 
-**Registro / login / recuperar contraseña** — no existen todavía. Cuenta base:
-email + contraseña + **fecha de nacimiento** (obligatoria). Vincular póliza es
-un segundo paso, aparte. Token en almacenamiento seguro, en cada request HTTP.
+**Registro / login / recuperar contraseña** — el backend ya tiene `POST
+/api/v1/registro` y `POST /api/v1/login`; las **pantallas de Flutter no existen
+todavía** (recuperar contraseña tampoco: falta elegir un proveedor de correo).
+Cuenta base: usuario + contraseña + **fecha de nacimiento** (obligatoria, no
+puede ser futura); el email queda para más adelante. El servidor genera el
+`usuario_id`, un nombre público que no identifica a quien manda datos. Vincular
+póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
+seguro, lo manda en cada request HTTP y se lo entrega a Swift con
+`actualizarSesion`.
 
 ## Datos que se comparten con la aseguradora
 
@@ -783,15 +794,19 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 
 - Frontend: **Flutter** (decisión final, no solo demo). Capa nativa en Swift
   solo para HealthKit.
-- **MethodChannel:** 2 métodos, nada más — `solicitarPermisos` y
-  `sincronizar`. Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás
-  va por HTTP directo contra la API.
+- **MethodChannel:** 3 métodos, nada más — `solicitarPermisos`, `sincronizar`
+  y `actualizarSesion` (le entrega a Swift el token de la sesión, o `null` al
+  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás va
+  por HTTP directo contra la API.
 - Backend: **Django + PostgreSQL** (decisión final). `TIME_ZONE =
   'America/Guatemala'`.
 - Sync: `POST /api/v1/sync`, el día completo cada vez. Los reintentos corren
   del lado nativo — Flutter no implementa reintentos propios.
-- Autenticación: `TokenAuthentication` de DRF; la identidad sale del token,
-  nunca del body. Todavía no implementada.
+- Autenticación: `TokenAuthentication` de DRF, con el encabezado
+  `Authorization: Token <clave>` en todo `/api/v1/*` salvo registro y login. La
+  identidad sale del token, nunca del body: `usuario_id` ya no viaja en ningún
+  request. **Backend implementado.** Falta que Swift mande el token y las
+  pantallas de Flutter (ver `contrato-tecnico.md`, "Autenticación (token)").
 - Fuente de datos: Apple HealthKit únicamente
 - Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación, NO sueño en v1)
 - Distribución piloto: TestFlight, cuenta Apple Developer de organización
