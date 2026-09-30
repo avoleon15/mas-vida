@@ -6,7 +6,10 @@ import 'almacen_social.dart';
 import 'api_vida_repository.dart';
 import 'mock_vida_repository.dart';
 import 'modelos.dart';
+import 'sesion.dart';
 import 'vida_repository.dart';
+
+export 'sesion.dart';
 
 // ============================================================
 // EL ÚNICO LUGAR QUE DECIDE DE DÓNDE SALEN LOS DATOS.
@@ -18,6 +21,15 @@ import 'vida_repository.dart';
 
 final VidaRepository repositorio = MockVidaRepository();
 // final VidaRepository repositorio = ApiVidaRepository(baseUrl: 'https://api.masvida.gt');
+
+/// Quién maneja el ingreso y el registro. Mismo cambio que arriba: el
+/// local deja recorrer todo el flujo sin backend; el de la API habla con
+/// Django (antes de pasarlo, leer lo que le falta al servidor en
+/// `ServicioSesionApi`).
+final ServicioSesion servicioSesion = ServicioSesionLocal();
+// final ServicioSesion servicioSesion = ServicioSesionApi(
+//   cliente: ClienteApi(baseUrl: 'https://api.masvida.gt'),
+// );
 
 /// Fotografía de todos los datos, ya cargados.
 ///
