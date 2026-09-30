@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'datos/fuente_datos.dart';
 import 'navegacion.dart';
+import 'screens/acceso_screen.dart';
 import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
@@ -84,6 +86,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       title: '+Vida',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.temaClaro,
+      // Toda la app en español: la rueda de fechas del registro dice
+      // "septiembre" y no "September", y el menú de copiar y pegar dice
+      // "Copiar".
+      locale: const Locale('es'),
+      supportedLocales: const [Locale('es')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       initialRoute: '/',
       // El rebote de iOS y el arrastre con mouse, para TODA la app y no
       // solo para las pantallas que se acuerdan de pedirlo. Ver
@@ -100,7 +108,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       onGenerateRoute: (ajustes) {
         final pantalla = _pantallaDe(ajustes.name);
         if (pantalla == null) return null;
-        return rutasDePestana.contains(ajustes.name)
+        // '/' también cruza con fundido: se vuelve a ella al cerrar
+        // sesión, y el arranque no es una pantalla "más adentro".
+        return rutasDePestana.contains(ajustes.name) || ajustes.name == '/'
             ? rutaDePestana(pantalla, ajustes)
             : rutaInterna(pantalla, ajustes);
       },
@@ -171,12 +181,25 @@ Widget? _pantallaDe(String? ruta) {
   }
 }
 
-/// La primera pantalla de la app: muestra la animación de carga y,
-/// cuando los datos ya están, se convierte en Hoy.
+/// Por dónde va el arranque.
+enum _Etapa {
+  /// La animación, mientras cargan los datos.
+  cargando,
+
+  /// No hay sesión guardada: login, registro o acceso de prueba.
+  acceso,
+
+  /// Hoy.
+  lista,
+}
+
+/// La primera pantalla de la app: carga, pide el ingreso si no hay
+/// sesión y termina en Hoy.
 ///
 /// Cambia de una a otra con un `setState` y no navegando: si empujara
-/// una ruta nueva, la pantalla de carga quedaría en la pila y el gesto
-/// de volver atrás de iOS traería de vuelta un loader ya cumplido.
+/// una ruta nueva, la pantalla anterior quedaría en la pila y el gesto
+/// de volver atrás de iOS traería de vuelta un loader ya cumplido — o
+/// peor, el login desde Hoy.
 class _Arranque extends StatefulWidget {
   const _Arranque();
 
@@ -185,7 +208,7 @@ class _Arranque extends StatefulWidget {
 }
 
 class _ArranqueState extends State<_Arranque> {
-  bool _listo = false;
+  _Etapa _etapa = _Etapa.cargando;
 
   @override
   void initState() {
@@ -218,17 +241,34 @@ class _ArranqueState extends State<_Arranque> {
       }),
       Future.delayed(_minimoEnPantalla),
     ]);
+    final sesion = await servicioSesion.actual();
 
     if (!mounted) return;
-    setState(() => _listo = true);
+    setState(() => _etapa = sesion == null ? _Etapa.acceso : _Etapa.lista);
   }
 
   @override
   Widget build(BuildContext context) {
     // `Datos.i` es `late` y las pantallas lo leen de forma síncrona: si
     // Hoy se construyera antes de que la carga termine, reventaría al
-    // leerlo. Por eso el cambio es seco, sin transición cruzada que
-    // deje las dos pantallas vivas al mismo tiempo.
-    return _listo ? const HomeScreen() : const PantallaCargando();
+    // leerlo. Por eso el loader sale con un cambio seco, sin transición
+    // cruzada que deje las dos pantallas vivas al mismo tiempo.
+    if (_etapa == _Etapa.cargando) return const PantallaCargando();
+
+    // De ahí en adelante los datos ya están, así que el ingreso y Hoy
+    // sí se cruzan con un fundido.
+    final Widget pantalla = switch (_etapa) {
+      _Etapa.acceso => AccesoScreen(
+        key: const ValueKey('acceso'),
+        alEntrar: (_) => setState(() => _etapa = _Etapa.lista),
+      ),
+      _ => const HomeScreen(key: ValueKey('hoy')),
+    };
+    return AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 280),
+      child: pantalla,
+    );
   }
 }
