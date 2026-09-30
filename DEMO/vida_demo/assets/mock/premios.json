@@ -355,5 +355,75 @@
       "costo_monedas": 18,
       "vence": "2026-12-31"
     }
+  ],
+  "_comentario_cupones": "mis_cupones son los cupones que el usuario YA TIENE: los que compro con monedas y los que gano por una semana o un podio patrocinado. Viven en Premios > Mis cupones. Un cupon canjeado caduca a los 60 DIAS de canjeado; 'vence' y 'dias_para_vencer' los calcula el backend y aca se cuentan contra el 8 de septiembre de 2026, el hoy de este mock. PLACEHOLDER: los beneficios ('Un cafe americano...') son de ejemplo porque el catalogo todavia dice 'Beneficio por definir'; Diego los reemplaza con lo que acuerde cada comercio. Los codigos tambien son de ejemplo.",
+  "mis_cupones": [
+    {
+      "id": "cup-ookii-s1",
+      "comercio": "Ookii",
+      "beneficio": "2x1 en sushi",
+      "codigo": "MV-OK41-7XQ2",
+      "origen": "semana",
+      "ganado_en": "Semana 1",
+      "canjeado": "2026-09-07",
+      "vence": "2026-11-06",
+      "dias_para_vencer": 59,
+      "estado": "activo",
+      "foto": "assets/img/premios/restaurantes/ookii.webp"
+    },
+    {
+      "id": "cup-cafecito-01",
+      "comercio": "El Cafecito",
+      "beneficio": "Un café americano de cualquier tamaño",
+      "codigo": "MV-CF20-K8M3",
+      "origen": "tienda",
+      "costo_monedas": 20,
+      "canjeado": "2026-07-15",
+      "vence": "2026-09-13",
+      "dias_para_vencer": 5,
+      "estado": "activo",
+      "foto": "assets/img/premios/cafecitos/el-cafecito.webp"
+    },
+    {
+      "id": "cup-cruzverde-01",
+      "comercio": "Cruz Verde",
+      "beneficio": "15% en cuidado personal",
+      "codigo": "MV-CV30-P2H9",
+      "origen": "tienda",
+      "costo_monedas": 30,
+      "canjeado": "2026-08-20",
+      "vence": "2026-10-19",
+      "dias_para_vencer": 41,
+      "estado": "activo",
+      "foto": "assets/img/premios/farmacias/cruz-verde.svg"
+    },
+    {
+      "id": "cup-smartfit-01",
+      "comercio": "Smart Fit",
+      "beneficio": "Una semana de acceso libre",
+      "codigo": "MV-SF45-R6T1",
+      "origen": "tienda",
+      "costo_monedas": 45,
+      "canjeado": "2026-07-02",
+      "vence": "2026-08-31",
+      "dias_para_vencer": 0,
+      "estado": "usado",
+      "usado_el": "2026-07-10",
+      "foto": "assets/img/premios/deportes-ejercicio/smart-fit.webp"
+    },
+    {
+      "id": "cup-frutalle-01",
+      "comercio": "Frutalle",
+      "beneficio": "Un smoothie mediano",
+      "codigo": "MV-FR25-W4N8",
+      "origen": "tienda",
+      "costo_monedas": 25,
+      "canjeado": "2026-05-20",
+      "vence": "2026-07-19",
+      "dias_para_vencer": 0,
+      "estado": "vencido",
+      "foto": "assets/img/premios/restaurantes/frutalle.webp",
+      "fondo": "#000000"
+    }
   ]
 }

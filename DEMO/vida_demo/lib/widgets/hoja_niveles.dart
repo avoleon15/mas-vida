@@ -200,8 +200,8 @@ class AvanceAlSiguienteNivel extends StatelessWidget {
   final int puntosTotal;
   final int nivelActual;
 
-  /// El nivel de arriba, o null si ya está en el último.
-  Nivel? _siguienteNivel() => nivelPorNumero(nivelActual + 1);
+  /// El nivel de arriba, o null si ya está en el último que se alcanza.
+  Nivel? _siguienteNivel() => siguienteNivelAlcanzable(nivelActual);
 
   @override
   Widget build(BuildContext context) {
@@ -211,7 +211,12 @@ class AvanceAlSiguienteNivel extends StatelessWidget {
     ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary);
 
     if (siguiente == null) {
-      return Text('Estás en el nivel más alto de cashback', style: estiloApoyo);
+      return Text(
+        nivelPorNumero(nivelActual + 1) == null
+            ? 'Estás en el nivel más alto de cashback'
+            : 'Llegaste al nivel más alto que da la actividad física',
+        style: estiloApoyo,
+      );
     }
     if (!siguiente.definido) {
       return Text(

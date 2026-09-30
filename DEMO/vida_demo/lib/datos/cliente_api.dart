@@ -41,7 +41,7 @@ class ClienteApi {
     if (respuesta.statusCode != 200) {
       throw ErrorApi(
         respuesta.statusCode,
-        'No se pudo iniciar sesión. Revisá el usuario y la contraseña.',
+        'No se pudo iniciar sesión. Revisa el usuario y la contraseña.',
       );
     }
     final json = jsonDecode(respuesta.body) as Map<String, dynamic>;

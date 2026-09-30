@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'datos/almacen_permisos.dart';
 import 'datos/fuente_datos.dart';
 import 'navegacion.dart';
+import 'screens/permisos_salud_screen.dart';
 import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
@@ -166,6 +168,8 @@ Widget? _pantallaDe(String? ruta) {
       return const PremioDetalleScreen();
     case '/canje-exitoso':
       return const CanjeExitosoScreen();
+    case '/permisos-salud':
+      return const PermisosSaludScreen();
     default:
       return null;
   }
@@ -186,6 +190,11 @@ class _Arranque extends StatefulWidget {
 
 class _ArranqueState extends State<_Arranque> {
   bool _listo = false;
+
+  /// Si toca mostrar el permiso de Apple Salud antes de Hoy: solo la
+  /// primera vez que se abre la app. Sin pasos no hay puntos, así que es
+  /// el paso uno; después vive en Perfil.
+  bool _pedirPermisos = false;
 
   @override
   void initState() {
@@ -218,9 +227,13 @@ class _ArranqueState extends State<_Arranque> {
       }),
       Future.delayed(_minimoEnPantalla),
     ]);
+    final yaSePidieron = await AlmacenPermisos.yaSePidieron();
 
     if (!mounted) return;
-    setState(() => _listo = true);
+    setState(() {
+      _listo = true;
+      _pedirPermisos = !yaSePidieron;
+    });
   }
 
   @override
@@ -229,6 +242,14 @@ class _ArranqueState extends State<_Arranque> {
     // Hoy se construyera antes de que la carga termine, reventaría al
     // leerlo. Por eso el cambio es seco, sin transición cruzada que
     // deje las dos pantallas vivas al mismo tiempo.
-    return _listo ? const HomeScreen() : const PantallaCargando();
+    if (!_listo) return const PantallaCargando();
+    if (_pedirPermisos) {
+      // Mismo cambio seco que el de la carga: sin ruta nueva, así el gesto
+      // de volver no trae de vuelta la pantalla de permisos desde Hoy.
+      return PermisosSaludScreen(
+        alTerminar: () => setState(() => _pedirPermisos = false),
+      );
+    }
+    return const HomeScreen();
   }
 }

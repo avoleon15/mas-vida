@@ -42,14 +42,14 @@
     "pasos": [
       {
         "titulo": "Antes de ir a cualquier hospital",
-        "detalle": "Llamá primero a la línea de emergencias de tu aseguradora. Ellos autorizan y te dicen a qué hospital de la red ir."
+        "detalle": "Llama primero a la línea de emergencias de tu aseguradora. Ellos autorizan y te dicen a qué hospital de la red ir."
       },
       {
-        "titulo": "Llevá tu número de póliza y tu DPI",
+        "titulo": "Lleva tu número de póliza y tu DPI",
         "detalle": "Con eso el hospital verifica tu cobertura en el momento."
       },
       {
-        "titulo": "Guardá todos los papeles",
+        "titulo": "Guarda todos los papeles",
         "detalle": "Facturas, recetas e informes médicos. Sin ellos el reembolso se puede atrasar."
       }
     ]

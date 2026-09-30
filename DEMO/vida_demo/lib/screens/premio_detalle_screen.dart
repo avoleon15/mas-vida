@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
 import '../widgets/placeholder_imagen.dart';
@@ -107,12 +108,17 @@ class PremioDetalleScreen extends StatelessWidget {
                               // monedas y no hay vuelta atrás. El liviano
                               // es para navegar; lo que compromete algo
                               // se siente distinto, igual que al crear un
-                              // grupo o aceptar un duelo.
+                              // grupo.
                               HapticFeedback.mediumImpact();
+                              // El cupón queda guardado ANTES de mostrar
+                              // el éxito: si el usuario cierra la pantalla
+                              // de canje, lo encuentra en Mis cupones.
+                              final cupon = registrarCanje(premio);
                               Navigator.of(context).pushNamed(
                                 '/canje-exitoso',
                                 arguments: {
                                   'premio': premio,
+                                  'cupon': cupon,
                                   'monedasRestantes': saldoRestante,
                                 },
                               );
@@ -253,7 +259,7 @@ class PremioDetalleScreen extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '30 días desde el canje',
+                '$diasDeUnCupon días desde el canje',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

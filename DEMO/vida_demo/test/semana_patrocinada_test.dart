@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
-import 'package:vida_demo/reglas_rango.dart';
 import 'package:vida_demo/screens/camino_semanas_screen.dart';
 import 'package:vida_demo/widgets/cintillo_patrocinador.dart';
-import 'package:vida_demo/widgets/insignia_rango.dart';
 import 'package:vida_demo/widgets/patrocinio.dart';
 
 import 'ayudas.dart';
@@ -50,7 +48,6 @@ Future<void> montarCamino(WidgetTester t, {ObjetivosSemana? conEstos}) async {
 /// En el mock la que corre SÍ está vendida —es la que sale en el título y
 /// en la tarjeta—, así que el caso contrario hay que armarlo.
 ObjetivosSemana sinMarcaEnLaSemanaEnCurso() => ObjetivosSemana(
-  rangoActual: objetivos.rangoActual,
   semanas: [
     for (final s in objetivos.semanas)
       if (s.estado == EstadoSemana.enCurso)
@@ -59,6 +56,7 @@ ObjetivosSemana sinMarcaEnLaSemanaEnCurso() => ObjetivosSemana(
           cierra: s.cierra,
           estado: s.estado,
           objetivos: s.objetivos,
+          monedas: s.monedas,
         )
       else
         s,
@@ -90,61 +88,16 @@ void main() {
         findsOneWidget,
       );
     });
-
-    testWidgets('el rango no comparte renglón con la semana', (t) async {
-      await montarCamino(t);
-
-      // Eran dos escaleras distintas —rangos y semanas— pegadas en el
-      // mismo renglon con un punto en el medio. El rango se mudó a su
-      // tarjeta, que es donde ademas se explica como se sube.
-      expect(
-        find.text(
-          'Rango ${objetivos.rangoActual} de $rangoMaximo · '
-          'Semana ${objetivos.enCurso!.numero}',
-        ),
-        findsNothing,
-      );
-    });
   });
 
-  group('El renglón de rango', () {
-    testWidgets('la insignia dice el rango que manda el servidor', (t) async {
+  group('Lo que paga cada semana', () {
+    testWidgets('va debajo de su nodo, solo el número', (t) async {
       await montarCamino(t);
 
-      final insignia = t.widget<InsigniaRango>(find.byType(InsigniaRango));
-      expect(insignia.rango, objetivos.rangoActual);
-      // La escalera sale de las reglas, no de un 10 escrito en la
-      // pantalla: si el programa cambia de largo, el anillo lo sigue.
-      expect(insignia.maximo, rangoMaximo);
-    });
-
-    testWidgets('dice CÓMO se sube y cómo se baja', (t) async {
-      await montarCamino(t);
-
-      // Lo que faltaba: el usuario veia una escalera de diez escalones y
-      // ningun lado decia que la mueve. Y que se pueda BAJAR no se puede
-      // callar: enterarse un lunes es un castigo escondido.
-      expect(find.byKey(llaveRenglonRango), findsOneWidget);
-      expect(
-        find.textContaining('Rango ${objetivos.rangoActual} de $rangoMaximo'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('subís al ${objetivos.rangoActual + 1}'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('bajás uno'), findsOneWidget);
-    });
-
-    testWidgets('el nodo ya no repite el rango diez veces', (t) async {
-      await montarCamino(t);
-
-      // Decia "+15 al Rango 3" debajo de cada uno de los diez nodos: la
-      // misma frase diez veces con el numero cambiando de a uno.
-      expect(find.textContaining('al Rango'), findsNothing);
-      // Lo que paga sí sigue, que es lo que se compara entre nodos.
-      final paga = objetivos.recorrido.firstWhere((p) => p.monedas > 0);
-      expect(find.text('+${paga.monedas}'), findsWidgets);
+      // Es lo que se compara de un nodo al otro. El monto lo manda el
+      // servidor en la propia semana.
+      final enCurso = objetivos.enCurso!;
+      expect(find.text('+${enCurso.monedas}'), findsWidgets);
     });
   });
 
@@ -221,16 +174,32 @@ void main() {
 
       // Fila 1: las semanas 1, 2 y 3 a la misma altura, hacia la derecha.
       for (final n in [2, 3]) {
-        expect(y[n], closeTo(y[1]!, 0.01), reason: 'la semana $n cambió de fila');
-        expect(x[n], greaterThan(x[n - 1]!), reason: 'la semana $n no fue a la derecha');
+        expect(
+          y[n],
+          closeTo(y[1]!, 0.01),
+          reason: 'la semana $n cambió de fila',
+        );
+        expect(
+          x[n],
+          greaterThan(x[n - 1]!),
+          reason: 'la semana $n no fue a la derecha',
+        );
       }
 
       // Fila 2: la 4 arranca DEBAJO de la 3 —el giro es vertical— y la
       // fila vuelve hacia la izquierda.
-      expect(x[4], closeTo(x[3]!, 0.01), reason: 'el giro de fila no es vertical');
+      expect(
+        x[4],
+        closeTo(x[3]!, 0.01),
+        reason: 'el giro de fila no es vertical',
+      );
       expect(y[4], greaterThan(y[3]!));
       for (final n in [5, 6]) {
-        expect(y[n], closeTo(y[4]!, 0.01), reason: 'la semana $n cambió de fila');
+        expect(
+          y[n],
+          closeTo(y[4]!, 0.01),
+          reason: 'la semana $n cambió de fila',
+        );
         expect(x[n], lessThan(x[n - 1]!), reason: 'la semana $n no volvió');
       }
 
@@ -270,7 +239,11 @@ void main() {
 
       final porFila = <double, int>{};
       for (final s in objetivos.semanas) {
-        porFila.update(centroDe(t, s.numero).dy, (n) => n + 1, ifAbsent: () => 1);
+        porFila.update(
+          centroDe(t, s.numero).dy,
+          (n) => n + 1,
+          ifAbsent: () => 1,
+        );
       }
       final filas = porFila.keys.toList()..sort();
 
@@ -358,11 +331,13 @@ void main() {
     testWidgets('el cupón NO reemplaza a las monedas de la semana', (t) async {
       await montarCamino(t);
 
-      // Si alguien cambia el premio de rango por el cupón, esto se cae.
-      final paso = objetivos.recorrido.firstWhere(
-        (p) => p.semana.tienePatrocinio && p.monedas > 0,
+      // Si alguien cambia las monedas de la semana por el cupón, esto se
+      // cae.
+      final s = objetivos.semanas.firstWhere(
+        (s) => s.tienePatrocinio && s.estado != EstadoSemana.cerrada,
       );
-      expect(find.textContaining('+${paso.monedas}'), findsWidgets);
+      expect(s.monedas, greaterThan(0));
+      expect(find.textContaining('+${s.monedas}'), findsWidgets);
     });
 
     testWidgets('el cupón se ve al abrir esa semana', (t) async {

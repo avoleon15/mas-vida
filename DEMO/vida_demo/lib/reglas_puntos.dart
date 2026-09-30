@@ -25,12 +25,11 @@ const int techoDiario = 200;
 
 /// Techo anual de los puntos por ACTIVIDAD FÍSICA (pasos + intensidad).
 ///
-/// NO es un techo de los puntos del año: los chequeos médicos dan puntos
-/// aparte que se suman POR ENCIMA de este número. Por eso el nivel 4
-/// (15.000) sí se alcanza — pero solo sumando chequeos, no caminando más.
-///
-/// [PENDIENTE: cuántos puntos da un chequeo. No inventarlo, y no nombrar
-/// ninguna cifra de chequeos en la UI hasta que esté definido.]
+/// El chequeo médico está fuera de v1, así que en el piloto este es
+/// también el techo de los puntos del año. Consecuencia aceptada y
+/// documentada (CLAUDE.md): el nivel 4 arranca en 15.000 y queda FUERA
+/// DE ALCANCE en el piloto. No es un bug — no se arregla subiendo este
+/// techo ni bajando el piso del nivel 4.
 const int techoAnual = 12000;
 
 /// Piso mínimo de pasos para ganar cualquier punto.
@@ -213,7 +212,11 @@ class Nivel {
   String get rangoTexto {
     if (!definido) return 'Pendiente de definir';
     final min = _miles(puntosMinimos!);
-    if (puntosMaximos == null) return '$min+ pts';
+    // El último nivel no tiene techo real: el número que trae es el tope
+    // para dibujar la escalera, no un límite de lo que se acumula.
+    if (puntosMaximos == null || puntosMaximos == puntosMinimos) {
+      return '$min+ pts';
+    }
     return '$min – ${_miles(puntosMaximos!)} pts';
   }
 
@@ -226,16 +229,17 @@ class Nivel {
 /// Tabla de niveles anuales de cashback. Los cinco niveles y sus rangos
 /// están confirmados: ya no hay huecos pendientes acá.
 ///
-/// OJO con el nivel 4: arranca justo en [techoAnual] (12.000), que es lo
-/// máximo que da la ACTIVIDAD FÍSICA sola. Los chequeos médicos suman
-/// POR ENCIMA de ese techo, y son los que llevan al usuario a moverse
-/// dentro del nivel 4 hasta los 15.000.
+/// OJO con el nivel 4: arranca en 15.000, por encima de [techoAnual]
+/// (12.000), así que en el piloto no se alcanza. El cashback máximo real
+/// es el 10% del nivel 3. En el nivel 4, el tercer número es el tope de
+/// la tabla para dibujar la escalera, no un límite de lo acumulable
+/// (piso confirmado por Alvaro el 19 de septiembre de 2026).
 const List<Nivel> niveles = [
   Nivel(0, 0, 2499, 0),
   Nivel(1, 2500, 4999, 5),
   Nivel(2, 5000, 9999, 7.5),
-  Nivel(3, 10000, 11999, 10),
-  Nivel(4, 12000, 15000, 20),
+  Nivel(3, 10000, 14999, 10),
+  Nivel(4, 15000, 15000, 20),
 ];
 
 /// Nivel que corresponde a un acumulado anual.
@@ -245,6 +249,22 @@ int nivelParaPuntos(int puntosAnuales) {
     if (puntosAnuales >= n.puntosMinimos!) return n.numero;
   }
   return 0;
+}
+
+/// Si [nivel] se puede alcanzar con la actividad del año, que topa en
+/// [techoAnual]. El nivel 4 no: es la consecuencia aceptada del piloto.
+bool nivelAlcanzable(Nivel nivel) =>
+    nivel.puntosMinimos != null && nivel.puntosMinimos! <= techoAnual;
+
+/// El nivel de arriba de [nivelActual], si existe y se puede alcanzar.
+///
+/// Null en el último nivel Y en el último alcanzable: a quien está en el
+/// nivel 3 no se le dice "te faltan 3.760 pts" para un nivel al que
+/// caminando no llega.
+Nivel? siguienteNivelAlcanzable(int nivelActual) {
+  final siguiente = nivelPorNumero(nivelActual + 1);
+  if (siguiente == null || !nivelAlcanzable(siguiente)) return null;
+  return siguiente;
 }
 
 /// Busca un nivel por número. Devuelve `null` si no está en la tabla.
