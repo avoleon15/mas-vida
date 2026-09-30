@@ -3,8 +3,9 @@
 //  Runner (+Vida — A10)
 //
 //  Modelos del JSON #1 y JSON #2 del contrato v3 (iOS ↔ Backend), portados
-//  tal cual del spike (+vida_fetch/SyncPayload.swift) — sin cambios, tal
-//  como está congelado en "contrato-v3_1.md":
+//  del spike (+vida_fetch/SyncPayload.swift), más los tres campos
+//  `dispositivo_*` que el contrato confirmó el 20 de septiembre de 2026
+//  (ver "Tipo de dispositivo" en contrato-tecnico.md):
 //
 //    POST /api/v1/sync
 //    → { fecha, zona_horaria, pasos[], sesiones[], frecuencia_cardiaca[],
@@ -32,6 +33,14 @@ struct PasoMuestra: Codable {
     let fuente_bundle: String
     let fuente_nombre: String
     let fuente_version: String?
+    // Hardware que generó la muestra (HKDevice). `fuente_*` dice qué APP la
+    // escribió; estos dicen QUÉ APARATO: iPhone y Apple Watch comparten el
+    // mismo `fuente_bundle` (com.apple.health), y solo así el servidor puede
+    // distinguirlos para no contar dos veces los mismos pasos. Nulos si
+    // HealthKit no los trae: el servidor nunca descarta la muestra por eso.
+    let dispositivo_nombre: String?
+    let dispositivo_modelo: String?
+    let dispositivo_fabricante: String?
 }
 
 /// Una sesión de actividad (un `HKWorkout`).
@@ -45,6 +54,14 @@ struct SesionMuestra: Codable {
     let fc_maxima: Int
     let fuente_bundle: String
     let fuente_nombre: String
+    // Hardware que generó la muestra (HKDevice). `fuente_*` dice qué APP la
+    // escribió; estos dicen QUÉ APARATO: iPhone y Apple Watch comparten el
+    // mismo `fuente_bundle` (com.apple.health), y solo así el servidor puede
+    // distinguirlos para no contar dos veces los mismos pasos. Nulos si
+    // HealthKit no los trae: el servidor nunca descarta la muestra por eso.
+    let dispositivo_nombre: String?
+    let dispositivo_modelo: String?
+    let dispositivo_fabricante: String?
 }
 
 /// Una muestra cruda de `.heartRate` (un `HKQuantitySample`), del día
@@ -56,6 +73,14 @@ struct FrecuenciaCardiacaMuestra: Codable {
     let bpm: Int
     let fuente_bundle: String
     let fuente_nombre: String
+    // Hardware que generó la muestra (HKDevice). `fuente_*` dice qué APP la
+    // escribió; estos dicen QUÉ APARATO: iPhone y Apple Watch comparten el
+    // mismo `fuente_bundle` (com.apple.health), y solo así el servidor puede
+    // distinguirlos para no contar dos veces los mismos pasos. Nulos si
+    // HealthKit no los trae: el servidor nunca descarta la muestra por eso.
+    let dispositivo_nombre: String?
+    let dispositivo_modelo: String?
+    let dispositivo_fabricante: String?
 }
 
 /// El payload completo de un día calendario, listo para `POST /api/v1/sync`.

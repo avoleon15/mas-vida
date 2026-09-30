@@ -1,18 +1,17 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getwidget/getwidget.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
-import 'package:vida_demo/reglas_rango.dart';
 import 'package:vida_demo/theme.dart';
 import 'package:vida_demo/screens/camino_semanas_screen.dart';
-import 'package:vida_demo/widgets/patrocinio.dart';
 import 'package:vida_demo/widgets/semanas_objetivos.dart';
 import 'package:vida_demo/widgets/tarjeta_semana.dart';
 
 import 'ayudas.dart';
 
-/// La sección "Objetivos de la semana" y el camino de las diez semanas.
+/// La sección "Objetivos de la semana" y el camino de las semanas.
 ///
 /// Lo que protegen estos tests es el rediseño: que los objetivos tengan
 /// NOMBRE a la vista, que lo que falta se diga en unidades reales y no en
@@ -56,21 +55,26 @@ void main() {
   }
 
   group('Los objetivos tienen nombre a la vista', () {
-    testWidgets('los tres nombres se leen sin tocar nada', (t) async {
+    testWidgets('los dos nombres se leen sin tocar nada', (t) async {
       await montarHome(t);
 
       // Es la razón de ser del rediseño. Antes había que tocar un círculo
       // y abrir un action sheet para saber de qué objetivo se trataba.
+      // En la columna va el nombre corto ("Pasos", "Entrenamiento");
+      // VoiceOver dice el nombre completo.
+      for (final corto in ['Pasos', 'Entrenamiento']) {
+        expect(find.text(corto), findsOneWidget);
+      }
       for (final o in objetivos.enCurso!.objetivos) {
         expect(
-          find.text(o.nombre),
+          find.bySemanticsLabel(RegExp('^${o.nombre}: ')),
           findsOneWidget,
-          reason: '"${o.nombre}" tiene que verse en la tarjeta',
+          reason: '"${o.nombre}" tiene que estar en la tarjeta',
         );
       }
     });
 
-    testWidgets('cada objetivo tiene su fila', (t) async {
+    testWidgets('cada objetivo tiene su columna', (t) async {
       await montarHome(t);
       for (final o in objetivos.enCurso!.objetivos) {
         expect(find.byKey(llaveObjetivo(o.id)), findsOneWidget);
@@ -83,7 +87,7 @@ void main() {
       await montarHome(t);
 
       // La primera persona que probó la app intentó TOCAR el círculo
-      // para marcar el objetivo. No hay nada que marcar: los tres los
+      // para marcar el objetivo. No hay nada que marcar: los dos los
       // cierra el servidor el domingo 23:59 con los datos de Apple
       // Health, así que un control que no controla nada se siente una
       // app rota. En su lugar va un riel: una barra de 3,5 px pegada al
@@ -108,21 +112,29 @@ void main() {
       }
     });
 
-    testWidgets('la fila entera tampoco recibe toques', (t) async {
+    testWidgets('tocarlo abre el detalle, que no tiene nada que marcar', (
+      t,
+    ) async {
+      t.view.physicalSize = const Size(390, 844);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
       await montarHome(t);
+      final o = objetivos.enCurso!.objetivos.last;
 
-      // Ni el riel ni la fila: tocar un objetivo no lleva a ningún lado.
-      // Lo único que se toca en la tarjeta es el pie, que abre el camino.
-      for (final o in objetivos.enCurso!.objetivos) {
-        expect(
-          find.descendant(
-            of: find.byKey(llaveObjetivo(o.id)),
-            matching: find.byType(GestureDetector),
-          ),
-          findsNothing,
-          reason: '"${o.nombre}" quedó tocable',
-        );
-      }
+      // Tocar un objetivo abre INFORMACIÓN (pedido de Daniel, 24 de
+      // septiembre de 2026), nunca lo marca: lo cierra el servidor. La
+      // hoja lo dice con todas las letras.
+      await t.tap(find.byKey(llaveObjetivo(o.id)));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      expect(find.byKey(llaveDetalleObjetivo), findsOneWidget);
+      expect(find.text(o.nombre), findsOneWidget);
+      expect(find.text('Cómo se cuenta'), findsOneWidget);
+      expect(find.textContaining('No tienes que marcar nada'), findsOneWidget);
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.byType(CupertinoCheckbox), findsNothing);
+      expect(find.byType(CupertinoSwitch), findsNothing);
     });
 
     testWidgets('el cumplido se marca con un check suelto, en naranja', (
@@ -155,7 +167,7 @@ void main() {
 
     test('NADA se dice con palabras de plazo', () {
       // La razón de ser del cambio: "Faltan 42 min" y "Faltan 2 días" se
-      // leían como cuentas regresivas de cada objetivo, cuando los tres
+      // leían como cuentas regresivas de cada objetivo, cuando los dos
       // cierran juntos el domingo 23:59. La columna de la derecha es una
       // CANTIDAD y no puede sonar a tiempo restante.
       for (final o in objetivos.enCurso!.objetivos) {
@@ -174,33 +186,23 @@ void main() {
     });
 
     test('la unidad concuerda con la meta', () {
-      // "1 dias" era un error visible en pantalla. La unidad venía cruda
+      // "1 pasos" era un error visible en pantalla. La unidad venía cruda
       // del JSON y se pegaba sin mirar la cantidad.
-      const deVarios = ObjetivoSemanal(
-        id: 'dias_ritmo_alto',
-        nombre: 'Días con ritmo cardíaco alto',
-        progreso: 1,
-        meta: 3,
-        unidad: 'días',
-        completo: false,
-      );
-      expect(avanceDicho(deVarios), '1 de 3 días');
-
       const deUno = ObjetivoSemanal(
-        id: 'dias_ritmo_alto',
-        nombre: 'Días con ritmo cardíaco alto',
+        id: 'pasos_semana',
+        nombre: 'Pasos de la semana',
         progreso: 0,
         meta: 1,
-        unidad: 'días',
+        unidad: 'pasos',
         completo: false,
       );
-      expect(avanceDicho(deUno), '0 de 1 día');
+      expect(avanceDicho(deUno), '0 de 1 paso');
     });
 
     test('los minutos se abrevian', () {
       const o = ObjetivoSemanal(
-        id: 'intensidad_semana',
-        nombre: 'Minutos de intensidad',
+        id: 'minutos_entrenamiento',
+        nombre: 'Minutos de entrenamiento',
         progreso: 48,
         meta: 90,
         unidad: 'minutos',
@@ -213,8 +215,8 @@ void main() {
       // "90 de 90" al lado de un círculo vacío se lee como un error de la
       // app, no como que el servidor todavía no lo cerró.
       const o = ObjetivoSemanal(
-        id: 'intensidad_semana',
-        nombre: 'Minutos de intensidad',
+        id: 'minutos_entrenamiento',
+        nombre: 'Minutos de entrenamiento',
         progreso: 90,
         meta: 90,
         unidad: 'minutos',
@@ -224,7 +226,7 @@ void main() {
     });
 
     test('sin meta NO se inventa un número', () {
-      // La tabla de dificultad por rango todavía no existe. Dividir el
+      // La tabla de metas por semana todavía no existe. Dividir el
       // progreso por un porcentaje redondeado daría una cifra falsa con
       // dos decimales de precisión inventada.
       const o = ObjetivoSemanal(
@@ -246,15 +248,11 @@ void main() {
     });
   });
 
-  group('Ninguna barra de progreso', () {
-    testWidgets('ni en la tarjeta de Hoy', (t) async {
-      await montarHome(t);
-      expect(find.byType(GFProgressBar), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-    });
-
-    testWidgets('ni en el camino', (t) async {
+  // Los objetivos de Hoy SÍ llevan una barra fina desde el rediseño del
+  // 24 de septiembre de 2026: con dos objetivos y el número en grande, la
+  // barra es lo que dice de un vistazo cuánto falta.
+  group('Ninguna barra de progreso en el camino', () {
+    testWidgets('ni una', (t) async {
       await montarCamino(t);
       expect(find.byType(GFProgressBar), findsNothing);
       expect(find.byType(LinearProgressIndicator), findsNothing);
@@ -263,12 +261,20 @@ void main() {
   });
 
   group('El titular ubica la semana', () {
-    testWidgets('dice por qué semana va', (t) async {
+    testWidgets('el botón del camino dice por qué semana va', (t) async {
       await montarHome(t);
       final s = objetivos.enCurso!;
-      // Sin el "de 10": cuantas tiene el programa lo dice el boton de
-      // arriba ("Ver las 10 semanas"). Aca solo hace falta en cual va.
-      expect(find.text('Semana ${s.numero}'), findsWidgets);
+      // La semana vive EN el botón: se ve sin entrar al camino, y no
+      // necesita una etiqueta aparte.
+      expect(
+        find.descendant(
+          of: find.byKey(llaveBotonCamino),
+          matching: find.text(
+            'Semana ${s.numero} de ${objetivos.semanas.length}',
+          ),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('debajo, en chico, cuántos objetivos van', (t) async {
@@ -298,94 +304,153 @@ void main() {
       );
     });
 
-    testWidgets('nada de oraciones explicando la regla', (t) async {
+    testWidgets('los dos objetivos van lado a lado', (t) async {
       await montarHome(t);
-      expect(find.textContaining('Con dos no alcanza'), findsNothing);
-      expect(find.textContaining('Cumplí los'), findsNothing);
+      final [primero, segundo] = objetivos.enCurso!.objetivos;
+
+      // Dos columnas, como las estadísticas de Fitness: el número grande
+      // de cada uno se compara de un vistazo.
+      final a = t.getTopLeft(find.byKey(llaveObjetivo(primero.id)));
+      final b = t.getTopLeft(find.byKey(llaveObjetivo(segundo.id)));
+      expect(b.dy, a.dy);
+      expect(b.dx, greaterThan(a.dx));
+    });
+  });
+
+  group('Lo que paga la semana', () {
+    testWidgets('en curso dice "+N" y la moneda, como en un juego', (t) async {
+      await montarHome(t);
+      final s = objetivos.enCurso!;
+      expect(
+        find.descendant(
+          of: find.byKey(llaveMonedasSemana),
+          matching: find.text('+${s.monedas}'),
+        ),
+        findsOneWidget,
+      );
+      // Sin oración: el premio se ve, no se lee.
+      expect(find.textContaining('ganas'), findsNothing);
+      expect(find.textContaining('ganás'), findsNothing);
+    });
+
+    SemanaObjetivos cerrada({required bool cumplida, int monedas = 10}) =>
+        SemanaObjetivos(
+          numero: 1,
+          cierra: DateTime(2026, 9, 6),
+          estado: EstadoSemana.cerrada,
+          monedas: monedas,
+          objetivos: [
+            const ObjetivoSemanal(
+              id: 'pasos_semana',
+              nombre: 'Pasos de la semana',
+              progreso: 40000,
+              meta: 30000,
+              unidad: 'pasos',
+              completo: true,
+            ),
+            ObjetivoSemanal(
+              id: 'minutos_entrenamiento',
+              nombre: 'Minutos de entrenamiento',
+              progreso: cumplida ? 80 : 20,
+              meta: 60,
+              unidad: 'minutos',
+              completo: cumplida,
+            ),
+          ],
+        );
+
+    Future<void> montarSemana(WidgetTester t, SemanaObjetivos s) async {
+      await montarPantalla(
+        t,
+        Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: TarjetaSemana(semana: s),
+          ),
+        ),
+      );
+      await t.pump();
+    }
+
+    testWidgets('cerrada con los dos, muestra lo que ganó', (t) async {
+      await montarSemana(t, cerrada(cumplida: true));
+      expect(find.text('+10'), findsOneWidget);
+      expect(find.bySemanticsLabel('Ganaste 10 monedas'), findsOneWidget);
+    });
+
+    testWidgets('cerrada con uno solo, no muestra premio', (t) async {
+      await montarSemana(t, cerrada(cumplida: false));
+      expect(find.byKey(llaveMonedasSemana), findsNothing);
+    });
+
+    testWidgets('una semana que no paga monedas no dice "0 monedas"', (
+      t,
+    ) async {
+      await montarSemana(t, cerrada(cumplida: true, monedas: 0));
+      expect(find.byKey(llaveMonedasSemana), findsNothing);
+      expect(find.textContaining('0 monedas'), findsNothing);
     });
   });
 
   group('El pie ubica la semana en el programa', () {
-    testWidgets('no repite la semana ni rotula el rango', (t) async {
+    testWidgets('no repite la semana', (t) async {
       await montarHome(t);
       // La semana la dice el titular. Repetirla en el pie era decir dos
       // veces lo mismo a diez centímetros de distancia.
       expect(find.textContaining('SEMANA'), findsNothing);
-      // Y el rango tampoco: ese dato vive en la insignia del camino, un
-      // medallon con el numero adentro y diez muescas alrededor. Aca era
-      // un rotulo suelto encima de una tira que cuenta SEMANAS, o sea
-      // explicando mal a lo que tenia debajo.
-      expect(find.text('RANGO ${objetivos.rangoActual}'), findsNothing);
-      expect(find.textContaining('RANGO'), findsNothing);
     });
 
-    testWidgets('la marca de la semana va al lado del titular', (t) async {
+    testWidgets('la marca va pegada a la semana y dice que es de ESTA', (
+      t,
+    ) async {
       await montarHome(t);
-      final marca = objetivos.enCurso!.patrocinio!.marca;
+      final s = objetivos.enCurso!;
+      final marca = s.patrocinio!.marca;
+      final renglon = find.bySemanticsLabel('Esta semana la patrocina $marca');
 
-      // La pildora con el logo y el color de la marca, no la cinta de
-      // dos renglones que estaba al fondo de la tarjeta.
-      expect(find.bySemanticsLabel('Patrocinada por $marca'), findsOneWidget);
-      // La cinta vieja decia "PATROCINA MONTANOS" en un bloque aparte,
-      // con el logo repetido y dos renglones de texto.
-      expect(find.textContaining('PATROCINA $marca'), findsNothing);
-
-      // El rotulo dice QUE es esa marca ahi, no solo su nombre.
-      expect(find.text('PATROCINADO POR'), findsOneWidget);
-
-      // Y a la DERECHA del titular, no debajo.
-      final titular = t.getTopLeft(
-        find.text('Semana ${objetivos.enCurso!.numero}'),
-      );
+      // Al pie de todo se leía como patrocinadora de la sección entera
+      // (pedido de Daniel, 24 de septiembre de 2026). Va entre el botón de
+      // la semana y los objetivos, y la frase dice "Esta semana".
+      expect(renglon, findsOneWidget);
+      final y = t.getTopLeft(renglon).dy;
+      expect(y, greaterThan(t.getTopLeft(find.byKey(llaveBotonCamino)).dy));
       expect(
-        t.getTopLeft(find.byType(ChipMarcaSemana)).dx,
-        greaterThan(titular.dx),
+        y,
+        lessThan(
+          t.getTopLeft(find.byKey(llaveObjetivo(s.objetivos.first.id))).dy,
+        ),
       );
     });
 
-    testWidgets('el titular no se corta con puntos suspensivos', (t) async {
+    testWidgets('la semana se dice una sola vez', (t) async {
       await montarHome(t);
-      // "Semana 3 de 10" mas la tarjetita de la marca no entran en un
-      // iPhone: el titular terminaba en "Semana 3 de ...", que pierde el
-      // numero que importa y encima se ve roto.
-      expect(find.textContaining('…'), findsNothing);
-      expect(find.textContaining('Semana 3 de'), findsNothing);
-    });
-
-    testWidgets('la franja del pie ya no existe', (t) async {
-      await montarHome(t);
-      final paso = objetivos.pasoDe(objetivos.enCurso!.numero)!;
-
-      // La tira de diez marcas decia por que semana va, que es lo mismo
-      // que el titular dice con palabras quince centimetros mas arriba.
-      expect(find.byKey(const ValueKey('tira-semanas')), findsNothing);
-      // Y el chip de monedas vive en el nodo del camino, que es donde
-      // se compara contra lo que pagan las otras nueve semanas.
-      expect(find.text('+${paso.monedas}'), findsNothing);
+      // La dice el botón. Una píldora "Semana 3" arriba de un botón que
+      // dice "Semana 3 de 10" es la misma cosa dos veces.
+      expect(find.textContaining('Semana '), findsOneWidget);
     });
   });
 
-  group('El pie de la tarjeta es el botón del camino', () {
+  group('El botón del camino encabeza la sección', () {
     testWidgets('se ve sin tocar nada y dice cuántas semanas son', (t) async {
       await montarHome(t);
       expect(find.byKey(llaveBotonCamino), findsOneWidget);
+      expect(find.text('Ver tu camino'), findsOneWidget);
       expect(
-        find.text('Ver las ${objetivos.semanas.length} semanas'),
+        find.textContaining('de ${objetivos.semanas.length}'),
         findsOneWidget,
       );
     });
 
-    testWidgets('va DEBAJO de los tres objetivos, no arriba de todo', (
-      t,
-    ) async {
+    testWidgets('va ARRIBA de los dos objetivos', (t) async {
       await montarHome(t);
-      final ultimo = objetivos.enCurso!.objetivos.last;
+      final primero = objetivos.enCurso!.objetivos.first;
 
-      // Estaba flotando entre el encabezado de la seccion y la tarjeta,
-      // pegado a otro renglon azul: se leia como un rotulo mas.
+      // Es la pieza más importante de la sección (rediseño de Daniel, 24
+      // de septiembre de 2026): al pie quedaba última, debajo de dos
+      // píldoras que pesaban más que ella.
       expect(
         t.getTopLeft(find.byKey(llaveBotonCamino)).dy,
-        greaterThan(t.getTopLeft(find.byKey(llaveObjetivo(ultimo.id))).dy),
+        lessThan(t.getTopLeft(find.byKey(llaveObjetivo(primero.id))).dy),
       );
     });
 
@@ -415,16 +480,16 @@ void main() {
       expect(find.textContaining('Esta semana paga'), findsNothing);
     });
 
-    testWidgets('el plazo se dice UNA vez, al lado del conteo', (t) async {
+    testWidgets('el plazo se dice UNA vez, abajo', (t) async {
       await montarHome(t);
       final enCurso = objetivos.enCurso!;
 
-      // Sigue siendo uno solo para los tres objetivos —esa es la regla
-      // que lo puso ahi—, pero ahora son tres palabras y no un bloque.
+      // Uno solo para los dos objetivos, y debajo de ellos: es la letra
+      // chica de la sección, no lo primero que se lee.
       expect(find.text(plazoCorto(enCurso)), findsOneWidget);
       expect(
         t.getTopLeft(find.text(plazoCorto(enCurso))).dy,
-        lessThan(
+        greaterThan(
           t
               .getTopLeft(find.byKey(llaveObjetivo(enCurso.objetivos.first.id)))
               .dy,
@@ -515,82 +580,6 @@ void main() {
       // La hoja trae la tarjeta de ESA semana, no la de la semana en
       // curso.
       expect(find.text('Semana ${primera.numero}'), findsWidgets);
-    });
-  });
-
-  group('Semana y rango no coinciden', () {
-    test('el monto sale del rango arrastrado, no del número de semana', () {
-      // Una semana fallada BAJA el rango, así que el nodo de la semana 5
-      // puede estar pagando el rango 4. Si el monto saliera del número de
-      // semana, este test se pondría rojo.
-      final fallada = SemanaObjetivos(
-        numero: 1,
-        cierra: DateTime(2026, 9, 6),
-        estado: EstadoSemana.cerrada,
-        objetivos: const [
-          ObjetivoSemanal(
-            id: 'a',
-            nombre: 'a',
-            progreso: 0,
-            meta: 10,
-            unidad: 'pasos',
-            completo: false,
-          ),
-        ],
-      );
-      final cumplida = SemanaObjetivos(
-        numero: 2,
-        cierra: DateTime(2026, 9, 13),
-        estado: EstadoSemana.cerrada,
-        objetivos: const [
-          ObjetivoSemanal(
-            id: 'a',
-            nombre: 'a',
-            progreso: 10,
-            meta: 10,
-            unidad: 'pasos',
-            completo: true,
-          ),
-        ],
-      );
-
-      final programa = ObjetivosSemana(
-        rangoActual: 1,
-        semanas: [fallada, cumplida],
-      );
-      final recorrido = programa.recorrido;
-
-      // La 1 falló desde el piso: se queda en 0 y no paga.
-      expect(recorrido[0].rangoAlCerrar, rangoMinimo);
-      expect(recorrido[0].monedas, 0);
-      // La SEGUNDA semana sube apenas al rango 1, no al 2.
-      expect(recorrido[1].rangoAlCerrar, 1);
-      expect(recorrido[1].monedas, monedasPorSubirA(1));
-    });
-
-    test('lo que no cerró viene marcado como proyección', () {
-      for (final p in objetivos.recorrido) {
-        expect(
-          p.proyectado,
-          p.semana.estado != EstadoSemana.cerrada,
-          reason: 'semana ${p.semana.numero}',
-        );
-      }
-    });
-
-    test('una proyección asume que se cumple todo de acá en adelante', () {
-      final pendientes = objetivos.recorrido
-          .where((p) => p.proyectado)
-          .toList();
-
-      // Cada semana proyectada sube exactamente un escalón sobre la
-      // anterior: es el mejor caso, y se dice que es el mejor caso.
-      for (var i = 1; i < pendientes.length; i++) {
-        expect(
-          pendientes[i].rangoAlCerrar,
-          (pendientes[i - 1].rangoAlCerrar + 1).clamp(rangoMinimo, rangoMaximo),
-        );
-      }
     });
   });
 }
