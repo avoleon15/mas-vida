@@ -590,8 +590,11 @@ Salida: `{ "estado": string, "detalle": string? }`
 - Es **idempotente**: mandar el mismo token dos veces no cambia nada.
 - **No hay forma de leer el token desde Flutter** (no existe un método para
   eso). Flutter conserva su propia copia y, al cerrar sesión, borra **las dos**.
-- Swift lo guarda con acceso "después del primer desbloqueo", para poder enviar
-  aunque el teléfono esté bloqueado. **Nunca se escribe en logs.**
+- Swift lo guarda en el Keychain con acceso "después del primer desbloqueo"
+  (`AfterFirstUnlockThisDeviceOnly`): se puede leer con el teléfono bloqueado, así
+  que un envío en segundo plano sí puede firmar, y **no viaja en copias de
+  seguridad ni a otro teléfono**. Servicio `com.assures.masvida.sesion`, cuenta
+  `token_api`. **Nunca se escribe en logs.**
 
 ### Backfill de los últimos 7 días
 
@@ -911,8 +914,8 @@ el dominio de pantallas, no acá.
 
 - **Token (30 sep):** `ApiClient` manda `Authorization: Token <clave>` en
   `POST /api/v1/sync`. El token lo entrega Flutter con `actualizarSesion`; Swift lo
-  guarda en su propio Keychain (acceso "después del primer desbloqueo") y **nunca
-  lo escribe en logs**.
+  guarda en su propio Keychain (acceso "después del primer desbloqueo", solo en
+  este dispositivo) y **nunca lo escribe en logs**.
 - **Sin token:** no enviar. El día queda pendiente. Aplica a los tres caminos de
   envío: el sync de hoy, la cola de reintentos y el backfill.
 - **`401`:** no es error permanente. El día queda pendiente y **no se corta el
