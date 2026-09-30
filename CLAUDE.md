@@ -43,7 +43,14 @@ pagado.** Si aparece en código viejo, se borra.
 ## Idioma — regla dura
 
 Toda la app en **español latinoamericano**, tono natural y humano (nunca
-traducción literal ni robótica). Es para el mercado guatemalteco. Excepción:
+traducción literal ni robótica). Es para el mercado guatemalteco.
+
+**Siempre de TÚ, nunca de vos** (decisión de Daniel, 24 de septiembre de
+2026): "tienes", "puedes", "toca", "elige", "cumple los dos", "a ti".
+Nunca "tenés", "podés", "tocá", "elegí", "cumplí", "vos". Aplica a todo
+texto que vea el usuario —pantallas, etiquetas de VoiceOver, textos de
+los mocks—; los comentarios del código no cuentan. "Estás" y "acá" son
+correctos en tuteo. Excepción:
 los niveles de cashback se nombran por número ("Nivel 3"), nunca con los
 nombres en inglés Bronze/Silver/Gold/Platinum, que el contrato v1 prohíbe
 expresamente por ser de Vitality.
@@ -69,11 +76,6 @@ expresamente por ser de Vitality.
    - Un cupón ya canjeado caduca aparte, a los **60 días** de canjeado.
    - Sin póliza verificada se ganan igual, pero **no se pueden canjear**:
      catálogo visible, botón de compra bloqueado con candado.
-
-Los **duelos** (Social, 1 contra 1 por pasos) NO dan ninguna moneda ni premio
-— son puramente competitivos/sociales. Tienen categorías cosméticas (Bronce →
-Plata → Oro → Diamante, en español) separadas de los niveles de cashback —
-solo estado social, sin beneficio real.
 
 ## Niveles anuales de cashback — regla dura, numéricos
 
@@ -112,9 +114,6 @@ Consecuencia: **el nivel 4 queda fuera de alcance en el piloto.** Con
 actividad sola se llega como máximo a 12.000, o sea nivel 3 (10%). Es una
 consecuencia aceptada y documentada, no un bug: no "arreglarla" subiendo el
 tope ni bajando el piso. Cashback máximo real del piloto: **10%**.
-
-La **liga de duelos cosmética** (Bronce → Plata → Oro → Diamante, en español)
-sigue siendo algo aparte de los niveles de cashback — solo estado social.
 
 **Regla regulatoria dura:** el cashback SIEMPRE se devuelve como dinero
 DESPUÉS del pago de la prima. NUNCA se descuenta directamente (regulación de
@@ -182,25 +181,27 @@ Notas sobre la edad:
 - En la UI, cualquier mención al ajuste por edad debe tener tono cálido, nunca
   clínico ni condescendiente.
 
-**Objetivo semanal** (antes "retos semanales") — fuente de verdad:
-`reglas-puntaje-vivo.md`, sección 4.
+**Objetivos semanales** (antes "retos semanales") — decisión de Daniel, 24
+de septiembre de 2026. Esto reemplaza a `reglas-puntaje-vivo.md`, sección 4,
+hasta que ese documento se actualice.
 
-- **Una sola meta por semana, en pasos acumulados**, con dificultad
-  progresiva (no es una meta de puntos). No hay tres objetivos por semana.
-- Todos arrancan en **objetivo 1**. Cumplir la meta → sube al siguiente
-  objetivo. **No cumplirla → el objetivo se congela** (misma meta la semana
-  siguiente). **Nunca baja.**
-- Techo real ~13 objetivos: una **season** dura 13 semanas.
-- **Seasons trimestrales** en fechas fijas (1 ene, 1 abr, 1 jul, 1 oct): ese
-  día exacto todos vuelven a objetivo 1, sin esperar al lunes. Se guarda el
-  objetivo máximo alcanzado en cada season.
+- **Dos objetivos por semana:** pasos de la semana y minutos de
+  entrenamiento. Ni uno ni tres.
+- **Hay que cumplir LOS DOS** para que la semana pague. Cumplir uno solo no
+  paga nada ni se arrastra a la semana siguiente.
+- **Cuántas MONEDAS paga cada semana lo manda el servidor**, semana por
+  semana (campo `monedas` de la semana). La app no tiene ninguna regla para
+  calcularlo. Se acuñan bajo el tope de 100 acumuladas.
+- **El programa avanza por calendario, igual para todos:** al cerrar la
+  semana 1 todos pasan a los objetivos de la semana 2, la hayan cumplido o
+  no, y así sucesivamente. No hay progresión propia de cada usuario.
+- **No existe el rango.** No hay escalera, insignia, ni nada que suba o baje
+  según cumplas. Si aparece `rango`, `reglas_rango.dart` o
+  `insignia_rango.dart`, es del modelo viejo.
 - Nunca usar la palabra "nivel" para esto: el nivel es el anual de cashback.
-- Cumplir la meta acuña MONEDAS (bajo el tope de 100 acumuladas).
-- Endpoint: `GET /api/v1/retos/estado` (objetivo actual, season, fecha de
-  cierre, historial de seasons).
 
-(Esto reemplaza a la versión anterior de este documento: tres objetivos por
-semana, subir o **bajar** un nivel, y reinicio mensual.)
+(Esto reemplaza a la versión anterior de este documento: una sola meta de
+pasos con objetivo 1, 2, 3… que se congelaba si no se cumplía.)
 
 La semana cierra el **domingo 23:59** y el lunes 00:00 ya corre la siguiente,
 en hora de Guatemala. Quién releva la semana es el **servidor**: el teléfono
@@ -209,13 +210,13 @@ nunca lo calcula, solo vuelve a pedir los datos al pasar el cierre
 horaria en Ajustes abriría una semana nueva antes de tiempo. El objetivo nuevo
 se fija a las 00:00 del lunes; no hay estado de "evaluando". El servidor
 acepta datos atrasados de la semana cerrada hasta el **mediodía del lunes**,
-pero eso ya no cambia el objetivo — solo el historial y el acumulado anual. Por lo mismo,
+pero eso ya no cambia la semana cerrada — solo el historial y el acumulado anual. Por lo mismo,
 **ningún texto del objetivo puede sonar a plazo propio** ("Faltan 42 min" se
 leía como cuenta regresiva): se dice el avance sobre la meta ("48.000 de 70.000 pasos")
 y el plazo una sola vez, abajo.
 
-[PENDIENTE: la tabla de meta de pasos por objetivo (objetivo 1, 2, 3…). La
-define Luis (L11) — **no inventarla**.]
+[PENDIENTE: la tabla de metas de cada semana (pasos y minutos) y lo que
+paga cada una. La define Luis (L11) — **no inventarla**.]
 
 ## Racha
 
@@ -344,7 +345,7 @@ Qué es el héroe de cada pantalla:
 |---|---|---|
 | Hoy | el anillo de pasos | plano |
 | **Progreso** | **las gráficas** | el total y la actividad, planos |
-| **Social** | **el duelo activo** | amigos y ranking, listas planas |
+| **Social** | [PENDIENTE: se rediseña ahora que es solo el ranking] | listas planas |
 | Premios | la cuadrícula de fotos | plano |
 
 En Progreso el héroe son **las gráficas y no el número**. Se probó al
@@ -358,7 +359,7 @@ tarjeta, una superficie de color llama demasiado la atención y le roba la
 lectura al contenido que tiene adentro. Si aparece un `azulTinta` o una
 `AppSombras.heroe` en el código, son de ese intento y hay que sacarlos.
 
-**Una lista es una lista, no una pila de tarjetas.** Amigos, grupos,
+**Una lista es una lista, no una pila de tarjetas.** Grupos,
 entrenamientos, filas de ranking: van como renglones separados por una
 línea de un pelo (`AppColors.separador`, 0,5 px), nunca metiendo cada uno
 en su propia caja con borde. Es lo que hace iOS y es lo que deja recorrer
@@ -487,21 +488,63 @@ resuelven, no por cómo se ven de fábrica.
   monto en quetzales con su nota regulatoria. Va plano, sin tarjeta: el
   héroe de Hoy es el anillo de pasos y esto era una tarjeta blanca con
   borde compitiendo con él
-- "Objetivo de la semana": **una sola meta de pasos** por semana, con su
-  progreso, sus monedas y el check. Las metas mensuales y los tres objetivos
-  por semana ya NO existen
+- **Hoy se divide en tres bloques por horizonte de tiempo: "Hoy", "Esta
+  semana" y "Este año"** (decisión de Daniel, 24 de septiembre de 2026:
+  "mucha info en un puño y cuesta saber dónde ver cada cosa"). Cada
+  bloque tiene UN solo título en grande (`AppTheme.display(22)`) con su
+  ícono en un disco `azulBruma`, una línea gris que dice qué hay adentro
+  ("Dos objetivos que te dan monedas") y una raya de un pelo que lo separa
+  del de arriba. Esto reemplaza al rótulo chico en mayúsculas (DIARIO,
+  SEMANAL, ANUAL) con otro título debajo ("Objetivos de la semana", "Tu
+  Cashback"): dos niveles de títulos peleando. "Ver mi plan" va a la
+  derecha del título de "Este año"
+- **El saldo de monedas NO va en Hoy.** Vive en el encabezado de **Tu
+  camino**, al lado de lo que paga cada semana, y tocarlo abre la hoja
+  de monedas. En Hoy competía con el "+10" de la semana
+- "Esta semana" (minimalista, sin tarjetas, **el botón del camino
+  primero**). De arriba abajo, en orden de importancia:
+  - el **botón del camino**, que además **dice la semana**: "Semana 3
+    de 10" en grande (el "de 10" atenuado), "Ver tu camino" debajo y una
+    flecha en un círculo blanco. Azul de marca con un degradado apenas
+    perceptible y sombra difusa: es lo único levantado del bloque. La
+    semana va ahí para que no haga falta entrar al camino a verla, y por
+    eso **no hay píldora "Semana 3" aparte**. Sin dibujos adentro (ni
+    camino en miniatura ni línea de puntos)
+  - la **marca, pegada debajo del botón**: logo y "Esta semana la
+    patrocina **Montanos**", con el nombre en el color de la marca. Al
+    pie de todo se leía como patrocinadora de la sección entera; pegada a
+    la semana y con "Esta semana" en la frase, queda claro que es solo de
+    esa semana
+  - la **regla en un renglón**, en gris: "Cumple los dos para ganar" y a
+    la derecha el **premio: solo "+10" y la moneda** en una pastilla
+    naranja suave (nunca "ganas 10 monedas")
+  - los **dos objetivos LADO A LADO**, en dos columnas separadas por una
+    línea de un pelo, como las estadísticas de Fitness: nombre corto
+    ("Pasos", "Entrenamiento") con su ícono y un chevron en `azulMedio`,
+    el avance en grande, "de 40,000 pasos" en chico y una barra fina de
+    6 px (`cardBorder` → degradado `azulMedio` → `accent`). El cumplido
+    lleva el check naranja suelto al lado del número
+  - al pie, en gris: el conteo y el plazo, una sola vez
+  - en la hoja que se abre desde un nodo del camino no hay botón: la
+    semana va de titular ("Semana 7") y el resto es igual
+- **Tocar un objetivo abre su DETALLE** (`hoja_objetivo.dart`, pedido
+  de Daniel, 24 de septiembre de 2026): el número en grande con su
+  barra, cuánto falta dicho como cantidad ("42 min más y lo cumples"),
+  cómo se cuenta, cuándo se cierra —"No tienes que marcar nada"— y lo
+  que paga la semana. Es una hoja de INFORMACIÓN: tocar un objetivo
+  nunca lo marca
+- **Los títulos de sección de Hoy llevan el ícono en un disco
+  `azulBruma`** con el ícono en `accent`: en negro suelto se perdían
+  entre tanto blanco
 - **Un objetivo NO se marca, y no puede parecer que se marca** (prueba
   con usuario, 22 de septiembre de 2026). Cada fila llevaba un círculo
   de 19 px con un check adentro —la forma exacta de un checkbox de
   iOS— y la primera persona que probó la app intentó tocarlo. No hay
-  nada que tocar: el objetivo lo cierra el SERVIDOR el domingo
-  23:59 con los datos de Apple Health. El estado va ahora en un RIEL:
-  una barra de 3,5 px pegada al borde izquierdo de la fila, azul de
-  marca si está cumplido y azul pálido si no. El cumplido suma un check
-  suelto en naranja al lado de la palabra "Completado" — sin círculo y
-  sin relleno, que es el cuarto uso permitido del naranja. Sigue siendo
-  binario: cuánto lleva lo dice la columna de la derecha en unidades
-  reales ("48 de 90 min")
+  nada que marcar (tocarlo abre el detalle, nada más): el objetivo lo
+  cierra el SERVIDOR el domingo
+  23:59 con los datos de Apple Health. Nada con forma de casilla: el
+  cumplido lleva un check suelto en naranja al final de la píldora — sin
+  círculo y sin relleno, que es el cuarto uso permitido del naranja
 - **El camino de las semanas** (`camino_semanas_screen.dart`) va y
   vuelve por FILAS, como un tablero de mesa: 3 nodos por fila, la fila
   siguiente al revés, y el giro siempre en la misma columna. No quedan
@@ -521,17 +564,16 @@ resuelven, no por cómo se ven de fábrica.
   evitaba eran las diagonales largas de la versión por columnas, no que
   la línea se curve
 - **Cada círculo dice qué semana es, con todas las letras: "SEM 7".** En
-  esa pantalla conviven tres escaleras de números —semanas, rangos y
-  monedas— y un número suelto adentro de un círculo puede ser cualquiera
-  de las tres; lo que el usuario necesita saber al mirar adelante es a
+  esa pantalla conviven dos escaleras de números —semanas y monedas— y
+  un número suelto adentro de un círculo puede ser cualquiera de las
+  dos; lo que el usuario necesita saber al mirar adelante es a
   qué SEMANA va a entrar. El rótulo va adentro del círculo y no colgado
   del nodo: rotular los diez por fuera eran diez cajitas blancas
   flotando sobre el camino. La semana en curso no lo repite, porque
   arriba tiene la única etiqueta del camino —rellena de azul, la que
   reemplazó a la píldora "ESTA SEMANA"— que ya dice "Semana 3"
-- **En el camino no hay ninguna tarjeta.** El rango es un renglón
-  apoyado sobre el fondo con una línea de un pelo debajo (era un bloque
-  de `azulNiebla`) y lo que paga cada semana va sin pastilla blanca: el
+- **En el camino no hay ninguna tarjeta.** Lo que paga cada semana va
+  sin pastilla blanca: el
   fondo que corta la cinta detrás del texto es del color del fondo de
   pantalla. Es la regla de UNA SOLA COSA LEVANTADA, y acá esa cosa es el
   camino
@@ -546,16 +588,10 @@ resuelven, no por cómo se ven de fábrica.
   bajaron al renglón de apoyo, que es su tamaño. (Esto reemplaza a la
   versión anterior de este documento, que pedía la semana en curso de
   titular.)
-- **El objetivo semanal va en una insignia** (`insignia_rango.dart`): un medallón
-  con el número adentro y un anillo de muescas alrededor (una por objetivo de la season, ~13), encendidas
-  hasta el objetivo actual del usuario, de `azulMedio` al `accent` — lo que separa
-  una muesca de la siguiente es la LUMINOSIDAD, igual que los niveles de
-  cashback. Las muescas se encienden ENTERAS: media muesca sería el
-  medidor de XP que `reglas_rango.dart` sacó a propósito, y el objetivo se
-  mueve por cumplir la meta de la semana, no por juntar puntitos. Nunca baja:
-  si no se cumple, la muesca se queda como está
-- **Una season dura 13 semanas** (techo ~13 objetivos). Si el código del
-  camino o de la insignia asume 10 semanas o 10 muescas, hay que ajustarlo
+- **En el camino no hay rango** (decisión de Daniel, 24 de septiembre de
+  2026): se sacaron el renglón con la insignia y la frase de cómo se
+  sube. Debajo del título va directo el camino. El camino no asume
+  cuántas semanas son: dibuja las que manda el servidor
 - **Semanas patrocinadas:** una alianza puede comprar una semana. Esa
   semana paga un cupón de esa marca **además** de las monedas del objetivo semanal,
   nunca en lugar de ellas. Se ve en tres lugares: el logo del local
@@ -602,83 +638,34 @@ resuelven, no por cómo se ven de fábrica.
   pide permiso `.heartRate`)
 - CTA "Ver mis récords" (pantalla de Récords Personales — pendiente)
 
-**Social** (`lib/screens/social_screen.dart`) — construida, dos pestañas.
-Ahí viven La Liga, Tus Ligas y Duelos (ver tabla abajo)
-- **La pestaña Amigos abre con los TRES NÚMEROS**, como un perfil de
-  Instagram: **Amigos · Solicitudes · Duelos activos**. Tienen que decir
-  cosas DISTINTAS — no hay "seguidores" y "seguidos" por separado,
-  porque la amistad en +Vida es mutua (se manda solicitud y el otro
-  acepta) y serían el mismo número dos veces. El de solicitudes lleva el
-  punto naranja cuando hay algo esperando; el de duelos no navega, es un
-  marcador de lo que está justo abajo
-- **No hay lista de amigos en Social** (decisión de Daniel, 22 de
-  septiembre de 2026). Estaban los tres primeros con un "ver todos" al
-  lado, que abre la misma lista que el contador de arriba: la pantalla
-  mostraba dos veces lo mismo y el duelo —lo único que está pasando
-  AHORA— quedaba aplastado entre dos listas de gente
-- **UN DUELO ES UN RETO CON META COMÚN** (decisión de Daniel, 22 de
-  septiembre de 2026): los dos van por el mismo número de pasos y el
-  mismo plazo ("70.000 pasos en una semana"), y gana el primero que
-  llega; si el domingo no llegó ninguno, gana el que quedó más cerca. La
-  tarjeta lo dice en este orden: el RETO arriba y en grande, después de
-  cada uno cuántos pasos lleva, qué parte de la meta es y cuánto le
-  falta, y al tuyo además a qué ritmo diario tenés que ir. Cierra con
-  cómo vas en palabras ("Vas arriba por 3.500 pasos") y la regla de cómo
-  se gana.
-
-  **Esto reemplaza a la regla anterior de este documento**, que pedía
-  medir la superación del propio baseline y prohibía la comparación
-  directa. El motivo de la regla vieja sigue siendo cierto —quien camina
-  3.000 al día no le gana nunca a quien camina 12.000— pero "+18% sobre
-  tu promedio" no dice cuánto falta ni qué hacer hoy. El duelo NO paga
-  monedas ni toca el cashback, así que la asimetría no cuesta plata; lo
-  que hay que cuidar es que la meta se elija entre los dos y sea
-  alcanzable. [PENDIENTE: elegir meta y plazo al armar el duelo — hoy
-  sale el reto por defecto.]
-- **El historial de duelos dice contra QUIÉN fue.** Eran cinco avatares
-  grises en fila con una W o una L en la esquina: no se reconocía a
-  nadie, que es lo único que un historial tiene para contar. Ahora es
-  una lista con la inicial, el nombre, el usuario y "Ganaste"/"Perdiste"
-  —la palabra entera, no una W— más el marcador arriba a la derecha
-- **"Retar a alguien" es un renglón, no un botón con relieve**, y cierra
-  el bloque de duelos en vez de flotar arriba a la derecha compitiendo
-  con el duelo en curso. Lleva a una pantalla PROPIA
-  (`retar_screen.dart`) que solo lista a tus amigos con un botón Retar
-  por renglón: antes llevaba a la pantalla de Amigos, y el que entró a
-  retar se encontraba administrando su lista de contactos
-- Alerta de racha en riesgo y, en la pantalla de Amigos, aceptar,
-  rechazar y eliminar
-- **No hay pestaña de "Enviadas"** (decisión de Daniel, 22 de septiembre
-  de 2026). Ver la lista de lo que mandaste no lleva a ninguna parte.
-  Que ya la mandaste se dice donde alguien lo preguntaría de nuevo: al
-  buscar a esa persona para agregarla, el botón dice **"Solicitud
-  enviada"** y no deja mandarla otra vez (y "Ya son amigos" si ya lo es).
-  Es el funcionamiento de Instagram, y la solicitud queda guardada, así
-  que cerrar la hoja y volver a buscar sigue diciendo lo mismo
-- **De otra persona SOLO se muestra la racha.** El nivel y las monedas
-  quedaron prohibidos (decisión de Daniel, 4 de septiembre de 2026): el
-  nivel se deriva del % de cashback sobre la prima, y las monedas son
-  saldo. Juntos dejan estimar cuánta plata mueve alguien, y eso es
-  exposición patrimonial — más en Guatemala. Esto reemplaza a la versión
-  anterior de este documento, que pedía mostrar racha, categoría y
-  monedas.
-- De alguien que todavía NO aceptó la solicitud solo se ven nombre,
-  usuario y amigos en común. Ni siquiera la racha.
+**Social** (`lib/screens/social_screen.dart`) — **solo el ranking**
+(decisión de Daniel, 25 de septiembre de 2026). Título "SOCIAL" y debajo lo
+que antes era la pestaña Ranking: Mis competencias (Tus Ligas) y Liga local
+(La Liga), con su selector.
+- **Ya no existen los amigos, las solicitudes ni los duelos.** Se borró todo
+  el código: la pestaña Amigos, `amigos_screen.dart`, `retar_screen.dart`,
+  los contadores, el flujo de "Agregar amigo", los modelos (`Duelo`,
+  `DueloHistorial`, `Conexion`, `Solicitud`) y sus datos del mock. Tampoco
+  existe el selector Amigos / Ranking. **No reconstruirlos** sin que Daniel
+  lo pida
+- "Invitar amigos" en un grupo de Tus Ligas NO es el sistema de amigos: es
+  compartir el código del grupo, y sigue siendo parte del ranking
+- [PENDIENTE: rediseño de la estructura y el diseño del ranking — Daniel
+  lo quiere cambiar]
 - Ranking: selector de grupos, posición propia, cuánto falta para subir,
   lista completa
 
-**Social: La Liga, Tus Ligas y Duelos** (nombres y reglas decididos por
-Alvaro el 22 de septiembre de 2026 — reemplaza la tabla anterior de "liga
-local trimestral"):
+**Social: La Liga y Tus Ligas** (nombres y reglas decididos por Alvaro el
+22 de septiembre de 2026; los duelos se sacaron el 25 de septiembre):
 
-| | La Liga | Tus Ligas | Duelos |
-|---|---|---|---|
-| Quién la arma | La app, automático | El usuario (crea o se une) | El usuario |
-| Con quién | Gente random de tu franja de edad | Amigos, familia, colegas | 1 contra 1 |
-| Ciclo | Mensual (día 1 al último del mes) | Mensual, no configurable | — |
-| Compite por | Pasos del mes | Pasos del mes | Más pasos |
-| Premio | **Sí** — monedas al top 3 | **No** | **No** |
-| Requiere póliza | Sí | Sí | Sí |
+| | La Liga | Tus Ligas |
+|---|---|---|
+| Quién la arma | La app, automático | El usuario (crea o se une) |
+| Con quién | Gente random de tu franja de edad | Amigos, familia, colegas |
+| Ciclo | Mensual (día 1 al último del mes) | Mensual, no configurable |
+| Compite por | Pasos del mes | Pasos del mes |
+| Premio | **Sí** — monedas al top 3 | **No** |
+| Requiere póliza | Sí | Sí |
 
 **La Liga** (la de `tipo: desconocidos` en el código): franjas de edad de 10
 años (20–29, 30–39…), máximo 30 personas por grupo, asignación **automática y
@@ -704,6 +691,30 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 - Canje exitoso (QR, resumen de monedas descontadas)
 - **Sin póliza verificada:** el catálogo se ve completo, pero el botón de
   compra sale bloqueado (gris, con candado) con CTA a vincular póliza
+- **Tienda / Mis cupones** (24 de septiembre de 2026): un
+  `CupertinoSlidingSegmentedControl` debajo del título, con cuántos
+  cupones hay por usar en una píldora azul. Antes el QR se veía UNA vez,
+  en el canje exitoso, y si se cerraba esa pantalla el cupón no se
+  volvía a encontrar. En "Mis cupones" (`mis_cupones.dart`):
+  - los **activos como boletos** —talón con el logo, muescas arriba y
+    abajo, corte sólido—, del que vence primero al último. Son lo único
+    levantado de la vista. A 7 días de vencer, el "Vence en…" pasa a
+    naranja (alerta real). Los que se ganaron llevan un regalo y
+    "Semana 1"
+  - los **usados y vencidos** abajo, como lista plana y apagada
+  - tocar un boleto abre el **código en grande** en una hoja: el QR con
+    las esquinas del visor en azul, el código escrito por si la caja no
+    escanea, y cuándo vence
+  - viven ahí también los cupones de semanas y podios patrocinados:
+    todos los cupones en un solo lugar
+- **El QR sale de `codigo_qr.dart`** y de ningún otro lado: el canje
+  exitoso y Mis cupones muestran el MISMO dibujo. Todavía es un QR de
+  muestra sacado del texto del código (`qr_flutter` no está en el
+  proyecto y el formato lo define el backend)
+- Al canjear, el cupón queda guardado ANTES de mostrar el éxito
+  (`registrarCanje` en `fuente_datos.dart`, que hace de backend mientras
+  no exista el de Luis), y el canje exitoso ofrece primero "Ver mis
+  cupones"
 
 **Mi Plan** — diseñada, confirmar si está construida en Flutter
 - Cashback acumulado, proyección de fin de año, calendario de cálculo,
@@ -730,6 +741,19 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 
 **Perfil y Configuración + Consentimiento aseguradora** — diseñadas en
 Stitch, pendiente pasar a Flutter
+
+**Permiso de Apple Salud** (`lib/screens/permisos_salud_screen.dart`,
+ruta `/permisos-salud`) — construida el 24 de septiembre de 2026. Antes
+del diálogo de iOS explica con palabras de todos los días para qué sirve
+cada dato ("Necesitamos ver tus pasos para calcular tus puntos"); después
+dice qué se ve DE VERDAD, tipo por tipo, con los `TiposVisibles` que
+devuelve `solicitarPermisos`. Sale **la primera vez que se abre la app**,
+antes de Hoy (`_Arranque` en `main.dart`, recordado en
+`AlmacenPermisos`), y desde **Perfil**, tocando la fila "Apple Salud".
+Regla de tono: sin ritmo cardíaco ni entrenamientos casi siempre es "no
+tiene reloj", no un permiso negado — se dice como algo normal, y el
+camino a Ajustes va solo para quien SÍ usa reloj. En la UI la app se
+llama "Salud", que es su nombre en un iPhone en español.
 
 **Registro / login / recuperar contraseña** — no existen todavía. Cuenta base:
 email + contraseña + **fecha de nacimiento** (obligatoria). Vincular póliza es
@@ -808,4 +832,10 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 - Ventana de datos rezagados de 3 o 6 días.
 - Liga de desconocidos **trimestral**, por zona, u opt-in.
 - Término "medallas" (ahora son monedas).
+- **Rango** de los objetivos semanales: escalera, insignia con muescas,
+  subir o bajar según cumplas, monedas por "subir al rango N". Una sola
+  meta por semana, o tres.
 - Recompensas por constancia: hitos de 4/8/12/24/52 semanas que dan monedas.
+- **Amigos, solicitudes de amistad y duelos 1 contra 1** en Social, con sus
+  categorías cosméticas Bronce → Plata → Oro → Diamante (sacados el 25 de
+  septiembre de 2026).

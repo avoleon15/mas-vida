@@ -18,8 +18,7 @@ import '../widgets/tarjeta_puntos.dart';
 // Esta pantalla adelgazó bastante. Se fueron cuatro tarjetas que
 // duplicaban cosas que ya viven en otro lado:
 //
-//   - "Reto semanal": lo mismo que los objetivos de la semana de Hoy, y
-//     encima llamaba Nivel a lo que es Rango.
+//   - "Reto semanal": lo mismo que los objetivos de la semana de Hoy.
 //   - "Nivel Actual": ya está en Hoy, en la sección de cashback.
 //   - Monedas del período: ya está en Premios, que es donde se gastan.
 //     El aviso de vencimiento se mudó allá y ahora es permanente.

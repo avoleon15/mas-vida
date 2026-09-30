@@ -125,8 +125,7 @@ class FotoComercio extends StatelessWidget {
                   // 249 px de ancho se decodifica a 249 aunque acá se pida
                   // más.
                   final anchoDecodificado = ancho.isFinite && ancho > 0
-                      ? (ancho * MediaQuery.devicePixelRatioOf(context))
-                            .round()
+                      ? (ancho * MediaQuery.devicePixelRatioOf(context)).round()
                       : null;
 
                   return Image.asset(

@@ -810,8 +810,7 @@ class _MedallonNivelState extends State<_MedallonNivel>
     // El disco CRECE un poco con el texto del sistema, pero no lo sigue
     // hasta el final: al 160% un medallón proporcional se comería el
     // monto. Crece hasta el 130% y de ahí el FittedBox acomoda el
-    // contenido adentro, igual que hace `insignia_rango.dart` con el
-    // rango de dos dígitos.
+    // contenido adentro.
     final escala = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.3);
     final lado = _lado * escala;
 
@@ -944,7 +943,7 @@ class _PieRegulatorio extends StatelessWidget {
 class _SeccionProyeccion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final siguiente = nivelPorNumero(nivelActual + 1);
+    final siguiente = siguienteNivelAlcanzable(nivelActual);
 
     // Sin superficie: el título de bloque y el aire de abajo alcanzan
     // para separarla de lo que sigue. El mismo encabezado que el
@@ -968,16 +967,20 @@ class _SeccionProyeccion extends StatelessWidget {
     );
   }
 
-  /// Ya está en el nivel más alto de la tabla: no hay barra que llenar.
+  /// Ya está en el nivel más alto que se puede alcanzar: no hay barra
+  /// que llenar. En el piloto eso pasa en el nivel 3, porque el 4 queda
+  /// por encima de lo que da la actividad física en un año.
   Widget _sinNivelSiguiente(BuildContext context) {
     final pct = nivelPorNumero(nivelActual)?.porcentajeCashback;
+    final hayArriba = nivelPorNumero(nivelActual + 1) != null;
+    final donde = hayArriba
+        ? 'el nivel más alto que da la actividad física'
+        : 'el nivel más alto del programa';
     return Text(
       pct == null
-          ? 'Estás en el nivel más alto del programa. El año cierra el '
-                '$cierreDelAno.'
-          : 'Estás en el nivel más alto del programa, con el '
-                '${_porcentaje(pct)}% de cashback. Ya no hay nivel que '
-                'subir: el año cierra el $cierreDelAno.',
+          ? 'Llegaste a $donde. El año cierra el $cierreDelAno.'
+          : 'Llegaste a $donde, con el ${_porcentaje(pct)}% de '
+                'cashback. El año cierra el $cierreDelAno.',
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
         color: AppColors.textPrimary,
         height: 1.4,
@@ -1595,7 +1598,7 @@ class _SegmentoCategoria extends StatelessWidget {
       label: sinVerificar
           ? '${categoria.etiqueta}, datos sin verificar'
           : categoria.etiqueta,
-      hint: abierta ? 'Tocá para cerrarla' : 'Abre ${categoria.titulo}',
+      hint: abierta ? 'Toca para cerrarla' : 'Abre ${categoria.titulo}',
       excludeSemantics: true,
       // `CupertinoButton` y no un GestureDetector: trae el atenuado al
       // tocar que un usuario de iPhone ya conoce, y CLAUDE.md pide bajar

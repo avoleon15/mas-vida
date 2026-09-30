@@ -55,8 +55,7 @@ class EscaleraCashback extends StatefulWidget {
   final int puntosTotal;
 
   /// Techo anual de puntos POR ACTIVIDAD FÍSICA (pasos + intensidad).
-  /// Los chequeos médicos dan puntos aparte, que se suman por encima de
-  /// este techo: por eso no es un techo de puntos del año.
+  /// Un nivel que arranca por encima no se alcanza en el piloto.
   final int techoActividad;
 
   @override
@@ -456,7 +455,7 @@ class _Detalle extends StatelessWidget {
         n.numero == nivelActual
             ? 'Todavía sin cashback'
             : 'El punto de partida',
-        'Llegá a ${_miles(siguiente!.puntosMinimos!)} pts en el año para '
+        'Llega a ${_miles(siguiente!.puntosMinimos!)} pts en el año para '
             'empezar a ganar el ${_formatoPct(siguiente.porcentajeCashback!)}%',
       );
     }
@@ -473,24 +472,17 @@ class _Detalle extends StatelessWidget {
     if (n.numero < nivelActual) {
       return ('Nivel alcanzado', n.rangoTexto);
     }
-    final faltan = 'Te faltan ${_miles(n.puntosMinimos! - puntosTotal)} pts';
-
-    // Arriba del techo de actividad NO es "fuera de alcance": los puntos
-    // de los chequeos médicos se suman POR ENCIMA de ese techo, así que
-    // el nivel sí se alcanza — pero no caminando más.
-    //
-    // Cuánto paga un chequeo todavía no está definido, así que el texto
-    // no nombra ninguna cifra de chequeos. Solo señala el camino.
-    // El nivel 4 arranca justo donde topa la actividad física, así que la
-    // comparación es >=, no >. Con > el mensaje se apagaba solo.
-    if (n.puntosMinimos! >= techoActividad) {
+    // Un nivel que arranca por encima del techo de actividad no se
+    // alcanza en el piloto: el chequeo médico está fuera de v1. No se
+    // dice "te faltan" de algo a lo que caminando no se llega.
+    if (n.puntosMinimos! > techoActividad) {
       return (
-        faltan,
-        'La actividad física llega hasta ${_miles(techoActividad)} pts al '
-            'año. Los chequeos médicos suman aparte y son los que te '
-            'llevan hasta acá.',
+        'Fuera de alcance este año',
+        'La actividad física suma hasta ${_miles(techoActividad)} pts al '
+            'año, y este nivel arranca en ${_miles(n.puntosMinimos!)}.',
       );
     }
+    final faltan = 'Te faltan ${_miles(n.puntosMinimos! - puntosTotal)} pts';
     return (faltan, n.rangoTexto);
   }
 

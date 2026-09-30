@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'datos/almacen_permisos.dart';
 import 'datos/fuente_datos.dart';
 import 'navegacion.dart';
 import 'screens/acceso_screen.dart';
+import 'screens/permisos_salud_screen.dart';
 import 'screens/canje_exitoso_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/mi_plan_screen.dart';
@@ -176,6 +178,8 @@ Widget? _pantallaDe(String? ruta) {
       return const PremioDetalleScreen();
     case '/canje-exitoso':
       return const CanjeExitosoScreen();
+    case '/permisos-salud':
+      return const PermisosSaludScreen();
     default:
       return null;
   }
@@ -189,12 +193,16 @@ enum _Etapa {
   /// No hay sesión guardada: login, registro o acceso de prueba.
   acceso,
 
+  /// El permiso de Apple Salud, solo la primera vez. Sin pasos no hay
+  /// puntos, así que es el paso uno; después vive en Perfil.
+  permisos,
+
   /// Hoy.
   lista,
 }
 
 /// La primera pantalla de la app: carga, pide el ingreso si no hay
-/// sesión y termina en Hoy.
+/// sesión, el permiso de Salud si nunca se pidió, y termina en Hoy.
 ///
 /// Cambia de una a otra con un `setState` y no navegando: si empujara
 /// una ruta nueva, la pantalla anterior quedaría en la pila y el gesto
@@ -244,7 +252,18 @@ class _ArranqueState extends State<_Arranque> {
     final sesion = await servicioSesion.actual();
 
     if (!mounted) return;
-    setState(() => _etapa = sesion == null ? _Etapa.acceso : _Etapa.lista);
+    if (sesion == null) {
+      setState(() => _etapa = _Etapa.acceso);
+    } else {
+      await _despuesDeEntrar();
+    }
+  }
+
+  /// Ya hay sesión: el permiso de Salud si nunca se pidió, y si no, Hoy.
+  Future<void> _despuesDeEntrar() async {
+    final yaSePidieron = await AlmacenPermisos.yaSePidieron();
+    if (!mounted) return;
+    setState(() => _etapa = yaSePidieron ? _Etapa.lista : _Etapa.permisos);
   }
 
   @override
@@ -255,12 +274,17 @@ class _ArranqueState extends State<_Arranque> {
     // cruzada que deje las dos pantallas vivas al mismo tiempo.
     if (_etapa == _Etapa.cargando) return const PantallaCargando();
 
-    // De ahí en adelante los datos ya están, así que el ingreso y Hoy
-    // sí se cruzan con un fundido.
+    // De ahí en adelante los datos ya están, así que el ingreso, el
+    // permiso y Hoy sí se cruzan con un fundido. Sin ruta nueva: así el
+    // gesto de volver no trae de vuelta el login ni el permiso desde Hoy.
     final Widget pantalla = switch (_etapa) {
       _Etapa.acceso => AccesoScreen(
         key: const ValueKey('acceso'),
-        alEntrar: (_) => setState(() => _etapa = _Etapa.lista),
+        alEntrar: (_) => _despuesDeEntrar(),
+      ),
+      _Etapa.permisos => PermisosSaludScreen(
+        key: const ValueKey('permisos'),
+        alTerminar: () => setState(() => _etapa = _Etapa.lista),
       ),
       _ => const HomeScreen(key: ValueKey('hoy')),
     };

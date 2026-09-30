@@ -309,7 +309,7 @@ class TextoCentroAnillo extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('LLEVÁS', style: estiloEtiqueta?.copyWith(letterSpacing: 2.5)),
+        Text('LLEVAS', style: estiloEtiqueta?.copyWith(letterSpacing: 2.5)),
         const SizedBox(height: 2),
         // Archivo no es condensada como la Bebas Neue que había antes,
         // así que un número de cinco dígitos ya no entra solo: el
