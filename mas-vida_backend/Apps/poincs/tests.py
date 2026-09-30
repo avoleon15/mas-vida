@@ -17,9 +17,6 @@ class HistorialTests(APITestCase):
             user=self.user,
             usuario_id="ana-1",
             birth_date=date(1990, 1, 1),
-            policy_number="POL-1",
-            insurer="Aseguradora",
-            policy_start_date=date(2026, 1, 1),
         )
         self.version = VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
         # El token lo crea la senal de users al crear el User.
@@ -85,9 +82,6 @@ class HistorialTests(APITestCase):
             user=otro,
             usuario_id="beto-1",
             birth_date=date(1990, 1, 1),
-            policy_number="POL-2",
-            insurer="Aseguradora",
-            policy_start_date=date(2026, 1, 1),
         )
         Ledger.objects.create(
             usuario=otro_usuario, fecha=date(2026, 9, 21), tipo="puntos_diarios",

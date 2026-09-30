@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.users.models import Usuario
 
@@ -55,9 +56,19 @@ class Command(BaseCommand):
             defaults={
                 "usuario_id": "prueba-1",
                 "birth_date": date(1995, 5, 10),
+            },
+        )
+
+        # Los datos de la poliza ya no viven en Usuario: van en PolizaVinculada.
+        # Queda verificada para que el usuario de prueba se comporte como uno
+        # con poliza, igual que antes.
+        PolizaVinculada.objects.get_or_create(
+            usuario=usuario,
+            defaults={
                 "policy_number": "POL-PRUEBA-001",
                 "insurer": "Aseguradora de prueba",
                 "policy_start_date": date(2026, 1, 1),
+                "estado_verificacion": "verificada",
             },
         )
 
