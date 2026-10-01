@@ -601,3 +601,75 @@ final class SesionKeychainTests: XCTestCase {
     XCTAssertEqual(SesionKeychain.cuentaPorDefecto, "token_api")
   }
 }
+
+// MARK: - ReglasWorkout: qué workouts se mandan (1 oct 2026)
+
+final class ReglasWorkoutTests: XCTestCase {
+
+  // MARK: Un workout necesita ritmo cardíaco medido
+
+  func testSinNingunDatoDeRitmoNoHayFC() {
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(stats: .vacio))
+  }
+
+  func testConSoloPromedioONadaMasNoHayFC() {
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(
+      stats: HeartRateStats(promedio: 140, minimo: nil, maximo: nil)))
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(
+      stats: HeartRateStats(promedio: nil, minimo: nil, maximo: 160)))
+  }
+
+  func testUnRitmoEnCeroNoSeManda() {
+    // Era el valor inventado que se mandaba cuando no había reloj.
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(
+      stats: HeartRateStats(promedio: 0, minimo: 0, maximo: 0)))
+  }
+
+  func testUnRitmoQueRedondeaACeroNoSeManda() {
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(
+      stats: HeartRateStats(promedio: 0.4, minimo: 0.2, maximo: 0.4)))
+  }
+
+  func testConRitmoMedidoSeMandaRedondeado() {
+    let fc = ReglasWorkout.fcParaEnviar(
+      stats: HeartRateStats(promedio: 142.6, minimo: 90, maximo: 161.2))
+
+    XCTAssertEqual(fc, ReglasWorkout.FC(promedio: 143, maxima: 161))
+  }
+
+  // MARK: Los workouts a mano no cuentan
+
+  func testUnWorkoutIngresadoAManoSeDetecta() {
+    XCTAssertTrue(ReglasWorkout.fueIngresadoAMano(
+      metadata: [HKMetadataKeyWasUserEntered: true]))
+  }
+
+  func testUnWorkoutMedidoPorUnSensorNoEsManual() {
+    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(
+      metadata: [HKMetadataKeyWasUserEntered: false]))
+  }
+
+  func testSinMetadataSeAsumeQueNoFueAMano() {
+    // Un reloj de terceros suele no escribir esa marca: no se le acusa de nada.
+    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(metadata: nil))
+    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(metadata: [:]))
+    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(metadata: ["otra_clave": true]))
+  }
+
+  func testUnaMarcaQueNoEsBooleanaNoCuentaComoManual() {
+    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(
+      metadata: [HKMetadataKeyWasUserEntered: "true"]))
+  }
+
+  // MARK: "Sin datos" no es un fallo; los demás errores sí
+
+  func testNoHayDatosEsUnCasoNormalNoUnFallo() {
+    XCTAssertTrue(ReglasWorkout.esSinDatos(HKError(.errorNoData)))
+  }
+
+  func testOtrosErroresDeHealthKitSiSonFallos() {
+    XCTAssertFalse(ReglasWorkout.esSinDatos(HKError(.errorAuthorizationDenied)))
+    XCTAssertFalse(ReglasWorkout.esSinDatos(HKError(.errorDatabaseInaccessible)))
+    XCTAssertFalse(ReglasWorkout.esSinDatos(NSError(domain: "otro", code: 11)))
+  }
+}
