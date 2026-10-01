@@ -9,6 +9,7 @@ class Ledger(UserIdBase):
         INTENSIDAD = "intensidad", "Intensidad"
         CHEQUEO_MEDICO = "chequeo_medico", "Chequeo médico"
         AJUSTE_MANUAL = "ajuste_manual", "Ajuste manual"
+        RETROACTIVO_DENEGADO = "retroactivo_denegado", "Retroactivo denegado"
 
     puntos = models.IntegerField()
 
@@ -45,6 +46,9 @@ class Ledger(UserIdBase):
             models.UniqueConstraint(
                 fields=["usuario", "fecha", "tipo", "version_regla"],
                 name="uq_ledger_usuario_fecha_tipo_version",
+                # Los ajustes son correcciones por datos tardíos: un mismo
+                # día puede necesitar varias, así que no se limitan a una.
+                condition=~models.Q(tipo="ajuste_manual"),
             ),
         ]
 

@@ -23,16 +23,20 @@ class HistorialTests(APITestCase):
         token = Token.objects.get(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
-    def _ledger(self, fecha, pasos, intensidad, tope=False):
-        return Ledger.objects.create(
-            usuario=self.usuario,
+    def _ledger(self, fecha, pasos, intensidad, tope=False, usuario=None):
+        """Escribe un día como lo hace el sync: una fila de pasos y una de intensidad."""
+        usuario = usuario or self.usuario
+        columnas = dict(
+            usuario=usuario,
             fecha=fecha,
-            tipo="puntos_diarios",
-            puntos=min(pasos + intensidad, 200),
             puntos_pasos=pasos,
             puntos_intensidad=intensidad,
             tope_diario_aplicado=tope,
             version_regla=self.version,
+        )
+        Ledger.objects.create(tipo="pasos", puntos=pasos, **columnas)
+        Ledger.objects.create(
+            tipo="intensidad", puntos=min(intensidad, 200 - pasos), **columnas
         )
 
     def test_sin_token_da_401(self):
@@ -83,10 +87,7 @@ class HistorialTests(APITestCase):
             usuario_id="beto-1",
             birth_date=date(1990, 1, 1),
         )
-        Ledger.objects.create(
-            usuario=otro_usuario, fecha=date(2026, 9, 21), tipo="puntos_diarios",
-            puntos=50, puntos_pasos=50, puntos_intensidad=0, version_regla=self.version,
-        )
+        self._ledger(date(2026, 9, 21), 50, 0, usuario=otro_usuario)
 
         respuesta = self.client.get(self.url)
 
