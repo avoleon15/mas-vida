@@ -8,8 +8,9 @@
 //  (ver "Tipo de dispositivo" en contrato-tecnico.md):
 //
 //    POST /api/v1/sync
-//    → { usuario_id, fecha, zona_horaria, pasos[], sesiones[], frecuencia_cardiaca[],
+//    → { fecha, zona_horaria, pasos[], sesiones[], frecuencia_cardiaca[],
 //        sincronizado_en, app_version }
+//    (sin `usuario_id`: desde el 30 sep 2026 el usuario sale del token)
 //    ← { fecha, puntos_pasos, puntos_intensidad, puntos_dia, tope_diario_aplicado,
 //        puntos_ano, tope_anual_aplicado, nivel, pasos_totales_dia }
 //
@@ -84,7 +85,6 @@ struct FrecuenciaCardiacaMuestra: Codable {
 
 /// El payload completo de un día calendario, listo para `POST /api/v1/sync`.
 struct SyncPayload: Codable {
-    let usuario_id: String
     let fecha: String
     let zona_horaria: String
     let pasos: [PasoMuestra]

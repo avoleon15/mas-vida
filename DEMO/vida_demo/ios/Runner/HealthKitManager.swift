@@ -152,10 +152,13 @@ final class HealthKitManager {
     private(set) var errorBackfill: String?
     private(set) var errorReintento: String?
 
-    /// `usuario_id` del payload.
-    /// TODO(A10): placeholder hasta que exista login real (L10/D6) — el
-    /// MethodChannel todavía no recibe un usuario autenticado desde Flutter.
-    private let usuarioID = "alvaro-001"
+    /// Dónde vive el token de la sesión. Lo entrega Flutter con
+    /// `actualizarSesion`; acá solo se lee, para mandarlo en cada envío.
+    private let almacenSesion: AlmacenSesion = SesionKeychain()
+
+    /// ¿Hay un token guardado? Sin él no se envía nada: los días quedan
+    /// pendientes hasta que Flutter entregue la sesión.
+    private var haySesion: Bool { almacenSesion.leerToken() != nil }
 
     /// URL base del backend de Luis.
     /// TODO(A10): reemplazar por configuración real antes de TestFlight —
@@ -340,7 +343,6 @@ final class HealthKitManager {
         let (pasos, sesiones, frecuenciaCardiaca) = try await (pasosTask, sesionesTask, frecuenciaCrudaTask)
 
         return SyncPayload(
-            usuario_id: usuarioID,
             fecha: FormatoFechas.diaCalendario.string(from: fecha),
             zona_horaria: TimeZone.current.identifier,
             pasos: pasos,
@@ -362,7 +364,7 @@ final class HealthKitManager {
         guard urlBackendValida, let url = URL(string: baseURLTexto) else {
             throw ApiError.urlInvalida
         }
-        return ApiClient(baseURL: url)
+        return ApiClient(baseURL: url, almacen: almacenSesion)
     }
 
     // MARK: - enviarSincronizacion() (A7)
@@ -383,6 +385,15 @@ final class HealthKitManager {
     func enviarSincronizacion(fecha: Date = Date()) async -> ResultadoSincronizacion {
         enviando = true
         defer { enviando = false }
+
+        // Sin sesión no hay a nombre de quién enviar. El día queda pendiente
+        // (no se pierde) y sale cuando Flutter entregue el token. Ni siquiera
+        // se lee HealthKit: no hace falta para dejarlo anotado.
+        guard haySesion else {
+            syncQueue.encolar(fecha: FormatoFechas.diaCalendario.string(from: fecha))
+            pendientesEnCola = syncQueue.pendientes().count
+            return .encolado(detalle: ApiError.sinSesion.localizedDescription)
+        }
 
         let payload: SyncPayload
         do {
@@ -422,15 +433,10 @@ final class HealthKitManager {
     }
 
     // MARK: - esReintentable() (A8)
+    // La política vive en `ApiError.esReintentable` (ver ApiClient.swift). Un
+    // error que no es de `ApiError` (red caída, tiempo agotado) se reintenta.
     private func esReintentable(_ error: Error) -> Bool {
-        guard let apiError = error as? ApiError else { return true }
-
-        switch apiError {
-        case .urlInvalida, .respuestaInvalida, .respuestaIlegible:
-            return false
-        case .servidor(let codigo, _):
-            return codigo >= 500 || codigo == 408 || codigo == 429
-        }
+        (error as? ApiError)?.esReintentable ?? true
     }
 
     // MARK: - reintentarPendientes() (A8)
@@ -443,6 +449,13 @@ final class HealthKitManager {
         let dias = syncQueue.pendientes()
         pendientesEnCola = dias.count
         guard !dias.isEmpty else { return }
+
+        // Sin sesión los días se quedan donde están: no se lee HealthKit ni se
+        // toca la cola. Se intenta de nuevo cuando vuelva a primer plano.
+        guard haySesion else {
+            errorReintento = ApiError.sinSesion.localizedDescription
+            return
+        }
 
         guard let cliente = try? clienteAPI() else {
             errorReintento = "La URL del backend no es válida."
@@ -510,6 +523,15 @@ final class HealthKitManager {
         errorBackfill = nil
         defer { backfillEnProgreso = false }
 
+        // Sin sesión el backfill no se da por hecho: la bandera de "ya hecho"
+        // no se enciende y se intenta de nuevo cuando la haya (ver contrato,
+        // "Backfill de los últimos 7 días").
+        guard haySesion else {
+            errorBackfill = ApiError.sinSesion.localizedDescription
+            huboRecorridoCompleto = false
+            return
+        }
+
         let hoy = Calendar.current.startOfDay(for: Date())
         let fechas = (0..<dias).compactMap {
             Calendar.current.date(byAdding: .day, value: -$0, to: hoy)
@@ -570,6 +592,15 @@ final class HealthKitManager {
 
         guard huboRecorridoCompleto else { return }
         UserDefaults.standard.set(true, forKey: Self.claveBackfillInicialHecho)
+    }
+
+    // MARK: - actualizarSesion()
+    // Tercer método del contrato. Flutter entrega el token al iniciar sesión,
+    // `nil` al cerrarla, y otra vez el token actual cada vez que abre la app.
+    // Nunca se escribe el token en logs.
+
+    func actualizarSesion(token: String?) -> ResultadoActualizarSesion {
+        Sesion.aplicar(token: token, en: almacenSesion)
     }
 
     // MARK: - Pasos crudos (una entrada por HKQuantitySample)
