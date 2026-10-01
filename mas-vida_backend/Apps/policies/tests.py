@@ -87,7 +87,8 @@ class PolizaTests(APITestCase):
     def test_sin_poliza_el_estado_lo_dice_y_no_desbloquea_nada(self):
         r = self.client.get(ESTADO)
         self.assertEqual(
-            r.json(), {"estado": "sin_poliza", "verificada": False, "poliza": None}
+            r.json(),
+            {"estado": "sin_poliza", "verificada": False, "motivo_rechazo": None, "poliza": None},
         )
 
     # --- verificación --------------------------------------------------------

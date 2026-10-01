@@ -26,7 +26,12 @@ SIN_PERFIL = {"mensaje": "El usuario autenticado no tiene un perfil asociado."}
 def _estado(poliza):
     """Lo que ve la app. `verificada` es el gate: pendiente y rechazada no desbloquean nada."""
     if poliza is None:
-        return {"estado": "sin_poliza", "verificada": False, "poliza": None}
+        return {
+            "estado": "sin_poliza",
+            "verificada": False,
+            "motivo_rechazo": None,
+            "poliza": None,
+        }
     return {
         "estado": poliza.estado_verificacion,
         "verificada": poliza.estado_verificacion == polizas.VERIFICADA,

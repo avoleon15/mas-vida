@@ -4,6 +4,13 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 1 oct 2026** (fuentes, workouts y póliza): la elección de
+fuente pasa de "gana el reloj" a **una decisión por hora** para los pasos; un
+workout **necesita ritmo cardíaco** (sin reloj no hay workout, y los workouts
+ingresados a mano no cuentan); y se documentan los endpoints de póliza y la
+regla de retroactividad. Ver "Elección de fuente", "Qué cuenta como workout" y
+"Póliza vinculada".
+
 **Actualizado el 30 sep 2026** (autenticación): quién manda los datos lo decide
 el servidor con un **token**, no con un `usuario_id` dentro del JSON. Sección
 nueva "Autenticación (token)"; `usuario_id` sale del JSON #1; el MethodChannel
@@ -205,12 +212,12 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 | `pasos[].dispositivo_nombre` | string, nullable | no | **nuevo (20 sep 2026)** — `HKDevice.name`, nombre legible del hardware físico. `null` cuando `sample.device` es `nil`, nunca string vacío |
 | `pasos[].dispositivo_modelo` | string, nullable | no | **nuevo** — `HKDevice.model`. Para dispositivos Apple ya es la categoría (`iPhone`/`Watch`/`iPad`), sin tabla ni parseo |
 | `pasos[].dispositivo_fabricante` | string, nullable | no | **nuevo** — `HKDevice.manufacturer`. Puede venir nulo en apps puente de terceros |
-| `sesiones[]` | array | sí (puede ir vacío) | una entrada por `HKWorkout` de ≥30 min continuos |
+| `sesiones[]` | array | sí (puede ir vacío) | una entrada por `HKWorkout` de ≥30 min continuos **que tenga ritmo cardíaco y no sea manual** (ver "Qué cuenta como workout") |
 | `sesiones[].external_id` | string (UUID) | sí | el `sample.uuid` del workout — clave de idempotencia |
 | `sesiones[].inicio` / `.fin` | string (ISO 8601) | sí | ventana del workout |
 | `sesiones[].duracion_min` | int | sí | duración en minutos |
 | `sesiones[].tipo_actividad` | string, **nullable** | no | tipo de `HKWorkoutActivityType` en texto plano. **`null` es válido** — un reloj de terceros (ej. WHOOP) puede detectar el workout automáticamente pero no tener confianza suficiente para clasificarlo, y eso puede quedar sin corregir indefinidamente si el usuario nunca lo edita a mano. El backend nunca lo rechaza por venir nulo; se guarda tal cual y se muestra como "No registrado" |
-| `sesiones[].fc_promedio` / `.fc_maxima` | int (bpm) | sí | FC durante la ventana de la sesión |
+| `sesiones[].fc_promedio` / `.fc_maxima` | int (bpm) | sí | FC durante la ventana de la sesión. **Siempre un valor medido**: si no hubo muestras de ritmo cardíaco en la ventana, Swift no manda la sesión (nunca manda `0`) |
 | `sesiones[].fuente_bundle` / `.fuente_nombre` | string | sí | mismo criterio que pasos[] |
 | `sesiones[].dispositivo_nombre` / `.dispositivo_modelo` / `.dispositivo_fabricante` | string, nullable | no | **nuevo** — mismo criterio que pasos[] |
 | `frecuencia_cardiaca[]` | array | sí (puede ir vacío) | una entrada por muestra `.heartRate` del día completo, esté o no dentro de un workout |
@@ -278,9 +285,48 @@ en este orden:
 marca el día como sospechoso. Contar de menos es preferible a acusar a alguien
 con una fuente no reconocida (pulsera barata, app puente rara).
 
-**Efecto directo en la precedencia de fuente (sección 7 de reglas de puntaje):**
-"¿hay reloj ese día?" pasa a resolverse con `tipo_dispositivo == "reloj"`, no
-con `fuente_nombre` (string libre, solo para mostrar/loggear).
+**Desde el 1 oct 2026 el puntaje ya no usa `tipo_dispositivo`.** La elección
+de fuente (ver "Elección de fuente") compara dispositivos entre sí por la
+combinación `fuente_bundle` + `dispositivo_modelo` + `dispositivo_fabricante`,
+sin importar si son reloj, anillo o teléfono. La derivación de arriba se
+conserva para reportes y para saber qué dispositivo es cada uno, pero
+"`desconocido` se trata como `telefono`" ya no cambia ningún puntaje.
+
+### Elección de fuente — por hora (decidido 1 oct 2026)
+
+Reemplaza la regla anterior "si hay reloj ese día, el reloj gana", que dejaba en
+cero a quien usa el reloj solo para dormir o solo para entrenar. **Nunca se
+suma la misma actividad dos veces, y nunca se descarta actividad real.**
+
+| Métrica | Regla |
+|---|---|
+| **Pasos** | En **cada hora** (hora de Guatemala) gana el dispositivo con más pasos en esa hora; después se suman las horas. Una muestra cuenta en la hora en que **empieza**. |
+| **Workouts** | Si dos dispositivos registran el mismo entrenamiento (se cruzan en el tiempo) cuenta **uno**, el más largo. Los que no se cruzan cuentan todos, aunque vengan de dispositivos distintos. |
+| **Intensidad** | Cada dispositivo calcula la suya con sus propias sesiones y su propio ritmo cardíaco; gana el de más puntos. No se suman. |
+
+Ejemplos: reloj solo de noche + teléfono de día → se cuentan los pasos del día
+del teléfono y los de la noche del reloj. Teléfono en el locker y reloj en el
+gym → en la hora del gym gana el reloj, el resto del día el teléfono.
+
+El día se **recalcula completo en cada sync** de esa fecha, a partir de lo
+guardado y no del último payload: un reloj de terceros que escribe a Apple
+Salud con horas de retraso corrige el resultado solo (con una fila de ajuste en
+el ledger, nunca editando una existente).
+
+### Qué cuenta como workout (decidido 1 oct 2026)
+
+Un workout necesita **ritmo cardíaco medido**, o sea un reloj o una banda. Con
+solo el teléfono no se registran workouts.
+
+- **Sin ritmo cardíaco no hay workout.** Swift no manda la sesión si no hay
+  muestras de ritmo cardíaco en su ventana. Si aun así llega con
+  `fc_promedio` y `fc_maxima` en `0`, el servidor la descarta (responde `200`;
+  se cuenta aparte en el log como `sesiones_sin_ritmo_cardiaco`, distinto de un
+  dato imposible).
+- **Los workouts ingresados a mano no cuentan.** Son demasiado fáciles de
+  inventar. Swift no los manda (`HKMetadataKeyWasUserEntered`).
+- Un workout que cuenta suma a `workouts_dia` (dashboard) y al objetivo
+  semanal, además de a los puntos de intensidad.
 
 ---
 
@@ -542,7 +588,7 @@ estados donde la sonda corrió), siempre con las tres claves. Leerlo así:
 |---|---|
 | `pasos` | Casi seguro **permiso negado** |
 | `ritmo_cardiaco` | Probablemente **no tiene reloj**, no que haya negado |
-| `entrenamientos` | Igual — sale del reloj o de registrar workouts a mano |
+| `entrenamientos` | Igual — solo cuentan los que tienen ritmo cardíaco (reloj); los ingresados a mano no cuentan |
 
 Texto para el usuario: condicional, nunca acusatorio ("si usás un reloj,
 revisá..."), porque mandar a arreglar un permiso a quien no tiene reloj es
@@ -719,11 +765,11 @@ existe en memoria al procesar el payload.
 | Campo | Notas |
 |---|---|
 | `pasos_totales_dia` | mismo valor que ya viaja en el JSON #2 del sync — se guarda, no se recalcula |
-| `workouts_dia.cantidad` / `.duracion_total_min` | agregado de `sesiones[]` del día |
+| `workouts_dia.cantidad` / `.duracion_total_min` | agregado de los workouts del día que cuentan (sin duplicar los que dos dispositivos registran a la vez) |
 | `workouts_dia.fc_promedio` | promedio de `sesiones[].fc_promedio` del día — **no** un promedio de las 24h de `frecuencia_cardiaca[]` cruda (eso incluiría horas de reposo y no dice nada) |
 | `workouts_dia.fc_maxima` | máximo de `sesiones[].fc_maxima` del día |
 | `workouts_dia` | `null` si no hubo sesión ese día — no `0`, para no confundir "sin actividad intensa" con "FC de cero" |
-| `puntos_dia` | mismo valor que ya viaja en el JSON #2 |
+| `puntos_dia` | mismo valor que ya viaja en el JSON #2, **salvo** un día anulado por retroactivo denegado (ver "Póliza vinculada"), que aquí y en el historial va en `0` |
 
 Mostrar máximo y promedio de FC por workout (no un promedio diario plano) es
 también lo que justifica ante Apple el permiso de `.heartRate`: tiene que
@@ -732,11 +778,72 @@ con reposo no lo hace tan bien como el máximo/promedio de la sesión.
 
 **`GET /api/v1/dashboard/resumen?desde=&hasta=`** devuelve un array de filas
 `resumen_diario` en ese rango — así arma Daniel el gráfico semanal y mensual,
-sin pedir un endpoint por vista. El endpoint no fija ninguna ventana: recibe
-`desde`/`hasta` y devuelve esas filas, nada más. Qué fechas calcula Daniel
+sin pedir un endpoint por vista. `desde` y `hasta` son **obligatorios** (formato `AAAA-MM-DD`, `desde` ≤
+`hasta`) y el rango no puede pasar de **366 días** (un año con bisiesto, lo
+más que pide Progreso); fuera de eso responde `400`. Devuelve solo los días
+que existen, sin rellenar huecos con ceros. Qué fechas calcula Daniel
 para "semanal" y "mensual" (decidido: lunes–domingo alineado al objetivo
 semanal, mes calendario alineado a La Liga) es una decisión de UI — vive en
 el dominio de pantallas, no acá.
+
+---
+
+## Póliza vinculada
+
+Una cuenta base (gratis) no tiene póliza. Vincularla es un paso aparte, después
+de registrarse. Todo lo que implica dinero (cashback, canjear monedas, La
+Liga) exige la póliza **verificada**; `pendiente` y `rechazada` cuentan igual
+que no tener póliza. Ambos endpoints piden `Authorization: Token <clave>`; el
+usuario sale del token.
+
+### `POST /api/v1/polizas/vincular`
+
+Vincula y verifica en el mismo paso, contra el registro de la aseguradora.
+
+| Cuerpo | Tipo | Notas |
+|---|---|---|
+| `policy_number` | string | número como lo escribe el usuario; se guarda el oficial de la aseguradora |
+| `insurer` | string | |
+| `birth_date` | `YYYY-MM-DD` | la que escribe el usuario; se compara con la de la aseguradora |
+
+Respuesta `200`: `{ "estado_verificacion": "verificada" | "rechazada", "motivo_rechazo": string | null }`.
+Motivos: `no_existe`, `aseguradora_no_coincide`, `no_vigente`,
+`fecha_nacimiento_no_coincide`. Una póliza puede estar vinculada a varios
+usuarios (pólizas familiares). `409` si el usuario ya tiene una póliza
+verificada; `400` por campos faltantes; `403` si la cuenta no tiene perfil.
+Una rechazada se puede volver a enviar.
+
+*Hoy la aseguradora es un registro simulado cargado desde un CSV; cuando haya
+integración real se reemplaza sin cambiar este endpoint.*
+
+### `GET /api/v1/polizas/estado`
+
+```json
+{ "estado": "sin_poliza" | "pendiente" | "verificada" | "rechazada",
+  "verificada": false,
+  "motivo_rechazo": null,
+  "poliza": { "policy_number": "POL-100001", "insurer": "Seguros Demo GT",
+              "policy_start_date": "2026-01-15" } }
+```
+
+`poliza` es `null` si no hay póliza; `policy_start_date` es `null` hasta que la
+aseguradora confirma la póliza. `verificada` es el único valor que debe usarse
+para habilitar canje, cashback y La Liga.
+
+### Retroactividad
+
+Al verificarse, la fecha de nacimiento de la **cuenta** (la del registro) se
+compara con la **confirmada por la aseguradora**:
+
+- **Coinciden:** todo lo ganado en la cuenta base (puntos y monedas) cuenta.
+- **No coinciden:** no hay retroactividad. Los días anteriores a la
+  verificación se anulan con una fila negativa por día en el ledger
+  (`retroactivo_denegado`), y las monedas ganadas antes también. Nada se edita
+  ni se borra. La edad que se usa para el puntaje es, desde la verificación, la
+  confirmada por la aseguradora.
+
+Como la verificación ocurre al vincular, "desde la vinculación" y "desde la
+verificación" son el mismo momento.
 
 ---
 
@@ -747,9 +854,9 @@ el dominio de pantallas, no acá.
   romper versiones viejas de la app). **Prueba obligatoria de suplantación:** con
   el token de A y el `usuario_id` de B en el cuerpo, los datos quedan a nombre de
   A.
-- **Códigos de error coherentes:** fecha inválida en `sync` debe dar `400` (hoy
-  da `404`). Una cuenta sin perfil de usuario da `403` en todos los endpoints (hoy
-  `sync` da `403` pero `historial` da `404`).
+- **Códigos de error coherentes:** fecha inválida en `sync` da `400`. Una cuenta
+  sin perfil de usuario da `403` en todos los endpoints (`sync`, `historial`,
+  dashboard, retos y póliza). Resuelto el 1 oct.
 - **Nunca registrar el token ni el encabezado `Authorization`** en logs.
 - **Idempotencia (L4):** constraint único en `(usuario_id, external_id)` (la
   columna interna, no un campo del JSON) para
@@ -758,10 +865,10 @@ el dominio de pantallas, no acá.
 - **Nunca sumar `pasos[].cantidad` de fuentes distintas sin dedup** — ni para
   puntos ni para `pasos_totales_dia`. Jerarquía de fuentes antes de sumar,
   siempre: sistema (`com.apple.health.*`) vs. terceros (Garmin, Whoop, Zepp,
-  Fitbit, etc.) al mismo nivel de confianza. **Precedencia: si hay reloj (de
-  cualquier marca) con datos ese día, el reloj gana — tanto para pasos como
-  para intensidad. Sin reloj ese día, gana el teléfono. Nunca se suman.** La
-  decisión se re-evalúa en cada sync de esa fecha, no solo la primera vez
+  Fitbit, etc.) al mismo nivel de confianza. **Elección de fuente (1 oct): pasos
+  por hora, workouts sin duplicar los que se cruzan, intensidad por el
+  dispositivo que más puntos da — ver "Elección de fuente". Nunca se suman.**
+  La decisión se re-evalúa en cada sync de esa fecha, no solo la primera vez
   (los relojes de terceros pueden sincronizar a Health con retraso).
 - **Tipo de dispositivo (nuevo, confirmado 20 sep 2026) — usarlo en vez de
   `fuente_nombre` para la precedencia de arriba:** tres columnas nullable
@@ -769,11 +876,10 @@ el dominio de pantallas, no acá.
   `dispositivo_modelo`, `dispositivo_fabricante`), más una función de
   derivación de `tipo_dispositivo` (`telefono`/`reloj`/`anillo`/`desconocido`)
   que corre en el servidor con el orden descrito en la sección "Tipo de
-  dispositivo" de arriba. "¿Hay reloj ese día?" pasa a resolverse comparando
-  `tipo_dispositivo == "reloj"` entre las muestras del día, no comparando
-  `fuente_nombre` (string libre). `desconocido` se trata como `telefono` —
-  nunca se excluye la muestra. Detalle completo y por qué en
-  `decision-tipo-dispositivo.md`.
+  dispositivo" de arriba. Desde el 1 oct el puntaje compara dispositivos por
+  `fuente_bundle` + `dispositivo_modelo` + `dispositivo_fabricante`, no por
+  `tipo_dispositivo`; la derivación se conserva para reportes. Nunca se excluye
+  una muestra por su tipo. Detalle y por qué en `decision-tipo-dispositivo.md`.
 - **`sesiones[].tipo_actividad` puede llegar `null` (confirmado 21 sep 2026)
   — nunca rechazar la sesión por eso.** Un reloj de terceros (ej. WHOOP)
   puede detectar el workout automáticamente pero clasificarlo genérico/sin
@@ -821,9 +927,10 @@ el dominio de pantallas, no acá.
   para después, pero las seasons se mantienen** en el modelo y en la
   respuesta del endpoint (el reinicio ocurre el día exacto de la season). Se
   mantienen las dos corridas programadas (00:00 fija el objetivo, 12:00 solo
-  corrige historial/acumulado). Un **workout** = una fila de `Sesion` de la
-  semana (`sesiones[]` ya exige ≥30 min continuos) — si además debe ser
-  "intenso" por FC, es un punto abierto.
+  corrige historial/acumulado). Un **workout** = un entrenamiento que
+  cuenta (≥30 min continuos, con ritmo cardíaco, no manual y sin duplicar los
+  que dos dispositivos registran a la vez — ver "Qué cuenta como workout") —
+  si además debe ser "intenso" por FC, es un punto abierto.
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
   vinculada y verificada. Al cierre del mes calcular una vez posición,
   percentil y tramo de premio de cada participante
@@ -923,11 +1030,33 @@ el dominio de pantallas, no acá.
   resto).
 - **Quitar `usuario_id` del payload** y la constante `"alvaro-001"`.
 - **`actualizarSesion(null)`:** borra el token del Keychain.
+- **Pendiente (1 oct) — workouts:** (1) no mandar una sesión si no hay muestras
+  de ritmo cardíaco en su ventana (hoy manda `fc_promedio`/`fc_maxima` en `0`);
+  (2) no mandar los workouts ingresados a mano
+  (`metadata[HKMetadataKeyWasUserEntered] == true`). Ver "Qué cuenta como
+  workout". El servidor ya descarta las sesiones con `fc` en `0`, así que lo
+  que falta en Swift es no inventar ese `0`.
 
 ---
 
 ## Puntos abiertos
 
+- **Aviso al usuario cuando se deniega el retroactivo (1 oct):**
+  `POST /polizas/vincular` responde `verificada` sin decir que se anularon los
+  puntos anteriores. Falta decidir si la respuesta lleva un campo (por ejemplo
+  `retroactivo: "aplicado" | "denegado"`) para que la app lo explique con tono
+  cálido, o si el usuario lo descubre en el historial.
+- **Anillos (Oura):** miden ritmo cardíaco pero no registran workouts ni pasos
+  de forma comparable. Con la regla de "un workout necesita ritmo cardíaco",
+  falta decidir si un tramo de ritmo alto de un anillo se infiere como workout
+  (hoy el backend infiere sesiones desde `frecuencia_cardiaca[]` si no hay
+  workout, para todos los dispositivos).
+- **`VersionRegla` inicial:** sin una versión de reglas cargada, `sync` responde
+  `500` y Swift reintenta los `5xx`. Hace falta cargar la versión 1 al
+  desplegar (comando o fixture), no depender de que alguien la cree a mano.
+- **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
+  fila por día ya no se lee. No hay datos reales en ese formato; una base de
+  pruebas vieja se vuelve a sincronizar.
 - **Logout en el servidor:** hoy no existe un endpoint que borre el token. Como
   hay un token por cuenta, borrarlo cerraría la sesión en **todos** los
   dispositivos de esa persona. Mientras tanto, cerrar sesión en la app solo borra
