@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 
 from services import polizas
 
-from .models import PolizaVinculada
+from .models import PolizaVinculada, RegistroAseguradora
 
 
 @admin.register(PolizaVinculada)
@@ -19,11 +19,14 @@ class PolizaVinculadaAdmin(admin.ModelAdmin):
 
     list_display = (
         "usuario", "policy_number", "insurer",
-        "estado_verificacion", "birth_date_confirmada", "fecha_vinculacion",
+        "estado_verificacion", "motivo_rechazo", "birth_date_confirmada",
+        "fecha_vinculacion",
     )
     list_filter = ("estado_verificacion", "insurer")
     search_fields = ("policy_number", "usuario__usuario_id")
-    readonly_fields = ("estado_verificacion", "fecha_vinculacion", "fecha_verificacion")
+    readonly_fields = (
+        "estado_verificacion", "motivo_rechazo", "fecha_vinculacion", "fecha_verificacion",
+    )
     actions = ["verificar_polizas", "rechazar_polizas"]
 
     def save_model(self, request, obj, form, change):
@@ -69,3 +72,20 @@ class PolizaVinculadaAdmin(admin.ModelAdmin):
                     f"{poliza.policy_number}: ya está verificada, no se rechaza.",
                     messages.ERROR,
                 )
+
+
+@admin.register(RegistroAseguradora)
+class RegistroAseguradoraAdmin(admin.ModelAdmin):
+    # Documento simulado de la aseguradora (solo para pruebas). Se carga con
+    # el comando cargar_registro_aseguradora; acá se puede revisar.
+    list_display = (
+        "numero_poliza",
+        "aseguradora",
+        "nombre",
+        "apellido",
+        "estado",
+        "vigencia_inicio",
+        "vigencia_fin",
+    )
+    list_filter = ("estado", "aseguradora")
+    search_fields = ("numero_poliza", "nombre", "apellido")

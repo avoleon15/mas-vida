@@ -122,7 +122,7 @@ class _Encabezado extends StatelessWidget {
               ),
               Text(
                 racha == 0
-                    ? 'Cumplí tu meta esta semana para arrancar una'
+                    ? 'Cumple tu meta esta semana para arrancar una'
                     : 'seguidas cumpliendo tu meta',
                 style: Theme.of(
                   context,

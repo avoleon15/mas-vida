@@ -32,6 +32,11 @@ void main() {
 
     expect(find.textContaining('PUNTOS ACUMULADOS'), findsOneWidget);
     expect(find.text('Ver mi cashback'), findsOneWidget);
-    expect(find.textContaining('para el nivel'), findsOneWidget);
+    // El mock está en el nivel 3, y el 4 no se alcanza en el piloto: en
+    // vez de "te faltan X para el nivel 4" dice que ya llegó al tope.
+    expect(
+      find.text('Llegaste al nivel más alto que da la actividad física'),
+      findsOneWidget,
+    );
   });
 }

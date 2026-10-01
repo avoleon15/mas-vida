@@ -19,6 +19,8 @@ def registro(request):
         {
             "token": token.key,
             "username": user.username,
+            # Lo genera el servidor, así que el cliente lo recibe acá.
+            "usuario_id": user.usuario.usuario_id,
         },
         status=status.HTTP_201_CREATED,
     )

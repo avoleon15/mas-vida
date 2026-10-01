@@ -1,6 +1,11 @@
 from datetime import date, timedelta
 
+from io import StringIO
+from pathlib import Path
+from unittest import mock
+
 from django.contrib.admin.sites import site
+from django.core.management import call_command
 from django.contrib.auth.models import User
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory
@@ -15,8 +20,8 @@ from Apps.users.models import Usuario
 from services import monedas, polizas
 
 NACIMIENTO = date(1990, 1, 1)
-VINCULAR = "/api/v1/poliza/vincular"
-ESTADO = "/api/v1/poliza"
+VINCULAR = "/api/v1/polizas/vincular"
+ESTADO = "/api/v1/polizas/estado"
 SYNC = "/api/v1/sync"
 
 
@@ -32,8 +37,8 @@ class PolizaTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
         self.datos = {
             "policy_number": "POL-123",
-            "insurer": "Aseguradora X",
-            "policy_start_date": "2026-01-01",
+            "insurer": "Seguros Demo GT",
+            "birth_date": "1994-03-12",
         }
 
     def _sync(self, fecha, pasos):
@@ -84,32 +89,6 @@ class PolizaTests(APITestCase):
         self.assertEqual(
             r.json(), {"estado": "sin_poliza", "verificada": False, "poliza": None}
         )
-
-    def test_vincular_queda_pendiente_y_no_desbloquea_nada(self):
-        r = self.client.post(VINCULAR, self.datos, format="json")
-        self.assertEqual(r.status_code, 201)
-        self.assertEqual(r.json()["estado"], "pendiente")
-        self.assertFalse(r.json()["verificada"])
-        self.assertFalse(polizas.tiene_poliza_verificada(self.usuario))
-
-    def test_vincular_dos_veces_da_409(self):
-        self.client.post(VINCULAR, self.datos, format="json")
-        r = self.client.post(VINCULAR, self.datos, format="json")
-        self.assertEqual(r.status_code, 409)
-        self.assertEqual(r.json()["error"], "poliza_ya_vinculada")
-
-    def test_vincular_con_campos_faltantes_da_400(self):
-        r = self.client.post(VINCULAR, {"insurer": "X"}, format="json")
-        self.assertEqual(r.status_code, 400)
-        self.assertIn("policy_number", r.json())
-
-    def test_una_rechazada_se_puede_volver_a_enviar(self):
-        poliza = polizas.vincular(self.usuario, "VIEJA", "X", date(2026, 1, 1))
-        polizas.rechazar(poliza)
-        r = self.client.post(VINCULAR, self.datos, format="json")
-        self.assertEqual(r.status_code, 201)
-        self.assertEqual(r.json()["poliza"]["policy_number"], "POL-123")
-        self.assertEqual(PolizaVinculada.objects.filter(usuario=self.usuario).count(), 1)
 
     # --- verificación --------------------------------------------------------
 
@@ -266,3 +245,99 @@ class PolizaAdminTests(APITestCase):
         self.admin.save_model(self._request(), poliza, form=None, change=False)
         poliza.refresh_from_db()
         self.assertEqual(poliza.estado_verificacion, "pendiente")
+
+
+# --- Vinculación automática (dev) + retroactividad ----------------------------
+
+CSV_EJEMPLO = Path(__file__).parent / "fixtures" / "registro_aseguradora.csv"
+# Fija el "hoy" de la verificación para que las vigencias del CSV no dependan
+# del día en que se corran las pruebas.
+HOY_VERIFICACION = date(2026, 9, 30)
+POLIZA_ANA = "POL-100001"  # Seguros Demo GT, nacida el 1994-03-12
+
+
+class VinculacionYRetroactivoTests(APITestCase):
+    """El endpoint de verificación automática aplica la regla de retroactividad.
+
+    La fecha de nacimiento del registro (Usuario.birth_date) puede no coincidir
+    con la que confirma la aseguradora: ese es el caso que se deniega.
+    """
+
+    _sync = PolizaTests._sync
+    _historia = PolizaTests._historia
+
+    def setUp(self):
+        call_command("cargar_registro_aseguradora", str(CSV_EJEMPLO), stdout=StringIO())
+        parche = mock.patch(
+            "services.policy_verification._hoy", return_value=HOY_VERIFICACION
+        )
+        parche.start()
+        self.addCleanup(parche.stop)
+        self.hoy = timezone.localdate()
+        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+
+    def _cuenta(self, nacimiento):
+        user = User.objects.create_user(username="ana", password="clave-segura-1")
+        self.usuario = Usuario.objects.create(
+            user=user, usuario_id="ana-1", birth_date=nacimiento
+        )
+        token = Token.objects.get(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+    def _vincular(self, numero=POLIZA_ANA, nacimiento="1994-03-12"):
+        return self.client.post(
+            "/api/v1/polizas/vincular",
+            {"policy_number": numero, "insurer": "Seguros Demo GT", "birth_date": nacimiento},
+            format="json",
+        )
+
+    def test_si_la_fecha_coincide_el_historico_se_conserva(self):
+        self._cuenta(date(1994, 3, 12))
+        self._historia()
+        r = self._vincular()
+        self.assertEqual(r.json(), {"estado_verificacion": "verificada", "motivo_rechazo": None})
+        self.assertFalse(Ledger.objects.filter(tipo="retroactivo_denegado").exists())
+        self.assertEqual(self._sync(self.hoy, 12000)["puntos_ano"], 200)
+
+    def test_si_la_fecha_del_registro_no_coincide_se_anula_el_historico(self):
+        # Se registró con otra fecha de nacimiento; la aseguradora confirma 1994-03-12.
+        self._cuenta(date(1991, 1, 1))
+        self._historia()
+        r = self._vincular()
+        self.assertEqual(r.json()["estado_verificacion"], "verificada")
+
+        anulaciones = Ledger.objects.filter(tipo="retroactivo_denegado")
+        self.assertEqual(sorted(a.puntos for a in anulaciones), [-100, -50])
+        self.assertEqual(self._sync(self.hoy, 12000)["puntos_ano"], 50)
+
+    def test_una_poliza_rechazada_no_toca_el_ledger(self):
+        self._cuenta(date(1991, 1, 1))
+        self._historia()
+        antes = Ledger.objects.count()
+        r = self._vincular(nacimiento="2000-01-01")  # no es la fecha del registro de la aseguradora
+        self.assertEqual(r.json()["estado_verificacion"], "rechazada")
+        self.assertEqual(Ledger.objects.count(), antes)
+        self.assertFalse(polizas.tiene_poliza_verificada(self.usuario))
+
+    def test_el_estado_de_una_poliza_verificada_trae_la_vigencia_de_la_aseguradora(self):
+        self._cuenta(date(1994, 3, 12))
+        self._vincular()
+        r = self.client.get("/api/v1/polizas/estado")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["verificada"])
+        self.assertEqual(r.json()["poliza"]["policy_start_date"], "2026-01-15")
+
+    def test_el_estado_de_una_poliza_pendiente_sin_fecha_de_inicio_no_revienta(self):
+        # Una póliza pendiente (o rechazada) todavía no tiene policy_start_date.
+        self._cuenta(date(1994, 3, 12))
+        PolizaVinculada.objects.create(usuario=self.usuario, policy_number="X-1", insurer="Y")
+        r = self.client.get("/api/v1/polizas/estado")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["estado"], "pendiente")
+        self.assertIsNone(r.json()["poliza"]["policy_start_date"])
+
+    def test_el_estado_de_una_cuenta_sin_perfil_da_403(self):
+        sin_perfil = User.objects.create_user(username="admin2", password="clave-segura-2")
+        token = Token.objects.get(user=sin_perfil)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.assertEqual(self.client.get("/api/v1/polizas/estado").status_code, 403)

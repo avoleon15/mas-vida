@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -69,6 +70,17 @@ class Datos {
       resumen: resultados[2] as ResumenAnual,
       catalogo: resultados[3] as Catalogo,
       social: social,
+    );
+
+    // Los cupones canjeados en esta sesión vuelven encima de los del
+    // mock: si no, jalar para refrescar haría desaparecer el cupón que el
+    // usuario acaba de comprar. Con el backend real esto sobra, porque
+    // el canje queda guardado allá.
+    final cupones = i.catalogo.cupones;
+    final idsCupones = cupones.map((c) => c.id).toSet();
+    cupones.insertAll(
+      0,
+      _canjeadosEnEstaSesion.where((c) => !idsCupones.contains(c.id)),
     );
 
     // La carga de arranque también cuenta como "recién recargado". Sin
@@ -165,7 +177,7 @@ Future<void> refrescarDatosSiHaceFalta() async {
 // de las monedas: las fechas del negocio no se calculan en el teléfono.
 // Acá además hay un motivo de fraude: si el relevo lo decidiera el
 // teléfono, cambiar la zona horaria en Ajustes abriría una semana nueva
-// antes de tiempo, con tres objetivos nuevos y un rango más para ganar.
+// antes de tiempo, con dos objetivos nuevos y otra semana de monedas.
 //
 // Por eso lo único que vive acá es CUÁNDO volver a preguntar.
 // ============================================================
@@ -249,3 +261,49 @@ void cancelarRelevoDeSemana() {
 // comentada de arriba funcione con solo descomentarla.
 // ignore: unused_element
 ApiVidaRepository? _referenciaApi;
+
+// ============================================================
+// EL CANJE DE UN PREMIO.
+//
+// Hace lo que hará el backend de Luis cuando exista: guarda el cupón con
+// su código y su vencimiento, y lo deja en Premios › Mis cupones. Hoy vive
+// acá, en memoria, igual que el resto del mock.
+// ============================================================
+
+/// Cuánto dura un cupón canjeado (CLAUDE.md): 60 días, aparte de las
+/// monedas. Con el backend real la fecha la manda el servidor.
+const int diasDeUnCupon = 60;
+
+final List<CuponCanjeado> _canjeadosEnEstaSesion = [];
+
+/// Canjea [premio] y devuelve el cupón que queda guardado.
+CuponCanjeado registrarCanje(Premio premio, {DateTime? ahora}) {
+  final hoy = ahora ?? DateTime.now();
+  final vence = hoy.add(const Duration(days: diasDeUnCupon));
+  final azar = Random();
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  String bloque(int n) =>
+      List.generate(n, (_) => letras[azar.nextInt(letras.length)]).join();
+
+  String fecha(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  final cupon = CuponCanjeado(
+    id: 'cup-${premio.id}-${hoy.microsecondsSinceEpoch}',
+    comercio: premio.nombre,
+    beneficio: premio.descripcion,
+    codigo: 'MV-${bloque(4)}-${bloque(4)}',
+    origen: OrigenCupon.tienda,
+    canjeado: fecha(hoy),
+    vence: fecha(vence),
+    diasParaVencer: diasDeUnCupon,
+    estado: EstadoCupon.activo,
+    foto: premio.foto,
+    fondo: premio.fondo,
+    costoMonedas: premio.costoMonedas,
+  );
+  _canjeadosEnEstaSesion.insert(0, cupon);
+  Datos.i.catalogo.cupones.insert(0, cupon);
+  return cupon;
+}

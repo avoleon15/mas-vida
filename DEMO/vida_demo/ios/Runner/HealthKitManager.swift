@@ -32,6 +32,31 @@ private let logSalud = Logger(
     category: "HealthKit"
 )
 
+/// Hardware que generó una muestra (`HKDevice`): nombre, modelo y fabricante.
+///
+/// Se manda al servidor tal cual, sin decidir nada acá: el servidor deriva si
+/// es teléfono, reloj o anillo (ver "Tipo de dispositivo" en el contrato).
+/// `nil` cuando HealthKit no lo trae o viene vacío — el servidor nunca
+/// descarta una muestra por eso; la trata como teléfono.
+struct DatosDispositivo: Equatable {
+    let nombre: String?
+    let modelo: String?
+    let fabricante: String?
+
+    init(_ dispositivo: HKDevice?) {
+        nombre = Self.limpiar(dispositivo?.name)
+        modelo = Self.limpiar(dispositivo?.model)
+        fabricante = Self.limpiar(dispositivo?.manufacturer)
+    }
+
+    /// Un texto vacío o de puros espacios no dice nada: se manda como nulo.
+    private static func limpiar(_ texto: String?) -> String? {
+        guard let recortado = texto?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !recortado.isEmpty else { return nil }
+        return recortado
+    }
+}
+
 /// Estadísticas de ritmo cardíaco (bpm) para un rango de fechas.
 struct HeartRateStats {
     let promedio: Double?
@@ -127,10 +152,13 @@ final class HealthKitManager {
     private(set) var errorBackfill: String?
     private(set) var errorReintento: String?
 
-    /// `usuario_id` del payload.
-    /// TODO(A10): placeholder hasta que exista login real (L10/D6) — el
-    /// MethodChannel todavía no recibe un usuario autenticado desde Flutter.
-    private let usuarioID = "alvaro-001"
+    /// Dónde vive el token de la sesión. Lo entrega Flutter con
+    /// `actualizarSesion`; acá solo se lee, para mandarlo en cada envío.
+    private let almacenSesion: AlmacenSesion = SesionKeychain()
+
+    /// ¿Hay un token guardado? Sin él no se envía nada: los días quedan
+    /// pendientes hasta que Flutter entregue la sesión.
+    private var haySesion: Bool { almacenSesion.leerToken() != nil }
 
     /// URL base del backend de Luis.
     /// TODO(A10): reemplazar por configuración real antes de TestFlight —
@@ -315,7 +343,6 @@ final class HealthKitManager {
         let (pasos, sesiones, frecuenciaCardiaca) = try await (pasosTask, sesionesTask, frecuenciaCrudaTask)
 
         return SyncPayload(
-            usuario_id: usuarioID,
             fecha: FormatoFechas.diaCalendario.string(from: fecha),
             zona_horaria: TimeZone.current.identifier,
             pasos: pasos,
@@ -337,7 +364,7 @@ final class HealthKitManager {
         guard urlBackendValida, let url = URL(string: baseURLTexto) else {
             throw ApiError.urlInvalida
         }
-        return ApiClient(baseURL: url)
+        return ApiClient(baseURL: url, almacen: almacenSesion)
     }
 
     // MARK: - enviarSincronizacion() (A7)
@@ -358,6 +385,15 @@ final class HealthKitManager {
     func enviarSincronizacion(fecha: Date = Date()) async -> ResultadoSincronizacion {
         enviando = true
         defer { enviando = false }
+
+        // Sin sesión no hay a nombre de quién enviar. El día queda pendiente
+        // (no se pierde) y sale cuando Flutter entregue el token. Ni siquiera
+        // se lee HealthKit: no hace falta para dejarlo anotado.
+        guard haySesion else {
+            syncQueue.encolar(fecha: FormatoFechas.diaCalendario.string(from: fecha))
+            pendientesEnCola = syncQueue.pendientes().count
+            return .encolado(detalle: ApiError.sinSesion.localizedDescription)
+        }
 
         let payload: SyncPayload
         do {
@@ -397,15 +433,10 @@ final class HealthKitManager {
     }
 
     // MARK: - esReintentable() (A8)
+    // La política vive en `ApiError.esReintentable` (ver ApiClient.swift). Un
+    // error que no es de `ApiError` (red caída, tiempo agotado) se reintenta.
     private func esReintentable(_ error: Error) -> Bool {
-        guard let apiError = error as? ApiError else { return true }
-
-        switch apiError {
-        case .urlInvalida, .respuestaInvalida, .respuestaIlegible:
-            return false
-        case .servidor(let codigo, _):
-            return codigo >= 500 || codigo == 408 || codigo == 429
-        }
+        (error as? ApiError)?.esReintentable ?? true
     }
 
     // MARK: - reintentarPendientes() (A8)
@@ -418,6 +449,13 @@ final class HealthKitManager {
         let dias = syncQueue.pendientes()
         pendientesEnCola = dias.count
         guard !dias.isEmpty else { return }
+
+        // Sin sesión los días se quedan donde están: no se lee HealthKit ni se
+        // toca la cola. Se intenta de nuevo cuando vuelva a primer plano.
+        guard haySesion else {
+            errorReintento = ApiError.sinSesion.localizedDescription
+            return
+        }
 
         guard let cliente = try? clienteAPI() else {
             errorReintento = "La URL del backend no es válida."
@@ -485,6 +523,15 @@ final class HealthKitManager {
         errorBackfill = nil
         defer { backfillEnProgreso = false }
 
+        // Sin sesión el backfill no se da por hecho: la bandera de "ya hecho"
+        // no se enciende y se intenta de nuevo cuando la haya (ver contrato,
+        // "Backfill de los últimos 7 días").
+        guard haySesion else {
+            errorBackfill = ApiError.sinSesion.localizedDescription
+            huboRecorridoCompleto = false
+            return
+        }
+
         let hoy = Calendar.current.startOfDay(for: Date())
         let fechas = (0..<dias).compactMap {
             Calendar.current.date(byAdding: .day, value: -$0, to: hoy)
@@ -547,6 +594,15 @@ final class HealthKitManager {
         UserDefaults.standard.set(true, forKey: Self.claveBackfillInicialHecho)
     }
 
+    // MARK: - actualizarSesion()
+    // Tercer método del contrato. Flutter entrega el token al iniciar sesión,
+    // `nil` al cerrarla, y otra vez el token actual cada vez que abre la app.
+    // Nunca se escribe el token en logs.
+
+    func actualizarSesion(token: String?) -> ResultadoActualizarSesion {
+        Sesion.aplicar(token: token, en: almacenSesion)
+    }
+
     // MARK: - Pasos crudos (una entrada por HKQuantitySample)
     // El contrato pide muestras sin agregar — nunca un total ya sumado del
     // día, eso lo calcula el backend.
@@ -572,14 +628,18 @@ final class HealthKitManager {
         }
 
         return muestras.map { muestra in
-            PasoMuestra(
+            let dispositivo = DatosDispositivo(muestra.device)
+            return PasoMuestra(
                 external_id: muestra.uuid.uuidString,
                 inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
                 fin: FormatoFechas.iso8601.string(from: muestra.endDate),
                 cantidad: Int(muestra.quantity.doubleValue(for: .count()).rounded()),
                 fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
                 fuente_nombre: muestra.sourceRevision.source.name,
-                fuente_version: muestra.sourceRevision.version
+                fuente_version: muestra.sourceRevision.version,
+                dispositivo_nombre: dispositivo.nombre,
+                dispositivo_modelo: dispositivo.modelo,
+                dispositivo_fabricante: dispositivo.fabricante
             )
         }
     }
@@ -638,13 +698,17 @@ final class HealthKitManager {
         }
 
         return muestras.map { muestra in
-            FrecuenciaCardiacaMuestra(
+            let dispositivo = DatosDispositivo(muestra.device)
+            return FrecuenciaCardiacaMuestra(
                 external_id: muestra.uuid.uuidString,
                 inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
                 fin: FormatoFechas.iso8601.string(from: muestra.endDate),
                 bpm: Int(muestra.quantity.doubleValue(for: unidad).rounded()),
                 fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
-                fuente_nombre: muestra.sourceRevision.source.name
+                fuente_nombre: muestra.sourceRevision.source.name,
+                dispositivo_nombre: dispositivo.nombre,
+                dispositivo_modelo: dispositivo.modelo,
+                dispositivo_fabricante: dispositivo.fabricante
             )
         }
     }
@@ -679,6 +743,7 @@ final class HealthKitManager {
             // pendiente de confirmar con Luis cómo debe tratar el backend
             // este caso (igual que en el spike original).
             let fc = try? await fetchFrecuenciaCardiaca(desde: workout.startDate, hasta: workout.endDate)
+            let dispositivo = DatosDispositivo(workout.device)
             sesiones.append(
                 SesionMuestra(
                     external_id: workout.uuid.uuidString,
@@ -689,7 +754,10 @@ final class HealthKitManager {
                     fc_promedio: Int((fc?.promedio ?? 0).rounded()),
                     fc_maxima: Int((fc?.maximo ?? 0).rounded()),
                     fuente_bundle: workout.sourceRevision.source.bundleIdentifier,
-                    fuente_nombre: workout.sourceRevision.source.name
+                    fuente_nombre: workout.sourceRevision.source.name,
+                    dispositivo_nombre: dispositivo.nombre,
+                    dispositivo_modelo: dispositivo.modelo,
+                    dispositivo_fabricante: dispositivo.fabricante
                 )
             )
         }

@@ -1,7 +1,10 @@
+import uuid
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from rest_framework import serializers
 
@@ -17,7 +20,6 @@ class RegistroSerializer(serializers.Serializer):
         write_only=True,
         trim_whitespace=False,
     )
-    usuario_id = serializers.CharField(max_length=100)
     birth_date = serializers.DateField()
 
     def validate_username(self, value):
@@ -27,10 +29,12 @@ class RegistroSerializer(serializers.Serializer):
             )
         return value
 
-    def validate_usuario_id(self, value):
-        if Usuario.objects.filter(usuario_id=value).exists():
+    def validate_birth_date(self, value):
+        # La edad sale de esta fecha (FCmáx, bono 60+): una fecha futura daría
+        # una edad negativa y rompería el cálculo de puntos.
+        if value > timezone.localdate():
             raise serializers.ValidationError(
-                "Este usuario_id ya existe."
+                "La fecha de nacimiento no puede ser futura."
             )
         return value
 
@@ -53,9 +57,11 @@ class RegistroSerializer(serializers.Serializer):
             password=validated_data["password"],
         )
 
+        # El identificador público lo genera el servidor: el cliente no lo
+        # elige, así no puede repetirlo ni adivinar el de otra persona.
         Usuario.objects.create(
             user=user,
-            usuario_id=validated_data["usuario_id"],
+            usuario_id=str(uuid.uuid4()),
             birth_date=validated_data["birth_date"],
         )
 

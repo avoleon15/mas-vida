@@ -1,8 +1,8 @@
 from django.urls import path
 
-from .views import estado_poliza, vincular_poliza
+from .views import estado_poliza, vincular
 
 urlpatterns = [
-    path("poliza", estado_poliza, name="poliza"),
-    path("poliza/vincular", vincular_poliza, name="poliza_vincular"),
+    path("polizas/estado", estado_poliza, name="polizas-estado"),
+    path("polizas/vincular", vincular, name="polizas-vincular"),
 ]

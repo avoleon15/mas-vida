@@ -59,6 +59,9 @@ class Command(BaseCommand):
             },
         )
 
+        # Los datos de la poliza ya no viven en Usuario: van en PolizaVinculada.
+        # Queda verificada para que el usuario de prueba se comporte como uno
+        # con poliza, igual que antes.
         PolizaVinculada.objects.get_or_create(
             usuario=usuario,
             defaults={
