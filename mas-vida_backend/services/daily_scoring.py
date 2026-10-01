@@ -6,8 +6,12 @@ a Apple Health horas después) cambia el resultado solo, sin lógica especial.
 
 Elección de fuente (decidido 30 sep, cambia la sección 7 de las reglas de
 puntaje): cada métrica elige por separado el dispositivo que más aporta, sin
-importar si es reloj, anillo o teléfono, y nunca se suman fuentes.
-- Pasos: gana el dispositivo con más pasos.
+importar si es reloj, anillo o teléfono, y nunca se suma la misma actividad
+dos veces.
+- Pasos: en cada hora gana el dispositivo con más pasos; las horas se suman.
+- Workouts: un entrenamiento que dos dispositivos registran al mismo tiempo
+  cuenta una vez (el más largo); los que no se cruzan cuentan todos. Un
+  workout necesita ritmo cardíaco: sin eso el serializer lo descarta.
 - Intensidad: cada dispositivo calcula la suya con sus propias sesiones y su
   propio ritmo cardíaco (fallback de bpm incluido); gana el de más puntos.
 Así pasos e intensidad pueden venir de dispositivos distintos.
@@ -32,12 +36,12 @@ from Apps.poincs.models import Ledger
 from services.device import (
     agrupar_por_dispositivo,
     clave_dispositivo,
-    dispositivo_con_mas_pasos,
+    pasos_ganadores_por_hora,
 )
 from services.hearth_rate import (
     calculate_age,
-    calculate_daily_intensity_points,
     calculate_intensity_from_heart_rate,
+    sesiones_se_traslapan,
 )
 from services.niveles import TOPE_ANUAL, nivel_para
 from services.reglas import SinVersionRegla, version_regla_vigente  # noqa: F401  (SinVersionRegla lo captura la vista)
@@ -99,24 +103,25 @@ def _dicts(queryset, campos):
     return filas
 
 
-def _sesiones_del_mejor_dispositivo(sesiones_por, edad: int) -> list[dict]:
-    """Sesiones del dispositivo cuyas sesiones dan más puntos de intensidad.
+def _sesiones_sin_traslape(sesiones: list[dict]) -> list[dict]:
+    """Los workouts del día, contando una sola vez los que se cruzan en el tiempo.
 
-    Es lo que se cuenta como workouts del día: si el reloj y el teléfono
-    registran el mismo entrenamiento, cuenta una vez, no dos. Con puntos
-    iguales gana el que acumuló más minutos.
+    Si el reloj y el teléfono registran el mismo entrenamiento, cuenta uno solo
+    (el más largo). Dos entrenamientos que no se cruzan cuentan los dos, aunque
+    vengan de dispositivos distintos. Con duración igual gana el de mayor
+    ritmo máximo y, al final, la clave del dispositivo (resultado estable).
     """
-    if not sesiones_por:
-        return []
-    mejor = max(
-        sesiones_por,
-        key=lambda clave: (
-            calculate_daily_intensity_points(sesiones_por[clave], edad),
-            sum(s["duracion_min"] for s in sesiones_por[clave]),
-            clave,
+    elegidas: list[dict] = []
+    candidatas = sorted(
+        sesiones,
+        key=lambda s: (
+            -s["duracion_min"], -s["fc_maxima"], clave_dispositivo(s), s["inicio"],
         ),
     )
-    return sesiones_por[mejor]
+    for sesion in candidatas:
+        if not any(sesiones_se_traslapan(sesion, otra) for otra in elegidas):
+            elegidas.append(sesion)
+    return elegidas
 
 
 def calcular_dia(usuario, fecha: date) -> ResultadoDia:
@@ -136,8 +141,7 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         ("inicio", "fin", "bpm", *dispositivo),
     )
 
-    ganador_pasos = dispositivo_con_mas_pasos(pasos)
-    pasos = [m for m in pasos if clave_dispositivo(m) == ganador_pasos]
+    pasos = pasos_ganadores_por_hora(pasos)
 
     pasos_totales = sum(m["cantidad"] for m in pasos)
     edad = calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
@@ -155,7 +159,7 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         default=0,
     )
     puntos_dia_bruto = puntos_pasos + puntos_intensidad
-    sesiones = _sesiones_del_mejor_dispositivo(sesiones_por, edad)
+    sesiones = _sesiones_sin_traslape(sesiones)
     puntos_dia = apply_daily_points_limit(puntos_dia_bruto)
 
     if pasos_totales > PASOS_DIA_ATIPICO:

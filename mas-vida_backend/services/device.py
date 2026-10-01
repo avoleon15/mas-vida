@@ -1,3 +1,6 @@
+from datetime import datetime
+
+from django.utils import timezone
 
 BUNDLE_A_TIPO = {
     "com.garmin.connect": "reloj",
@@ -75,16 +78,36 @@ def agrupar_por_dispositivo(muestras):
     return grupos
 
 
-def dispositivo_con_mas_pasos(pasos):
-    """Clave del dispositivo que reportó más pasos, o None si no hay pasos.
+def _hora_local(muestra):
+    """Hora (en hora de Guatemala) en la que empieza la muestra.
 
-    Un empate exacto se resuelve por la clave, solo para que el resultado
-    sea siempre el mismo.
+    Una muestra que cruza el cambio de hora cuenta en la hora en que empieza.
+    Guatemala no tiene horario de verano, así que las horas son estables.
     """
-    grupos = agrupar_por_dispositivo(pasos)
-    if not grupos:
-        return None
-    return max(
-        grupos,
-        key=lambda clave: (sum(m["cantidad"] for m in grupos[clave]), clave),
-    )
+    inicio = datetime.fromisoformat(muestra["inicio"])
+    return timezone.localtime(inicio).replace(minute=0, second=0, microsecond=0)
+
+
+def pasos_ganadores_por_hora(pasos):
+    """Muestras de pasos que cuentan: en cada hora, las del dispositivo con más pasos.
+
+    El mismo caminar lo registran a la vez el teléfono y el reloj, así que
+    dentro de una hora nunca se suman dos dispositivos (se duplicaría). Entre
+    horas distintas sí se suma: un reloj que solo se usa para dormir no le
+    quita al teléfono los pasos del día, y un reloj que solo se usa en el gym
+    aporta justo esa hora. Un empate exacto se resuelve por la clave, solo para
+    que el resultado sea siempre el mismo.
+    """
+    por_hora = {}
+    for muestra in pasos:
+        por_hora.setdefault(_hora_local(muestra), []).append(muestra)
+
+    elegidas = []
+    for hora in sorted(por_hora):
+        grupos = agrupar_por_dispositivo(por_hora[hora])
+        ganador = max(
+            grupos,
+            key=lambda clave: (sum(m["cantidad"] for m in grupos[clave]), clave),
+        )
+        elegidas.extend(grupos[ganador])
+    return elegidas

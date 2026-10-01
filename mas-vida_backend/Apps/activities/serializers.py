@@ -82,6 +82,16 @@ def bpm_plausible(m) -> bool:
     return BPM_MIN <= m["bpm"] <= BPM_MAX and m["fin"] >= m["inicio"]
 
 
+def sesion_sin_ritmo_cardiaco(s) -> bool:
+    """Workout sin reloj: Swift manda fc_promedio y fc_maxima en 0.
+
+    No es un dato roto, es un entrenamiento que no se puede contar: un workout
+    necesita ritmo cardíaco (regla del producto, 1 oct 2026). Se descarta, pero
+    se cuenta aparte de los datos imposibles para poder distinguirlos en el log.
+    """
+    return s["fc_promedio"] == 0 and s["fc_maxima"] == 0
+
+
 def sesion_plausible(s) -> bool:
     return (
         s["fin"] >= s["inicio"]
@@ -126,6 +136,8 @@ class SyncSerializer(serializers.Serializer):
         errores = {}
         descartadas = {}
 
+        descartadas["sesiones_sin_ritmo_cardiaco"] = 0
+
         for nombre, clase, es_plausible in LISTAS:
             validas = []
             descartadas[nombre] = 0
@@ -135,6 +147,8 @@ class SyncSerializer(serializers.Serializer):
                     errores[f"{nombre}[{i}]"] = item.errors
                 elif es_plausible(item.validated_data):
                     validas.append(item.validated_data)
+                elif nombre == "sesiones" and sesion_sin_ritmo_cardiaco(item.validated_data):
+                    descartadas["sesiones_sin_ritmo_cardiaco"] += 1
                 else:
                     descartadas[nombre] += 1
             attrs[nombre] = validas

@@ -201,18 +201,18 @@ class SyncTests(SyncBase):
             })
         return muestras
 
-    def test_en_pasos_gana_el_dispositivo_con_mas_pasos_y_no_se_suman(self):
+    def test_en_la_misma_hora_gana_el_dispositivo_con_mas_pasos_y_no_se_suman(self):
         r = self._sync(pasos=[
             paso("tel", 12000),
-            paso("rel", 8000, hora=9, **RELOJ),
+            paso("rel", 8000, **RELOJ),
         ])
         self.assertEqual(r.json()["pasos_totales_dia"], 12000)  # no 20000
         self.assertEqual(r.json()["puntos_pasos"], 50)
 
-    def test_un_reloj_con_mas_pasos_le_gana_al_telefono(self):
+    def test_un_reloj_con_mas_pasos_le_gana_al_telefono_en_esa_hora(self):
         r = self._sync(pasos=[
             paso("tel", 8000),
-            paso("rel", 12000, hora=9, **RELOJ),
+            paso("rel", 12000, **RELOJ),
         ])
         self.assertEqual(r.json()["pasos_totales_dia"], 12000)
 
@@ -276,13 +276,72 @@ class SyncTests(SyncBase):
         self.assertEqual(r["puntos_pasos"], 50)       # del teléfono
         self.assertEqual(r["puntos_intensidad"], 150)  # del reloj
 
+    # --- pasos por hora ------------------------------------------------------
+
+    def test_un_reloj_que_solo_se_usa_para_dormir_no_le_quita_los_pasos_al_telefono(self):
+        # Antes ganaba "el que más pasos tiene en el día" o "el reloj": con un
+        # reloj puesto solo de noche se perdía la caminata del día.
+        r = self._sync(pasos=[
+            paso("tel-dia", 12000, hora=10),
+            paso("rel-noche", 300, hora=3, **RELOJ),
+        ])
+        self.assertEqual(r.json()["pasos_totales_dia"], 12300)
+        self.assertEqual(r.json()["puntos_pasos"], 50)
+
+    def test_un_reloj_que_solo_se_usa_en_el_gym_aporta_esa_hora(self):
+        # El teléfono se queda en el locker: 6000 pasos en el día y solo 500 en
+        # la hora del gym, donde el reloj mide 4000.
+        r = self._sync(pasos=[
+            paso("tel-dia", 6000, hora=9),
+            paso("tel-gym", 500, hora=18),
+            paso("rel-gym", 4000, hora=18, **RELOJ),
+        ])
+        self.assertEqual(r.json()["pasos_totales_dia"], 10000)  # no 6500
+        self.assertEqual(r.json()["puntos_pasos"], 50)
+
+    # --- workouts ------------------------------------------------------------
+
+    def _sesion_a_las(self, id_, hora, minutos, fc, **fuente):
+        sesion = self._sesion(id_, minutos, fc, **fuente)
+        sesion["inicio"] = f"{_dia}T{hora:02d}:00:00-06:00"
+        fin = hora * 60 + minutos
+        sesion["fin"] = f"{_dia}T{fin // 60:02d}:{fin % 60:02d}:00-06:00"
+        return sesion
+
+    def test_dos_workouts_que_no_se_cruzan_cuentan_los_dos_aunque_sean_de_dispositivos_distintos(self):
+        # Carrera con el reloj en la mañana y yoga en la tarde con otro reloj.
+        self._sync(sesiones=[
+            self._sesion_a_las("rel-am", 6, 40, 150, **RELOJ),
+            self._sesion_a_las("ani-pm", 17, 35, 120, **{**RELOJ, "dispositivo_modelo": "Otro"}),
+        ])
+        resumen = ResumenDiario.objects.get(usuario=self.usuario, fecha=self.hoy)
+        self.assertEqual(resumen.workouts_cantidad, 2)
+        self.assertEqual(resumen.workouts_duracion_total_min, 75)
+
+    def test_un_workout_sin_ritmo_cardiaco_no_cuenta_como_workout(self):
+        # Swift manda fc en 0 cuando no hay reloj: solo teléfono => no hay workout.
+        r = self._sync(sesiones=[self._sesion("tel-s", 45, 0, **IPHONE) | {"fc_maxima": 0}])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["puntos_intensidad"], 0)
+        resumen = ResumenDiario.objects.get(usuario=self.usuario, fecha=self.hoy)
+        self.assertIsNone(resumen.workouts_cantidad)
+        self.assertIsNone(resumen.workouts_fc_promedio)
+
+    def test_un_workout_sin_ritmo_no_le_quita_nada_al_que_si_lo_tiene(self):
+        sin_reloj = self._sesion_a_las("tel-s", 6, 45, 0, **IPHONE) | {"fc_maxima": 0}
+        con_reloj = self._sesion_a_las("rel-s", 17, 35, 150, **RELOJ)
+        self._sync(sesiones=[sin_reloj, con_reloj])
+        resumen = ResumenDiario.objects.get(usuario=self.usuario, fecha=self.hoy)
+        self.assertEqual(resumen.workouts_cantidad, 1)
+        self.assertEqual(resumen.workouts_fc_promedio, 150)
+
     # --- sync tardío ---------------------------------------------------------
 
     def test_un_dispositivo_con_mas_pasos_que_llega_tarde_corrige_el_dia(self):
         primero = self._sync(pasos=[paso("tel", 8000)]).json()
         self.assertEqual(primero["puntos_dia"], 25)
 
-        tarde = self._sync(pasos=[paso("rel", 18000, hora=9, **RELOJ)]).json()
+        tarde = self._sync(pasos=[paso("rel", 18000, **RELOJ)]).json()
         self.assertEqual(tarde["pasos_totales_dia"], 18000)
         self.assertEqual(tarde["puntos_dia"], 100)
         self.assertEqual(tarde["puntos_ano"], 100)
@@ -297,7 +356,7 @@ class SyncTests(SyncBase):
 
     def test_un_dato_tardio_que_no_cambia_nada_no_escribe_ajuste(self):
         self._sync(pasos=[paso("tel", 18000)])
-        self._sync(pasos=[paso("rel", 8000, hora=9, **RELOJ)])  # el teléfono sigue ganando
+        self._sync(pasos=[paso("rel", 8000, **RELOJ)])  # el teléfono sigue ganando esa hora
         self.assertFalse(
             Ledger.objects.filter(usuario=self.usuario, tipo="ajuste_manual").exists()
         )
@@ -305,7 +364,7 @@ class SyncTests(SyncBase):
 
     def test_varios_ajustes_el_mismo_dia_quedan_asentados(self):
         self._sync(pasos=[paso("tel", 8000)])                          # 25
-        self._sync(pasos=[paso("rel", 12000, hora=9, **RELOJ)])        # reloj 12000 -> 50
+        self._sync(pasos=[paso("rel", 12000, **RELOJ)])                # reloj 12000 -> 50
         r = self._sync(pasos=[paso("rel2", 6000, hora=10, **RELOJ)])   # reloj 18000 -> 100
         self.assertEqual(r.json()["puntos_dia"], 100)
         self.assertEqual(self._acreditado(), 100)
@@ -314,7 +373,7 @@ class SyncTests(SyncBase):
 
     def test_repetir_el_sync_tardio_no_duplica_el_ajuste(self):
         self._sync(pasos=[paso("tel", 8000)])
-        payload = dict(pasos=[paso("rel", 18000, hora=9, **RELOJ)])
+        payload = dict(pasos=[paso("rel", 18000, **RELOJ)])
         self._sync(**payload)
         self._sync(**payload)
         self.assertEqual(
