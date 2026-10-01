@@ -4,10 +4,13 @@ Cada sync recalcula el día COMPLETO a partir de Muestra / Sesion / MuestraBPM,
 no del payload recibido. Así un dato tardío (un reloj de terceros que escribe
 a Apple Health horas después) cambia el resultado solo, sin lógica especial.
 
-Precedencia de fuente (reglas-puntaje-vivo.md sección 7): si hay un reloj con
-datos ese día gana el reloj, luego el anillo, luego el teléfono; dentro de un
-mismo nivel gana el de más pasos. Nunca se suman fuentes, ni para pasos ni
-para ritmo cardíaco ni para sesiones.
+Elección de fuente (decidido 30 sep, cambia la sección 7 de las reglas de
+puntaje): cada métrica elige por separado el dispositivo que más aporta, sin
+importar si es reloj, anillo o teléfono, y nunca se suman fuentes.
+- Pasos: gana el dispositivo con más pasos.
+- Intensidad: cada dispositivo calcula la suya con sus propias sesiones y su
+  propio ritmo cardíaco (fallback de bpm incluido); gana el de más puntos.
+Así pasos e intensidad pueden venir de dispositivos distintos.
 
 Ledger append-only: el primer sync de un día escribe dos filas (pasos e
 intensidad). Si después el resultado cambia, se agrega UNA fila de
@@ -26,8 +29,16 @@ from django.utils import timezone
 from Apps.activities.models import Muestra, MuestraBPM, ResumenDiario, Sesion
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger, VersionRegla
-from services.device import filtrar_por_dispositivo, seleccionar_dispositivo_ganador
-from services.hearth_rate import calculate_age, calculate_intensity_from_heart_rate
+from services.device import (
+    agrupar_por_dispositivo,
+    clave_dispositivo,
+    dispositivo_con_mas_pasos,
+)
+from services.hearth_rate import (
+    calculate_age,
+    calculate_daily_intensity_points,
+    calculate_intensity_from_heart_rate,
+)
 from services.niveles import TOPE_ANUAL, nivel_para
 from services.points import apply_daily_points_limit, calculate_daily_step_points
 from services.polizas import TIPOS_DEL_DIA, fecha_corte_sin_retroactivo
@@ -91,6 +102,26 @@ def _dicts(queryset, campos):
     return filas
 
 
+def _sesiones_del_mejor_dispositivo(sesiones_por, edad: int) -> list[dict]:
+    """Sesiones del dispositivo cuyas sesiones dan más puntos de intensidad.
+
+    Es lo que se cuenta como workouts del día: si el reloj y el teléfono
+    registran el mismo entrenamiento, cuenta una vez, no dos. Con puntos
+    iguales gana el que acumuló más minutos.
+    """
+    if not sesiones_por:
+        return []
+    mejor = max(
+        sesiones_por,
+        key=lambda clave: (
+            calculate_daily_intensity_points(sesiones_por[clave], edad),
+            sum(s["duracion_min"] for s in sesiones_por[clave]),
+            clave,
+        ),
+    )
+    return sesiones_por[mejor]
+
+
 def calcular_dia(usuario, fecha: date) -> ResultadoDia:
     inicio, fin = _rango_del_dia(fecha)
     dispositivo = ("fuente_bundle", "dispositivo_modelo", "dispositivo_fabricante")
@@ -108,18 +139,27 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         ("inicio", "fin", "bpm", *dispositivo),
     )
 
-    ganador = seleccionar_dispositivo_ganador(pasos, sesiones, ritmo)
-    if ganador is not None:
-        pasos = filtrar_por_dispositivo(pasos, ganador)
-        sesiones = filtrar_por_dispositivo(sesiones, ganador)
-        ritmo = filtrar_por_dispositivo(ritmo, ganador)
+    ganador_pasos = dispositivo_con_mas_pasos(pasos)
+    pasos = [m for m in pasos if clave_dispositivo(m) == ganador_pasos]
 
     pasos_totales = sum(m["cantidad"] for m in pasos)
     edad = calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
 
     puntos_pasos = calculate_daily_step_points(pasos_totales, edad)
-    puntos_intensidad = calculate_intensity_from_heart_rate(ritmo, sesiones, edad)
-    puntos_dia = apply_daily_points_limit(puntos_pasos + puntos_intensidad)
+    sesiones_por = agrupar_por_dispositivo(sesiones)
+    ritmo_por = agrupar_por_dispositivo(ritmo)
+    puntos_intensidad = max(
+        (
+            calculate_intensity_from_heart_rate(
+                ritmo_por.get(clave, []), sesiones_por.get(clave, []), edad
+            )
+            for clave in set(sesiones_por) | set(ritmo_por)
+        ),
+        default=0,
+    )
+    puntos_dia_bruto = puntos_pasos + puntos_intensidad
+    sesiones = _sesiones_del_mejor_dispositivo(sesiones_por, edad)
+    puntos_dia = apply_daily_points_limit(puntos_dia_bruto)
 
     if pasos_totales > PASOS_DIA_ATIPICO:
         logger.warning(
@@ -133,7 +173,7 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         puntos_pasos=puntos_pasos,
         puntos_intensidad=puntos_intensidad,
         puntos_dia=puntos_dia,
-        tope_diario_aplicado=puntos_pasos + puntos_intensidad > TOPE_DIARIO,
+        tope_diario_aplicado=puntos_dia_bruto > TOPE_DIARIO,
         workouts_cantidad=len(sesiones),
         workouts_duracion_total=sum(s["duracion_min"] for s in sesiones),
         workouts_fc_promedio=(

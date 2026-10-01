@@ -67,33 +67,24 @@ def clave_dispositivo(muestra):
     )
 
 
-def filtrar_por_dispositivo(muestras, dispositivo_ganador):
-    """Devuelve solo las muestras del dispositivo seleccionado."""
-    return [
-        muestra
-        for muestra in muestras
-        if clave_dispositivo(muestra) == dispositivo_ganador
-    ]
+def agrupar_por_dispositivo(muestras):
+    """{clave_dispositivo: [muestras]} para elegir ganador por métrica."""
+    grupos = {}
+    for muestra in muestras:
+        grupos.setdefault(clave_dispositivo(muestra), []).append(muestra)
+    return grupos
 
-def seleccionar_dispositivo_ganador(pasos, sesiones, frecuencia_cardiaca):
-    por_dispositivo = {}
 
-    for muestra in pasos + sesiones + frecuencia_cardiaca:
-        clave = clave_dispositivo(muestra)
-        datos = por_dispositivo.setdefault(
-            clave, {"tipo": tipo_dispositivo(muestra), "pasos": 0}
-        )
-        datos["pasos"] += muestra.get("cantidad", 0)  # solo las muestras de pasos traen "cantidad"
+def dispositivo_con_mas_pasos(pasos):
+    """Clave del dispositivo que reportó más pasos, o None si no hay pasos.
 
-    # Jerarquía: reloj > anillo > teléfono/desconocido. Dentro del mismo nivel gana el de más pasos.
-    for tipos in ({"reloj"}, {"anillo"}, {"telefono", "desconocido"}):
-        candidatas = [
-            (clave, datos)
-            for clave, datos in por_dispositivo.items()
-            if datos["tipo"] in tipos
-        ]
-        if candidatas:
-            ganador, _ = max(candidatas, key=lambda c: c[1]["pasos"])
-            return ganador
-
-    return None
+    Un empate exacto se resuelve por la clave, solo para que el resultado
+    sea siempre el mismo.
+    """
+    grupos = agrupar_por_dispositivo(pasos)
+    if not grupos:
+        return None
+    return max(
+        grupos,
+        key=lambda clave: (sum(m["cantidad"] for m in grupos[clave]), clave),
+    )

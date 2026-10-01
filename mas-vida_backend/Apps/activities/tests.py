@@ -185,69 +185,142 @@ class SyncTests(SyncBase):
         self.assertEqual(Ledger.objects.filter(usuario=self.usuario).count(), 2)
         self.assertEqual(ResumenDiario.objects.count(), 1)
 
-    # --- precedencia de fuente ----------------------------------------------
+    # --- elección de fuente: gana el dispositivo que más aporta --------------
 
-    def test_si_hay_reloj_gana_el_reloj_y_no_se_suman_fuentes(self):
+    def _bpm_serie(self, desde_min, bpm, fuente, cantidad=8):
+        """Muestras de 5 min seguidas (sin huecos): `cantidad` x 5 = 40 min."""
+        muestras = []
+        for i in range(cantidad):
+            ini = desde_min + 5 * i
+            muestras.append({
+                "external_id": f"b-{fuente['dispositivo_modelo']}-{ini}",
+                "inicio": f"{_dia}T{10 + ini // 60:02d}:{ini % 60:02d}:00-06:00",
+                "fin": f"{_dia}T{10 + (ini + 5) // 60:02d}:{(ini + 5) % 60:02d}:00-06:00",
+                "bpm": bpm,
+                **fuente,
+            })
+        return muestras
+
+    def test_en_pasos_gana_el_dispositivo_con_mas_pasos_y_no_se_suman(self):
         r = self._sync(pasos=[
             paso("tel", 12000),
             paso("rel", 8000, hora=9, **RELOJ),
         ])
-        self.assertEqual(r.json()["pasos_totales_dia"], 8000)
-        self.assertEqual(r.json()["puntos_pasos"], 25)
+        self.assertEqual(r.json()["pasos_totales_dia"], 12000)  # no 20000
+        self.assertEqual(r.json()["puntos_pasos"], 50)
 
-    def test_reloj_solo_con_ritmo_cardiaco_tambien_gana(self):
-        bpm = {
-            "external_id": "b1",
-            "inicio": f"{_dia}T10:00:00-06:00",
-            "fin": f"{_dia}T10:01:00-06:00",
-            "bpm": 120,
-            **RELOJ,
-        }
-        r = self._sync(pasos=[paso("tel", 12000)], bpm=[bpm])
-        self.assertEqual(r.json()["pasos_totales_dia"], 0)
+    def test_un_reloj_con_mas_pasos_le_gana_al_telefono(self):
+        r = self._sync(pasos=[
+            paso("tel", 8000),
+            paso("rel", 12000, hora=9, **RELOJ),
+        ])
+        self.assertEqual(r.json()["pasos_totales_dia"], 12000)
 
-    def test_fuente_desconocida_se_trata_como_telefono(self):
+    def test_varias_muestras_del_mismo_dispositivo_si_se_suman(self):
+        r = self._sync(pasos=[paso("a", 6000), paso("b", 6000, hora=9)])
+        self.assertEqual(r.json()["pasos_totales_dia"], 12000)
+
+    def test_un_reloj_que_solo_manda_ritmo_no_le_quita_los_pasos_al_telefono(self):
+        r = self._sync(
+            pasos=[paso("tel", 12000)],
+            bpm=self._bpm_serie(0, 100, RELOJ),  # bajo el 60%: no da puntos
+        )
+        self.assertEqual(r.json()["pasos_totales_dia"], 12000)
+        self.assertEqual(r.json()["puntos_intensidad"], 0)
+
+    def test_fuente_desconocida_cuenta_como_cualquier_otra(self):
         rara = {"fuente_bundle": "com.apps.rara", "fuente_nombre": "Rara"}
         r = self._sync(pasos=[paso("a", 12000, **rara)])
         self.assertEqual(r.json()["pasos_totales_dia"], 12000)
 
+    def test_en_intensidad_gana_el_dispositivo_cuyas_sesiones_dan_mas_puntos(self):
+        # 36 años: FCM 183, 60% = 110. El teléfono registra 100 lpm (0 puntos);
+        # el reloj registra 90 min a 140 lpm (150 puntos).
+        floja = self._sesion("tel-s", 90, 100)
+        fuerte = self._sesion("rel-s", 90, 140, **RELOJ)
+        r = self._sync(sesiones=[floja, fuerte])
+        self.assertEqual(r.json()["puntos_intensidad"], 150)
+
+    def test_las_sesiones_de_dos_dispositivos_no_se_suman_ni_se_cuentan_doble(self):
+        # El mismo entrenamiento lo registran el teléfono y el reloj.
+        r = self._sync(sesiones=[
+            self._sesion("tel-s", 35, 150),
+            self._sesion("rel-s", 35, 150, **RELOJ),
+        ])
+        self.assertEqual(r.json()["puntos_intensidad"], 100)
+        resumen = ResumenDiario.objects.get(usuario=self.usuario, fecha=self.hoy)
+        self.assertEqual(resumen.workouts_cantidad, 1)
+        self.assertEqual(resumen.workouts_duracion_total_min, 35)
+
+    def test_el_resumen_cuenta_los_workouts_del_dispositivo_con_mas_puntos(self):
+        floja = self._sesion("tel-s", 35, 100)       # 0 puntos
+        fuerte = self._sesion("rel-s", 90, 140, **RELOJ)  # 150 puntos
+        self._sync(sesiones=[floja, fuerte])
+        resumen = ResumenDiario.objects.get(usuario=self.usuario, fecha=self.hoy)
+        self.assertEqual(resumen.workouts_cantidad, 1)
+        self.assertEqual(resumen.workouts_duracion_total_min, 90)
+        self.assertEqual(resumen.workouts_fc_promedio, 140)
+
+    def test_en_el_fallback_de_bpm_gana_el_dispositivo_que_mas_puntos_da(self):
+        # Sin ninguna sesión registrada, 40 min seguidos de ritmo cardíaco.
+        # Teléfono a 100 lpm (bajo el 60%) y reloj a 140 (sobre el 70%).
+        bpm = self._bpm_serie(0, 100, IPHONE) + self._bpm_serie(0, 140, RELOJ)
+        r = self._sync(bpm=bpm)
+        self.assertEqual(r.json()["puntos_intensidad"], 100)
+
+    def test_pasos_e_intensidad_pueden_venir_de_dispositivos_distintos(self):
+        r = self._sync(
+            pasos=[paso("tel", 12000)],
+            sesiones=[self._sesion("rel-s", 90, 140, **RELOJ)],
+        ).json()
+        self.assertEqual(r["puntos_pasos"], 50)       # del teléfono
+        self.assertEqual(r["puntos_intensidad"], 150)  # del reloj
+
     # --- sync tardío ---------------------------------------------------------
 
-    def test_reloj_que_llega_tarde_corrige_el_dia_con_un_ajuste(self):
-        primero = self._sync(pasos=[paso("tel", 18000)]).json()
-        self.assertEqual(primero["puntos_dia"], 100)
+    def test_un_dispositivo_con_mas_pasos_que_llega_tarde_corrige_el_dia(self):
+        primero = self._sync(pasos=[paso("tel", 8000)]).json()
+        self.assertEqual(primero["puntos_dia"], 25)
 
-        tarde = self._sync(pasos=[paso("rel", 8000, hora=9, **RELOJ)]).json()
-        self.assertEqual(tarde["pasos_totales_dia"], 8000)
-        self.assertEqual(tarde["puntos_dia"], 25)
-        self.assertEqual(tarde["puntos_ano"], 25)
+        tarde = self._sync(pasos=[paso("rel", 18000, hora=9, **RELOJ)]).json()
+        self.assertEqual(tarde["pasos_totales_dia"], 18000)
+        self.assertEqual(tarde["puntos_dia"], 100)
+        self.assertEqual(tarde["puntos_ano"], 100)
 
-        self.assertEqual(self._acreditado(), 25)
+        self.assertEqual(self._acreditado(), 100)
         ajuste = Ledger.objects.get(usuario=self.usuario, tipo="ajuste_manual")
-        self.assertEqual(ajuste.puntos, -75)
+        self.assertEqual(ajuste.puntos, 75)
         # Las filas originales no se tocaron.
         self.assertEqual(
-            Ledger.objects.get(usuario=self.usuario, tipo="pasos").puntos, 100
+            Ledger.objects.get(usuario=self.usuario, tipo="pasos").puntos, 25
         )
 
+    def test_un_dato_tardio_que_no_cambia_nada_no_escribe_ajuste(self):
+        self._sync(pasos=[paso("tel", 18000)])
+        self._sync(pasos=[paso("rel", 8000, hora=9, **RELOJ)])  # el teléfono sigue ganando
+        self.assertFalse(
+            Ledger.objects.filter(usuario=self.usuario, tipo="ajuste_manual").exists()
+        )
+        self.assertEqual(self._acreditado(), 100)
+
     def test_varios_ajustes_el_mismo_dia_quedan_asentados(self):
-        self._sync(pasos=[paso("tel", 18000)])           # 100
-        self._sync(pasos=[paso("rel", 8000, hora=9, **RELOJ)])   # reloj: 25
-        r = self._sync(pasos=[paso("rel2", 4000, hora=10, **RELOJ)])  # 12000: 50
-        self.assertEqual(r.json()["puntos_dia"], 50)
-        self.assertEqual(self._acreditado(), 50)
+        self._sync(pasos=[paso("tel", 8000)])                          # 25
+        self._sync(pasos=[paso("rel", 12000, hora=9, **RELOJ)])        # reloj 12000 -> 50
+        r = self._sync(pasos=[paso("rel2", 6000, hora=10, **RELOJ)])   # reloj 18000 -> 100
+        self.assertEqual(r.json()["puntos_dia"], 100)
+        self.assertEqual(self._acreditado(), 100)
         ajustes = Ledger.objects.filter(usuario=self.usuario, tipo="ajuste_manual")
-        self.assertEqual(sorted(a.puntos for a in ajustes), [-75, 25])
+        self.assertEqual(sorted(a.puntos for a in ajustes), [25, 50])
 
     def test_repetir_el_sync_tardio_no_duplica_el_ajuste(self):
-        self._sync(pasos=[paso("tel", 18000)])
-        payload = dict(pasos=[paso("rel", 8000, hora=9, **RELOJ)])
+        self._sync(pasos=[paso("tel", 8000)])
+        payload = dict(pasos=[paso("rel", 18000, hora=9, **RELOJ)])
         self._sync(**payload)
         self._sync(**payload)
         self.assertEqual(
             Ledger.objects.filter(usuario=self.usuario, tipo="ajuste_manual").count(), 1
         )
-        self.assertEqual(self._acreditado(), 25)
+        self.assertEqual(self._acreditado(), 100)
 
     # --- topes y nivel -------------------------------------------------------
 
