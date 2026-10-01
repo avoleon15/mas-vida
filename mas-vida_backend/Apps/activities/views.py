@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from Apps.users.models import Usuario
 from services import daily_scoring
 
-from .models import Muestra, MuestraBPM, Sesion
+from .models import Muestra, MuestraBPM, ResumenDiario, Sesion
 from .serializers import SyncSerializer
 
 logger = logging.getLogger(__name__)
@@ -118,3 +118,74 @@ def sync(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+# Un año completo (con bisiesto) es lo más que pide la vista Año de Progreso.
+MAX_DIAS_RESUMEN = 366
+
+
+def _fecha_param(request, nombre):
+    crudo = request.query_params.get(nombre)
+    if not crudo:
+        raise ValueError(f"Falta el parámetro {nombre}.")
+    try:
+        return date.fromisoformat(crudo)
+    except ValueError:
+        raise ValueError(f"{nombre} debe tener formato AAAA-MM-DD.")
+
+
+@api_view(["GET"])
+def resumen_dashboard(request):
+    """Filas de resumen diario del usuario en [desde, hasta].
+
+    Solo devuelve los días que existen; rellenar los huecos con ceros es
+    decisión de la pantalla. `workouts_dia` es null si no hubo sesión (no 0,
+    para no confundir "sin actividad intensa" con "FC de cero").
+    """
+    try:
+        usuario = request.user.usuario
+    except Usuario.DoesNotExist:
+        return Response(
+            {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        desde = _fecha_param(request, "desde")
+        hasta = _fecha_param(request, "hasta")
+    except ValueError as error:
+        return Response({"mensaje": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if desde > hasta:
+        return Response(
+            {"mensaje": "desde no puede ser mayor a hasta."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if (hasta - desde).days >= MAX_DIAS_RESUMEN:
+        return Response(
+            {"mensaje": f"El rango no puede pasar de {MAX_DIAS_RESUMEN} días."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    filas = ResumenDiario.objects.filter(
+        usuario=usuario, fecha__gte=desde, fecha__lte=hasta
+    ).order_by("fecha")
+
+    return Response([
+        {
+            "fecha": fila.fecha.isoformat(),
+            "pasos_totales_dia": fila.pasos_totales_dia,
+            "workouts_dia": (
+                None
+                if fila.workouts_cantidad is None
+                else {
+                    "cantidad": fila.workouts_cantidad,
+                    "duracion_total_min": fila.workouts_duracion_total_min,
+                    "fc_promedio": fila.workouts_fc_promedio,
+                    "fc_maxima": fila.workouts_fc_maxima,
+                }
+            ),
+            "puntos_dia": fila.puntos_dia,
+        }
+        for fila in filas
+    ])

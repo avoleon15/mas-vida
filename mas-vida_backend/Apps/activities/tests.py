@@ -33,7 +33,9 @@ def paso(id_, cantidad, hora=8, **fuente):
 _dia = ""
 
 
-class SyncTests(APITestCase):
+class SyncBase(APITestCase):
+    """Montaje y ayudas compartidas; no define tests propios."""
+
     def setUp(self):
         global _dia
         self.hoy = timezone.localdate()
@@ -77,6 +79,8 @@ class SyncTests(APITestCase):
         filas = Ledger.objects.filter(usuario=self.usuario, fecha=fecha or self.hoy)
         return sum(f.puntos for f in filas)
 
+
+class SyncTests(SyncBase):
     # --- acceso y validación -------------------------------------------------
 
     def test_sin_token_da_401(self):
@@ -292,3 +296,95 @@ class SyncTests(APITestCase):
         VersionRegla.objects.all().delete()
         r = self._sync(pasos=[paso("a", 12000)])
         self.assertEqual(r.status_code, 500)
+
+
+class DashboardResumenTests(SyncBase):
+    """Usa el montaje del sync para generar los días con POST reales."""
+
+    url = "/api/v1/dashboard/resumen"
+
+    def _pedir(self, desde, hasta):
+        return self.client.get(self.url, {"desde": desde, "hasta": hasta})
+
+    def test_sin_token_da_401(self):
+        self.client.credentials()
+        self.assertEqual(self._pedir("2026-09-01", "2026-09-30").status_code, 401)
+
+    def test_devuelve_las_filas_del_rango_con_la_forma_del_contrato(self):
+        self._sync(pasos=[paso("a", 12000)], sesiones=[self._sesion("s1", 35, 150)])
+        r = self._pedir(self.hoy.isoformat(), self.hoy.isoformat())
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), [{
+            "fecha": self.hoy.isoformat(),
+            "pasos_totales_dia": 12000,
+            "workouts_dia": {
+                "cantidad": 1,
+                "duracion_total_min": 35,
+                "fc_promedio": 150,
+                "fc_maxima": 160,
+            },
+            "puntos_dia": 150,  # 50 por 12.000 pasos + 100 por 35 min al 70%+
+        }])
+
+    def test_sin_sesion_workouts_dia_es_null_no_cero(self):
+        self._sync(pasos=[paso("a", 12000)])
+        fila = self._pedir(self.hoy.isoformat(), self.hoy.isoformat()).json()[0]
+        self.assertIsNone(fila["workouts_dia"])
+
+    def test_filtra_por_rango_y_ordena_de_viejo_a_nuevo(self):
+        ayer = self.hoy - timedelta(days=1)
+        anteayer = self.hoy - timedelta(days=2)
+        for fecha in (self.hoy, anteayer, ayer):
+            ResumenDiario.objects.create(
+                usuario=self.usuario, fecha=fecha, pasos_totales_dia=8000, puntos_dia=25
+            )
+        r = self._pedir(anteayer.isoformat(), ayer.isoformat())
+        self.assertEqual(
+            [f["fecha"] for f in r.json()], [anteayer.isoformat(), ayer.isoformat()]
+        )
+
+    def test_los_dias_sin_dato_no_aparecen(self):
+        r = self._pedir("2026-01-01", "2026-01-31")
+        self.assertEqual(r.json(), [])
+
+    def test_no_muestra_los_datos_de_otro_usuario(self):
+        otra = User.objects.create_user(username="beto", password="clave-segura-2")
+        beto = Usuario.objects.create(
+            user=otra, usuario_id="beto-1", birth_date=date(1990, 1, 1)
+        )
+        ResumenDiario.objects.create(
+            usuario=beto, fecha=self.hoy, pasos_totales_dia=9999, puntos_dia=25
+        )
+        r = self._pedir(self.hoy.isoformat(), self.hoy.isoformat())
+        self.assertEqual(r.json(), [])
+
+    def test_parametros_invalidos_dan_400(self):
+        self.assertEqual(self.client.get(self.url).status_code, 400)
+        self.assertEqual(self._pedir("2026-09-01", "").status_code, 400)
+        self.assertEqual(self._pedir("01-09-2026", "2026-09-30").status_code, 400)
+        self.assertEqual(self._pedir("2026-09-30", "2026-09-01").status_code, 400)
+
+    def test_un_anio_entra_y_mas_que_eso_no(self):
+        self.assertEqual(self._pedir("2026-01-01", "2026-12-31").status_code, 200)
+        self.assertEqual(self._pedir("2025-01-01", "2026-12-31").status_code, 400)
+
+    def test_un_dia_anulado_por_retroactivo_denegado_se_ve_en_cero(self):
+        from Apps.policies.models import PolizaVinculada
+        from services import polizas
+
+        ayer = self.hoy - timedelta(days=1)
+        ResumenDiario.objects.create(
+            usuario=self.usuario, fecha=ayer, pasos_totales_dia=12000, puntos_dia=50
+        )
+        Ledger.objects.create(
+            usuario=self.usuario, fecha=ayer, tipo="pasos", puntos=50,
+            version_regla=VersionRegla.objects.get(version=1),
+        )
+        poliza = polizas.vincular(self.usuario, "P-1", "X", date(2026, 1, 1))
+        poliza.birth_date_confirmada = date(1991, 1, 1)  # no coincide con 1990
+        poliza.save()
+        polizas.verificar(poliza)
+
+        fila = self._pedir(ayer.isoformat(), ayer.isoformat()).json()[0]
+        self.assertEqual(fila["puntos_dia"], 0)
+        self.assertEqual(fila["pasos_totales_dia"], 12000)  # la actividad se conserva

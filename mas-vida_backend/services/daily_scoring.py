@@ -227,6 +227,9 @@ def asentar(usuario, dia: ResultadoDia) -> ResultadoAnual:
 def guardar_resumen(usuario, dia: ResultadoDia) -> None:
     """Tabla materializada: se puede borrar y reconstruir, no es fuente de verdad."""
     hubo_sesion = dia.workouts_cantidad > 0
+    # Un día anulado por retroactivo denegado se ve en 0, igual que en el ledger.
+    corte = fecha_corte_sin_retroactivo(usuario)
+    anulado = corte is not None and dia.fecha < corte
     ResumenDiario.objects.update_or_create(
         usuario=usuario,
         fecha=dia.fecha,
@@ -236,6 +239,6 @@ def guardar_resumen(usuario, dia: ResultadoDia) -> None:
             "workouts_duracion_total_min": dia.workouts_duracion_total if hubo_sesion else None,
             "workouts_fc_promedio": dia.workouts_fc_promedio,
             "workouts_fc_maxima": dia.workouts_fc_maxima,
-            "puntos_dia": dia.puntos_dia,
+            "puntos_dia": 0 if anulado else dia.puntos_dia,
         },
     )

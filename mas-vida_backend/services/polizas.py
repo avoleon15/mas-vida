@@ -22,6 +22,7 @@ from datetime import date
 from django.db import transaction
 from django.utils import timezone
 
+from Apps.activities.models import ResumenDiario
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger
 
@@ -169,4 +170,7 @@ def denegar_retroactivo(usuario, corte: date) -> int:
             version_regla=ultima.version_regla,
         )
         anulados += 1
+
+    # El resumen del dashboard debe decir lo mismo que el ledger.
+    ResumenDiario.objects.filter(usuario=usuario, fecha__lt=corte).update(puntos_dia=0)
     return anulados
