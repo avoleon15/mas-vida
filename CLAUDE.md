@@ -851,7 +851,9 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 - **Tres objetivos por semana**, retos que **bajan** de nivel, reinicio
   mensual, "metas mensuales".
 - Monedas que caducan a 6 meses; tope de 100 monedas **por semana**.
-- Lista blanca de fuentes; "gana la fuente con más pasos" entre todas.
+- Lista blanca de fuentes; "gana la fuente con más pasos **del día**" entre
+  todas. (No confundir con la regla vigente: los pasos se deciden **por hora**
+  y las horas se suman; ver "Elección de fuente".)
 - Ventana de datos rezagados de 3 o 6 días.
 - Liga de desconocidos **trimestral**, por zona, u opt-in.
 - Término "medallas" (ahora son monedas).

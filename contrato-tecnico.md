@@ -4,6 +4,10 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 1 oct 2026** (cierre de huecos): se documentan
+`GET /api/v1/historial`, el campo `monedas_al_cumplir` de `retos/estado` y qué
+hace el servidor con datos mal formados o imposibles en `sync`.
+
 **Actualizado el 1 oct 2026** (fuentes, workouts y póliza): la elección de
 fuente pasa de "gana el reloj" a **una decisión por hora** para los pasos; un
 workout **necesita ritmo cardíaco** (sin reloj no hay workout, y los workouts
@@ -391,6 +395,32 @@ Swift decide **por el código de estado**, nunca por el texto:
 Las filas de `400`, `403`, `408`, `429` y `5xx` describen lo que Swift hace hoy; la
 de `401` es nueva.
 
+#### Qué hace el servidor con datos raros
+
+Hay dos niveles, y no se confunden:
+
+| Caso | Respuesta |
+|---|---|
+| **Mal formado** — falta un campo obligatorio de la raíz (`fecha`, `zona_horaria`, `sincronizado_en`, `app_version`), una muestra no trae un campo requerido (por ejemplo `external_id`), un tipo es incorrecto, `zona_horaria` no es una zona IANA válida, `fecha` es más de un día en el futuro, o un número que no puede ser negativo lo es (`cantidad`, `bpm`, `duracion_min`, `fc_promedio`, `fc_maxima`) | `400` con el detalle por campo, por ejemplo `{ "pasos[0]": { "external_id": ["Este campo es requerido."] } }` o `{ "fecha": ["La fecha no puede ser futura."] }`. **Todo el sync se rechaza.** |
+| **Físicamente imposible** — esa muestra se descarta y el resto se acepta | `200`. No hay forma de saber desde el cliente qué se descartó (se cuenta en el log del servidor) |
+
+Una muestra se descarta, sin tumbar el sync, si:
+
+- **pasos:** `cantidad` mayor que 30.000 en una sola muestra (30.000 exactos sí entra), o `fin` anterior a `inicio`;
+- **ritmo cardíaco:** `bpm` menor que 30 o mayor que 230, o `fin` anterior a `inicio`;
+- **sesión:** duración de 0 min o de más de 24 h, `fc_promedio` o `fc_maxima` fuera de 30 a 230, `fc_maxima` menor que `fc_promedio`, o `fin` anterior a `inicio`. Una sesión con `fc_promedio` y `fc_maxima` en `0` se descarta por la regla de "Qué cuenta como workout" y se cuenta aparte en el log.
+
+Ojo con la frontera: un valor **negativo** es un dato mal formado (rechaza todo
+el sync con `400`); un valor positivo pero absurdo (31.000 pasos en una muestra)
+solo se descarta.
+
+Las cifras vienen de lo que ya impone la base de datos (en PostgreSQL una
+restricción rota tumba todo el `INSERT`, y en SQLite se ignora en silencio),
+por eso se aplican antes: el resultado no depende del motor.
+
+Si el servidor no tiene ninguna versión de reglas cargada responde `500`, y
+Swift reintenta los `5xx` (ver "Puntos abiertos").
+
 ---
 
 ## Mecánica de objetivos semanales (fuera del payload de sync)
@@ -487,6 +517,7 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
   "objetivo": {
     "meta_pasos": 30000,
     "meta_workouts": 1,
+    "monedas_al_cumplir": 20,
     "fecha_inicio": "2026-09-21",
     "fecha_fin": "2026-09-27"
   },
@@ -499,6 +530,11 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
   "historial_seasons": []
 }
 ```
+
+`objetivo.monedas_al_cumplir` es cuántas monedas paga cumplir el objetivo de esa
+semana. **[PENDIENTE]** el 20 de hoy es un valor provisional del backend:
+ningún documento lo fija todavía. Las monedas respetan el tope de 100 acumuladas
+y caducan a los 90 días (ver `CLAUDE.md`); lo que excede el tope se pierde.
 
 El `objetivo` es **el mismo para todos los usuarios** esa semana; `progreso`
 es del usuario que pregunta. `historial_seasons` viene vacío en el demo (no
@@ -785,6 +821,46 @@ que existen, sin rellenar huecos con ceros. Qué fechas calcula Daniel
 para "semanal" y "mensual" (decidido: lunes–domingo alineado al objetivo
 semanal, mes calendario alineado a La Liga) es una decisión de UI — vive en
 el dominio de pantallas, no acá.
+
+---
+
+## Historial de puntos — `GET /api/v1/historial`
+
+Los puntos acreditados día por día. Pide `Authorization: Token <clave>`; el
+usuario sale del token.
+
+| Parámetro | Tipo | Notas |
+|---|---|---|
+| `fecha_desde` | `YYYY-MM-DD`, opcional | incluida |
+| `fecha_hasta` | `YYYY-MM-DD`, opcional | incluida |
+
+```json
+{
+  "historial": [
+    {
+      "fecha": "2026-09-30",
+      "puntos_pasos": 50,
+      "puntos_intensidad": 100,
+      "puntos_brutos": 150,
+      "puntos_dia": 150,
+      "tope_diario_aplicado": false,
+      "version_regla": 1
+    }
+  ]
+}
+```
+
+- Los días vienen del más nuevo al más viejo, y solo los que tienen movimientos.
+- `puntos_dia` es **lo que de verdad se acreditó**: la suma de todas las filas
+  del día en el ledger, incluidos los ajustes por datos tardíos. Nunca pasa de
+  200 por el tope diario.
+- Un día **anulado por retroactivo denegado** (ver "Póliza vinculada") aparece
+  con `puntos_dia` en `0`, pero con `puntos_pasos` y `puntos_intensidad` del
+  cálculo original, para que se vea que hubo actividad.
+- `puntos_brutos` es `puntos_pasos + puntos_intensidad` antes del tope; no es
+  lo acreditado.
+- Errores: `400` si una fecha no tiene formato `YYYY-MM-DD` o si `fecha_desde`
+  es mayor que `fecha_hasta`; `401` sin token; `403` si la cuenta no tiene perfil.
 
 ---
 
