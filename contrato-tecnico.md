@@ -870,8 +870,7 @@ verificación" son el mismo momento.
   dispositivo que más puntos da — ver "Elección de fuente". Nunca se suman.**
   La decisión se re-evalúa en cada sync de esa fecha, no solo la primera vez
   (los relojes de terceros pueden sincronizar a Health con retraso).
-- **Tipo de dispositivo (nuevo, confirmado 20 sep 2026) — usarlo en vez de
-  `fuente_nombre` para la precedencia de arriba:** tres columnas nullable
+- **Datos del dispositivo (confirmado 20 sep 2026):** tres columnas nullable
   nuevas en `Muestra`, `MuestraBPM` y `Sesion` (`dispositivo_nombre`,
   `dispositivo_modelo`, `dispositivo_fabricante`), más una función de
   derivación de `tipo_dispositivo` (`telefono`/`reloj`/`anillo`/`desconocido`)
@@ -1075,10 +1074,12 @@ verificación" son el mismo momento.
   más adelante.
 - **Días vacíos:** emparejar los tres caminos de envío frente a un día sin
   actividad (ver "Días sin actividad").
-- **Tipo de dispositivo:** Alvaro confirmó su parte (Swift) el 20 sep; falta
-  que Luis confirme la regla `desconocido → telefono` y agregue las tres
-  columnas + la función de derivación antes de dar esto por cerrado. Ver
-  "Puntos abiertos" en `decision-tipo-dispositivo.md`.
+- **Tipo de dispositivo:** las tres columnas y la función de derivación ya
+  existen en el backend, pero desde el 1 oct el puntaje no las usa (ver
+  "Elección de fuente"). Queda decidir si `tipo_dispositivo` se guarda o se
+  deriva al vuelo para los reportes de la aseguradora. La regla
+  `desconocido → telefono` ya no afecta ningún puntaje. Ver "Puntos abiertos"
+  en `decision-tipo-dispositivo.md`.
 - **Metas hardcodeadas del objetivo semanal (demo 1):** cuántos pasos y
   cuántos workouts, y si un workout debe ser "intenso" por FC o basta con que
   exista la sesión.
