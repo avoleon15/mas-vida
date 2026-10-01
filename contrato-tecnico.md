@@ -1046,11 +1046,11 @@ verificación" son el mismo momento.
   puntos anteriores. Falta decidir si la respuesta lleva un campo (por ejemplo
   `retroactivo: "aplicado" | "denegado"`) para que la app lo explique con tono
   cálido, o si el usuario lo descubre en el historial.
-- **Anillos (Oura):** miden ritmo cardíaco pero no registran workouts ni pasos
-  de forma comparable. Con la regla de "un workout necesita ritmo cardíaco",
-  falta decidir si un tramo de ritmo alto de un anillo se infiere como workout
-  (hoy el backend infiere sesiones desde `frecuencia_cardiaca[]` si no hay
-  workout, para todos los dispositivos).
+- **Anillos (Oura):** falta verificar con un anillo real qué escribe a Apple
+  Salud (pasos, ritmo cardíaco, workouts). Mientras tanto un anillo se trata
+  como cualquier otro dispositivo en la elección de fuente. Hoy el backend,
+  además, infiere sesiones intensas desde `frecuencia_cardiaca[]` cuando no hay
+  un workout que las cubra, para todos los dispositivos.
 - **`VersionRegla` inicial:** sin una versión de reglas cargada, `sync` responde
   `500` y Swift reintenta los `5xx`. Hace falta cargar la versión 1 al
   desplegar (comando o fixture), no depender de que alguien la cree a mano.
