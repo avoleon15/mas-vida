@@ -13,8 +13,8 @@ histórico sin dejar rastro. Se cuenta desde la verificación y no desde la
 vinculación porque los días intermedios también se calcularon con una edad
 sin confirmar, que es justo lo que esta regla evita reprocesar.
 
-[PENDIENTE] Cuando exista MonedaLedger, denegar el retroactivo también debe
-anular las monedas ganadas antes del corte.
+Las monedas ganadas antes del corte también se anulan (ver
+services.monedas.anular_ganadas_antes_de).
 """
 from collections import defaultdict
 from datetime import date
@@ -25,6 +25,7 @@ from django.utils import timezone
 from Apps.activities.models import ResumenDiario
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger
+from services import monedas
 
 PENDIENTE = "pendiente"
 VERIFICADA = "verificada"
@@ -170,6 +171,9 @@ def denegar_retroactivo(usuario, corte: date) -> int:
             version_regla=ultima.version_regla,
         )
         anulados += 1
+
+    # Las monedas ganadas antes del corte tampoco cuentan.
+    monedas.anular_ganadas_antes_de(usuario, corte)
 
     # El resumen del dashboard debe decir lo mismo que el ledger.
     ResumenDiario.objects.filter(usuario=usuario, fecha__lt=corte).update(puntos_dia=0)

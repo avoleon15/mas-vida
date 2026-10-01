@@ -12,7 +12,7 @@ from Apps.policies.admin import PolizaVinculadaAdmin
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.users.models import Usuario
-from services import polizas
+from services import monedas, polizas
 
 NACIMIENTO = date(1990, 1, 1)
 VINCULAR = "/api/v1/poliza/vincular"
@@ -191,6 +191,25 @@ class PolizaTests(APITestCase):
         confirmada = date(self.hoy.year - 60, 1, 1)
         polizas.verificar(self._vincular_y_confirmar(confirmada))
         self.assertEqual(self._sync(self.hoy, 10000)["puntos_pasos"], 75)
+
+    def test_denegar_el_retroactivo_tambien_anula_las_monedas_previas(self):
+        monedas.acreditar(
+            self.usuario, 20, "objetivo_cumplido", fecha=self.hoy - timedelta(days=3)
+        )
+        polizas.verificar(self._vincular_y_confirmar(date(1991, 1, 1)))
+        self.assertEqual(monedas.saldo(self.usuario, self.hoy), 0)
+
+    def test_las_monedas_ganadas_despues_de_verificar_se_conservan(self):
+        polizas.verificar(self._vincular_y_confirmar(date(1991, 1, 1)))
+        monedas.acreditar(self.usuario, 20, "objetivo_cumplido", fecha=self.hoy)
+        self.assertEqual(monedas.saldo(self.usuario, self.hoy), 20)
+
+    def test_si_la_fecha_coincide_las_monedas_previas_se_conservan(self):
+        monedas.acreditar(
+            self.usuario, 20, "objetivo_cumplido", fecha=self.hoy - timedelta(days=3)
+        )
+        polizas.verificar(self._vincular_y_confirmar(NACIMIENTO))
+        self.assertEqual(monedas.saldo(self.usuario, self.hoy), 20)
 
     def test_el_historial_muestra_los_dias_anulados_en_cero(self):
         self._historia()

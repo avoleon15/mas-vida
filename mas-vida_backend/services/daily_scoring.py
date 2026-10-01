@@ -28,7 +28,7 @@ from django.utils import timezone
 
 from Apps.activities.models import Muestra, MuestraBPM, ResumenDiario, Sesion
 from Apps.policies.models import PolizaVinculada
-from Apps.poincs.models import Ledger, VersionRegla
+from Apps.poincs.models import Ledger
 from services.device import (
     agrupar_por_dispositivo,
     clave_dispositivo,
@@ -40,6 +40,7 @@ from services.hearth_rate import (
     calculate_intensity_from_heart_rate,
 )
 from services.niveles import TOPE_ANUAL, nivel_para
+from services.reglas import SinVersionRegla, version_regla_vigente  # noqa: F401  (SinVersionRegla lo captura la vista)
 from services.points import apply_daily_points_limit, calculate_daily_step_points
 from services.polizas import TIPOS_DEL_DIA, fecha_corte_sin_retroactivo
 
@@ -49,10 +50,6 @@ TOPE_DIARIO = 200
 # Sin umbral confirmado (reglas de puntaje, sección 9): un día por encima de
 # esto se acredita igual y solo se deja en el log para revisión.
 PASOS_DIA_ATIPICO = 60_000
-
-
-class SinVersionRegla(Exception):
-    pass
 
 
 @dataclass
@@ -182,18 +179,6 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         ),
         workouts_fc_maxima=max((s["fc_maxima"] for s in sesiones), default=None),
     )
-
-
-def version_regla_vigente(fecha: date) -> VersionRegla:
-    version = (
-        VersionRegla.objects
-        .filter(vigente_desde__lte=fecha)
-        .order_by("-vigente_desde")
-        .first()
-    )
-    if version is None:
-        raise SinVersionRegla(f"No hay versión de regla vigente al {fecha}")
-    return version
 
 
 def _suma(queryset) -> int:
