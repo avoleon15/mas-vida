@@ -44,6 +44,13 @@ class HistorialTests(APITestCase):
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, 401)
 
+    def test_una_cuenta_sin_perfil_de_usuario_da_403(self):
+        # Cuenta que existe y tiene token pero no tiene fila en Usuario (p. ej. un admin).
+        sin_perfil = User.objects.create_user(username="admin2", password="clave-segura-2")
+        token = Token.objects.get(user=sin_perfil)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
     def test_devuelve_los_dias_del_mas_nuevo_al_mas_viejo(self):
         self._ledger(date(2026, 9, 20), 50, 0)
         self._ledger(date(2026, 9, 21), 100, 150, tope=True)

@@ -48,9 +48,10 @@ def historial(request):
     try:
          usuario = Usuario.objects.get(user=request.user)
     except Usuario.DoesNotExist:
+         # Contrato: una cuenta sin perfil da 403 en todos los endpoints.
          return Response(
-              {"mensaje": "El usuario no existe"},
-              status=status.HTTP_404_NOT_FOUND
+              {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+              status=status.HTTP_403_FORBIDDEN
          )
 
     # Un día puede tener varias filas (pasos, intensidad y, si un dato llegó
