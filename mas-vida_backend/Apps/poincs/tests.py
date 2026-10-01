@@ -23,22 +23,33 @@ class HistorialTests(APITestCase):
         token = Token.objects.get(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
-    def _ledger(self, fecha, pasos, intensidad, tope=False):
-        return Ledger.objects.create(
-            usuario=self.usuario,
+    def _ledger(self, fecha, pasos, intensidad, tope=False, usuario=None):
+        """Escribe un día como lo hace el sync: una fila de pasos y una de intensidad."""
+        usuario = usuario or self.usuario
+        columnas = dict(
+            usuario=usuario,
             fecha=fecha,
-            tipo="puntos_diarios",
-            puntos=min(pasos + intensidad, 200),
             puntos_pasos=pasos,
             puntos_intensidad=intensidad,
             tope_diario_aplicado=tope,
             version_regla=self.version,
+        )
+        Ledger.objects.create(tipo="pasos", puntos=pasos, **columnas)
+        Ledger.objects.create(
+            tipo="intensidad", puntos=min(intensidad, 200 - pasos), **columnas
         )
 
     def test_sin_token_da_401(self):
         self.client.credentials()
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, 401)
+
+    def test_una_cuenta_sin_perfil_de_usuario_da_403(self):
+        # Cuenta que existe y tiene token pero no tiene fila en Usuario (p. ej. un admin).
+        sin_perfil = User.objects.create_user(username="admin2", password="clave-segura-2")
+        token = Token.objects.get(user=sin_perfil)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.assertEqual(self.client.get(self.url).status_code, 403)
 
     def test_devuelve_los_dias_del_mas_nuevo_al_mas_viejo(self):
         self._ledger(date(2026, 9, 20), 50, 0)
@@ -83,10 +94,7 @@ class HistorialTests(APITestCase):
             usuario_id="beto-1",
             birth_date=date(1990, 1, 1),
         )
-        Ledger.objects.create(
-            usuario=otro_usuario, fecha=date(2026, 9, 21), tipo="puntos_diarios",
-            puntos=50, puntos_pasos=50, puntos_intensidad=0, version_regla=self.version,
-        )
+        self._ledger(date(2026, 9, 21), 50, 0, usuario=otro_usuario)
 
         respuesta = self.client.get(self.url)
 

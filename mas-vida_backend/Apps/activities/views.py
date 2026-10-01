@@ -1,177 +1,191 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
+
 from django.db import transaction
-from django.db.utils import DataError, IntegrityError
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from services.hearth_rate import (calculate_age, calculate_intensity_from_heart_rate,)
-from .models import Muestra, MuestraBPM, Sesion
-from Apps.users.models import Usuario
-from services.points import (apply_daily_points_limit, calculate_daily_step_points,)
-from Apps.poincs.models import Ledger, VersionRegla
 
+from Apps.users.models import Usuario
+from services import daily_scoring
+
+from .models import Muestra, MuestraBPM, ResumenDiario, Sesion
+from .serializers import SyncSerializer
 
 logger = logging.getLogger(__name__)
+
+# Contrato técnico: un dato más viejo que esto se rechaza. Es la misma cifra
+# que la cola de reintentos del cliente.
+VENTANA_DIAS = 14
+
+CAMPOS_DISPOSITIVO = (
+    "fuente_bundle",
+    "fuente_nombre",
+    "fuente_version",
+    "dispositivo_nombre",
+    "dispositivo_modelo",
+    "dispositivo_fabricante",
+)
+
+
+def _modelos(clase, usuario, items, campos):
+    return [
+        clase(usuario=usuario, **{campo: item[campo] for campo in campos})
+        for item in items
+    ]
 
 
 @api_view(["POST"])
 def sync(request):
-    payload = request.data
-    logger.debug("Payload recibido: %s", payload)
-
-
     try:
         usuario = request.user.usuario
     except Usuario.DoesNotExist:
         return Response(
             {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
             status=status.HTTP_403_FORBIDDEN,
+        )
+
+    serializer = SyncSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    datos = serializer.validated_data
+    fecha = datos["fecha"]
+
+    hoy = timezone.localdate()
+    if fecha < hoy - timedelta(days=VENTANA_DIAS):
+        return Response(
+            {"error": "fuera_de_ventana", "fecha": fecha.isoformat()},
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    if fecha > hoy + timedelta(days=1):
+        return Response(
+            {"fecha": ["La fecha no puede ser futura."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    logger.info(
+        "Sync: usuario=%s fecha=%s pasos=%d sesiones=%d bpm=%d descartadas=%s",
+        usuario.pk, fecha, len(datos["pasos"]), len(datos["sesiones"]),
+        len(datos["frecuencia_cardiaca"]), datos["descartadas"],
     )
 
-    try:
-        fecha_puntuacion = date.fromisoformat(payload["fecha"])
-
-        edad = calculate_age(
-            usuario.birth_date,
-            fecha_puntuacion,
-        )
-    except (KeyError, TypeError, ValueError):
-        return Response(
-            {'mensaje': 'Fecha inválida en payload'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    pasos = payload.get("pasos", [])
-    sesiones = payload.get("sesiones", [])
-    frecuencia_cardiaca = payload.get("frecuencia_cardiaca", [])
-
-    try:
-        nuevos_pasos = [
-            Muestra(
-                usuario=usuario,
-                external_id=m["external_id"],
-                inicio=m["inicio"],
-                fin=m["fin"],
-                cantidad=m["cantidad"],
-                fuente_bundle=m["fuente_bundle"],
-                fuente_nombre=m["fuente_nombre"],
-                fuente_version=m.get("fuente_version"),
-            )
-            for m in pasos
-        ]
-
-        nuevas_sesiones = [
-            Sesion(
-                usuario=usuario,
-                external_id=s["external_id"],
-                inicio=s["inicio"],
-                fin=s["fin"],
-                duracion_min=s["duracion_min"],
-                tipo_actividad=s["tipo_actividad"],
-                fc_promedio=s["fc_promedio"],
-                fc_maxima=s["fc_maxima"],
-                fuente_bundle=s["fuente_bundle"],
-                fuente_nombre=s["fuente_nombre"],
-            )
-            for s in sesiones
-        ]
-
-        nuevas_muestras_bpm = [
-            MuestraBPM(
-                usuario=usuario,
-                external_id=f["external_id"],
-                inicio=f["inicio"],
-                fin=f["fin"],
-                bpm=f["bpm"],
-                fuente_bundle=f["fuente_bundle"],
-                fuente_nombre=f["fuente_nombre"],
-            )
-            for f in frecuencia_cardiaca
-        ]
-    except KeyError as e:
-        return Response(
-            {'mensaje': f'Campo faltante en payload: {e.args[0]}'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
+    base = ("external_id", "inicio", "fin", *CAMPOS_DISPOSITIVO)
     try:
         with transaction.atomic():
-            if nuevos_pasos:
-                Muestra.objects.bulk_create(
-                    nuevos_pasos,
-                    ignore_conflicts=True,
-                )
+            # Serializa los syncs del mismo usuario: dos POST del mismo día
+            # (reintento + sync manual) no pueden asentar el ledger a la vez.
+            Usuario.objects.select_for_update().get(pk=usuario.pk)
 
-            if nuevas_sesiones:
-                Sesion.objects.bulk_create(
-                    nuevas_sesiones,
-                    ignore_conflicts=True,
-                )
+            Muestra.objects.bulk_create(
+                _modelos(Muestra, usuario, datos["pasos"], (*base, "cantidad")),
+                ignore_conflicts=True,
+            )
+            Sesion.objects.bulk_create(
+                _modelos(
+                    Sesion, usuario, datos["sesiones"],
+                    (*base, "duracion_min", "tipo_actividad", "fc_promedio", "fc_maxima"),
+                ),
+                ignore_conflicts=True,
+            )
+            MuestraBPM.objects.bulk_create(
+                _modelos(
+                    MuestraBPM, usuario, datos["frecuencia_cardiaca"], (*base, "bpm")
+                ),
+                ignore_conflicts=True,
+            )
 
-            if nuevas_muestras_bpm:
-                MuestraBPM.objects.bulk_create(
-                    nuevas_muestras_bpm,
-                    ignore_conflicts=True,
-                )
-    except (DataError, IntegrityError):
+            dia = daily_scoring.calcular_dia(usuario, fecha)
+            anual = daily_scoring.asentar(usuario, dia)
+            daily_scoring.guardar_resumen(usuario, dia)
+    except daily_scoring.SinVersionRegla:
+        logger.error("Sync sin VersionRegla vigente: fecha=%s", fecha)
         return Response(
-            {"mensaje": "Datos inválidos en el payload"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"mensaje": "El servidor no tiene una versión de reglas configurada."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    pasos_totales_dia = sum(m["cantidad"] for m in pasos)
-    puntos_pasos = calculate_daily_step_points(
-        pasos_totales_dia,
-        edad,
-    )
-
-    puntos_intensidad = calculate_intensity_from_heart_rate(
-        frecuencia_cardiaca,
-        sesiones,
-        edad,
-    )
-
-    puntos_brutos = puntos_pasos + puntos_intensidad
-    puntos_dia = apply_daily_points_limit(puntos_brutos)
-    tope_diario_aplicado = puntos_brutos > puntos_dia
-
-    version_regla = (
-        VersionRegla.objects
-        .filter(vigente_desde__lte=fecha_puntuacion)
-        .order_by("-vigente_desde")
-        .first()
-    )
-
-    if version_regla is None:
-        return Response(
-            {"mensaje": "No existe una versión de regla vigente"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    Ledger.objects.update_or_create(
-        usuario=usuario,
-        fecha=fecha_puntuacion,
-        tipo="puntos_diarios",
-        defaults={
-            "puntos": puntos_dia,
-            "puntos_pasos": puntos_pasos,
-            "puntos_intensidad": puntos_intensidad,
-            "tope_diario_aplicado": tope_diario_aplicado,
-            "version_regla": version_regla,
-        },
-    )
     return Response(
         {
-            "fecha": fecha_puntuacion.isoformat(),
-            "puntos_pasos": puntos_pasos,
-            "puntos_intensidad": puntos_intensidad,
-            "puntos_dia": puntos_dia,
-            "tope_diario_aplicado": tope_diario_aplicado,
-            "puntos_ano": 0,
-            "tope_anual_aplicado": False,
-            "nivel": 0,
-            "pasos_totales_dia": pasos_totales_dia,
+            "fecha": fecha.isoformat(),
+            "puntos_pasos": dia.puntos_pasos,
+            "puntos_intensidad": dia.puntos_intensidad,
+            "puntos_dia": dia.puntos_dia,
+            "tope_diario_aplicado": dia.tope_diario_aplicado,
+            "puntos_ano": anual.puntos_ano,
+            "tope_anual_aplicado": anual.tope_anual_aplicado,
+            "nivel": anual.nivel,
+            "pasos_totales_dia": dia.pasos_totales,
         },
         status=status.HTTP_200_OK,
     )
+
+
+# Un año completo (con bisiesto) es lo más que pide la vista Año de Progreso.
+MAX_DIAS_RESUMEN = 366
+
+
+def _fecha_param(request, nombre):
+    crudo = request.query_params.get(nombre)
+    if not crudo:
+        raise ValueError(f"Falta el parámetro {nombre}.")
+    try:
+        return date.fromisoformat(crudo)
+    except ValueError:
+        raise ValueError(f"{nombre} debe tener formato AAAA-MM-DD.")
+
+
+@api_view(["GET"])
+def resumen_dashboard(request):
+    """Filas de resumen diario del usuario en [desde, hasta].
+
+    Solo devuelve los días que existen; rellenar los huecos con ceros es
+    decisión de la pantalla. `workouts_dia` es null si no hubo sesión (no 0,
+    para no confundir "sin actividad intensa" con "FC de cero").
+    """
+    try:
+        usuario = request.user.usuario
+    except Usuario.DoesNotExist:
+        return Response(
+            {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        desde = _fecha_param(request, "desde")
+        hasta = _fecha_param(request, "hasta")
+    except ValueError as error:
+        return Response({"mensaje": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if desde > hasta:
+        return Response(
+            {"mensaje": "desde no puede ser mayor a hasta."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if (hasta - desde).days >= MAX_DIAS_RESUMEN:
+        return Response(
+            {"mensaje": f"El rango no puede pasar de {MAX_DIAS_RESUMEN} días."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    filas = ResumenDiario.objects.filter(
+        usuario=usuario, fecha__gte=desde, fecha__lte=hasta
+    ).order_by("fecha")
+
+    return Response([
+        {
+            "fecha": fila.fecha.isoformat(),
+            "pasos_totales_dia": fila.pasos_totales_dia,
+            "workouts_dia": (
+                None
+                if fila.workouts_cantidad is None
+                else {
+                    "cantidad": fila.workouts_cantidad,
+                    "duracion_total_min": fila.workouts_duracion_total_min,
+                    "fc_promedio": fila.workouts_fc_promedio,
+                    "fc_maxima": fila.workouts_fc_maxima,
+                }
+            ),
+            "puntos_dia": fila.puntos_dia,
+        }
+        for fila in filas
+    ])

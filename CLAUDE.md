@@ -139,8 +139,9 @@ edad, son del modelo viejo y hay que migrarlos.
 - 15,000+ = 100 pts
 
 Los pasos por encima de 15,000 NO dan puntos adicionales. Cuentan tanto los del
-teléfono como los de un reloj vinculado, pero la deduplicación y la precedencia
-entre fuentes se resuelven ANTES de aplicar la tabla — nunca se suman crudo.
+teléfono como los de un reloj vinculado, pero la deduplicación y la elección
+de fuente (por hora) se resuelven ANTES de aplicar la tabla — nunca se suma
+crudo el mismo caminar de dos dispositivos.
 
 Los umbrales de pasos son **iguales para todas las edades**. Ya no existe una
 tabla de pasos separada para adultos mayores: el ajuste por edad vive ahora en
@@ -180,7 +181,8 @@ Notas sobre la edad:
   de inmediato para la FCmáx, aunque todavía no haya póliza. Cuando el usuario
   vincula su póliza, la aseguradora la confirma. Si **coincide**, todo lo
   ganado en la cuenta base (puntos y monedas) se acredita. Si **no
-  coincide**, no hay retroactividad: arranca en cero desde la vinculación.
+  coincide**, no hay retroactividad: arranca en cero desde la verificación
+  (que ocurre al vincular la póliza).
 - El bonus 60+ y la FCmáx REQUIEREN validación médica/actuarial antes de salir
   a piloto. No son definitivos.
 - En la UI, cualquier mención al ajuste por edad debe tener tono cálido, nunca
@@ -240,12 +242,18 @@ como motivación.
 - **No hay lista blanca de marcas.** Todas las apps de terceros (Garmin,
   Whoop, Zepp, Fitbit…) tienen el mismo nivel de confianza. Una fuente
   desconocida nunca se excluye: se trata como teléfono.
-- **Precedencia:** si hay un reloj con datos ese día, **gana el reloj** (pasos
-  e intensidad) y el teléfono se descarta. Sin reloj, gana el teléfono. Dos
-  relojes: el de más pasos. **Nunca se suman fuentes.**
-- "¿Es reloj?" se decide con `tipo_dispositivo`, derivado en el servidor —
-  nunca con `fuente_nombre`.
-- La precedencia se **re-evalúa en cada sync** de esa fecha: los relojes de
+- **Elección de fuente (1 oct 2026):** los **pasos** se deciden **por hora**
+  (en cada hora gana el dispositivo con más pasos; las horas se suman), así
+  que un reloj usado solo para dormir o solo en el gym no deja en cero al
+  teléfono. Los **workouts** que dos dispositivos registran a la vez cuentan
+  una vez; los que no se cruzan cuentan todos. La **intensidad** la da el
+  dispositivo con más puntos. **Nunca se suma la misma actividad dos veces.**
+- **Un workout necesita ritmo cardíaco** (un reloj): con solo el teléfono no
+  hay workouts. Los workouts ingresados a mano no cuentan (son fáciles de
+  inventar).
+- Ya no se usa `tipo_dispositivo` para el puntaje; los dispositivos se
+  comparan por `fuente_bundle` + `dispositivo_modelo` + `dispositivo_fabricante`.
+- El día se **recalcula completo en cada sync** de esa fecha: los relojes de
   terceros necesitan internet para escribir a Apple Health y pueden llegar
   tarde.
 - **Ventana de datos rezagados: 14 días.** Más viejo → `422`

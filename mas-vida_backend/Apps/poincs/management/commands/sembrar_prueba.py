@@ -68,6 +68,7 @@ class Command(BaseCommand):
                 "policy_number": "POL-PRUEBA-001",
                 "insurer": "Aseguradora de prueba",
                 "policy_start_date": date(2026, 1, 1),
+                "birth_date_confirmada": date(1995, 5, 10),
                 "estado_verificacion": "verificada",
             },
         )
@@ -76,17 +77,20 @@ class Command(BaseCommand):
         for i, (pasos, intensidad) in enumerate(DIAS):
             fecha = hoy - timedelta(days=len(DIAS) - 1 - i)
             brutos = pasos + intensidad
+            # Mismo formato que escribe el sync: pasos primero, lo que sobra a intensidad.
+            columnas = {
+                "puntos_pasos": pasos,
+                "puntos_intensidad": intensidad,
+                "tope_diario_aplicado": brutos > TOPE_DIARIO,
+                "version_regla": version,
+            }
             Ledger.objects.update_or_create(
-                usuario=usuario,
-                fecha=fecha,
-                tipo="puntos_diarios",
-                defaults={
-                    "puntos": min(brutos, TOPE_DIARIO),
-                    "puntos_pasos": pasos,
-                    "puntos_intensidad": intensidad,
-                    "tope_diario_aplicado": brutos > TOPE_DIARIO,
-                    "version_regla": version,
-                },
+                usuario=usuario, fecha=fecha, tipo="pasos",
+                defaults={"puntos": pasos, **columnas},
+            )
+            Ledger.objects.update_or_create(
+                usuario=usuario, fecha=fecha, tipo="intensidad",
+                defaults={"puntos": min(brutos, TOPE_DIARIO) - pasos, **columnas},
             )
 
         self.stdout.write(self.style.SUCCESS(

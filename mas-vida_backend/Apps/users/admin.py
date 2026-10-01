@@ -16,8 +16,15 @@ class PolizaVinculadaInline(admin.StackedInline):
     # (cuenta base).
     max_num = 1
     extra = 0
-    # fecha_vinculacion es automática (auto_now_add): se muestra pero no se edita.
-    readonly_fields = ("fecha_vinculacion",)
+    # El estado NO se edita a mano, ni siquiera desde acá: cambiarlo directo se
+    # saltaría los efectos de verificar (retroactividad). Se cambia solo con las
+    # acciones de la pantalla de Pólizas. fecha_vinculacion es automática.
+    readonly_fields = (
+        "estado_verificacion",
+        "motivo_rechazo",
+        "fecha_vinculacion",
+        "fecha_verificacion",
+    )
 
 
 @admin.register(Usuario)
