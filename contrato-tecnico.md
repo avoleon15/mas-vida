@@ -521,13 +521,44 @@ cumpla cada uno.
   2 oct 2026). La edad sale de la fecha de nacimiento **confirmada por la
   aseguradora** si hay póliza verificada; si no, de la del registro (la misma
   regla que usan los puntos). La meta de workouts es igual para todos.
-  **[PENDIENTE]** la tabla de metas por rango: falta investigar los promedios de
-  pasos por edad. Los estudios dan promedios **diarios**; la meta semanal se
-  calcula a partir de ellos.
+  **Tabla provisional** (2 oct 2026), ver "Meta de pasos por edad" abajo.
 - **No se sube ni se congela objetivo** en el demo. La sección "Diseño
   completo" de abajo **se mantiene como diseño**.
 - Los valores (metas y monedas) viven en una tabla del backend, editable a
   mano — sin cálculo.
+
+### Meta de pasos por edad — tabla provisional (2 oct 2026)
+
+| Edad | Pasos al día | Meta semanal de pasos |
+|---|---|---|
+| 18 a 29 | 7.000 | 49.000 |
+| 30 a 39 | 7.000 | 49.000 |
+| 40 a 49 | 6.500 | 45.000 |
+| 50 a 59 | 6.000 | 42.000 |
+| 60 a 69 | 5.000 | 35.000 |
+| 70 o más | 4.500 | 31.000 |
+
+**De dónde sale.** Queda entre lo que la gente camina medido con el teléfono y
+lo que recomienda la evidencia de salud:
+
+- Medido con teléfono o podómetro, un adulto camina unos **5.000 pasos al día**:
+  4.961 en promedio con iPhone en 111 países y 4.692 en México (Althoff et al.,
+  *Nature* 2017); entre 5.843 (18 a 29 años) y 4.027 (60 o más) con podómetro en
+  EE. UU. (Bassett et al., 2010). Un acelerómetro en la cintura cuenta casi el
+  doble (10.700 en ocho países de Latinoamérica, estudio ELANS 2021), porque el
+  teléfono no siempre va encima. +Vida mide con iPhone y, a veces, reloj: la
+  referencia que aplica es la del teléfono.
+- El beneficio en mortalidad se aplana en **6.000 a 8.000 pasos al día con 60
+  años o más** y en **8.000 a 10.000 con menos de 60** (Paluch et al., *Lancet
+  Public Health* 2022).
+- Arranca en 7.000 al día porque es el primer escalón de puntos diarios (25
+  puntos). No hay datos publicados de Guatemala.
+
+**Es provisional:** después de 2 a 4 semanas de piloto se ajusta con los pasos
+reales de los usuarios de cada rango, que miden exactamente como mide la app.
+La edad sale de la fecha confirmada por la aseguradora si hay póliza
+verificada; si no, de la del registro. **[PENDIENTE] (Luis):** el código usa hoy
+una sola meta de 30.000 para todos.
 
 ### Vista de semanas tipo "battle pass" (decidido 2 oct 2026)
 
@@ -1541,8 +1572,10 @@ verificación" son el mismo momento.
   deriva al vuelo para los reportes de la aseguradora. La regla
   `desconocido → telefono` ya no afecta ningún puntaje. Ver "Puntos abiertos"
   en `decision-tipo-dispositivo.md`.
-- **Metas del objetivo semanal:** la tabla de pasos por rango de edad (falta
-  investigar promedios de pasos por edad) y cuántos workouts. (Qué es un
+- **Metas del objetivo semanal:** la tabla de pasos por edad es provisional
+  (ver "Meta de pasos por edad"); falta ajustarla con 2 a 4 semanas de datos
+  del piloto. Falta decidir cuántos workouts y qué meta tiene un menor de 18
+  (la tabla empieza en 18). (Qué es un
   workout ya está decidido: cualquier entrenamiento con ritmo cardíaco, de
   cualquier duración.)
 - **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%

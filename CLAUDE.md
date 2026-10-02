@@ -217,8 +217,11 @@ hasta que ese documento se actualice.
   (Esto reemplaza la regla de que había que cumplir los dos para cobrar.)
 - **La meta de pasos depende del rango de edad**, de 10 en 10 años
   (decidido el 2 de octubre de 2026). La manda el servidor; la app nunca la
-  calcula. [PENDIENTE: la tabla de metas por edad — falta investigar los
-  promedios de pasos por edad.]
+  calcula. Tabla **provisional** (2 de octubre de 2026), en pasos por
+  semana: 18–29 y 30–39 → 49.000; 40–49 → 45.000; 50–59 → 42.000; 60–69 →
+  35.000; 70 o más → 31.000. Sale de promedios publicados y se ajusta con
+  datos del piloto (detalle y fuentes en el contrato, "Meta de pasos por
+  edad")
 - **Cuántas MONEDAS paga cada objetivo lo manda el servidor**, semana por
   semana. La app no tiene ninguna regla para calcularlo.
 - **Seasons de 13 semanas** que siguen las semanas ISO (la season 1 empieza
@@ -247,9 +250,9 @@ pero eso ya no cambia la semana cerrada — solo el historial y el acumulado anu
 leía como cuenta regresiva): se dice el avance sobre la meta ("48.000 de 70.000 pasos")
 y el plazo una sola vez, abajo.
 
-[PENDIENTE: la tabla de metas de cada semana (pasos por rango de edad y
-workouts) y lo que paga cada objetivo. La define Luis (L11) con la
-investigación de promedios — **no inventarla**.]
+[PENDIENTE: la meta de workouts, los montos definitivos de cada objetivo y el
+ajuste de la tabla de pasos con datos del piloto. Los define Luis (L11) —
+**no inventarlos**.]
 
 ## Racha
 
@@ -899,8 +902,8 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 ## Decisiones pendientes
 
 - El "twist propio" del proyecto
-- Tabla de metas de pasos del objetivo semanal por rango de edad (falta
-  investigar promedios) — Luis (L11)
+- Ajustar con datos del piloto la tabla provisional de metas de pasos por
+  edad, y definir la meta de workouts — Luis (L11)
 - Validación médica/actuarial del bonus 60+ y de FCmáx = 219 − edad
 - Datos por persona vs. solo agregados hacia la aseguradora
 - Plausibilidad fisiológica: descartar vs. marcar para revisión
