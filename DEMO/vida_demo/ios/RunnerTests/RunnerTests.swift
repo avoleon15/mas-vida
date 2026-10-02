@@ -602,66 +602,219 @@ final class SesionKeychainTests: XCTestCase {
   }
 }
 
-// MARK: - ReglasWorkout: qué workouts se mandan (1 oct 2026)
+// MARK: - Lo escrito a mano no cuenta (1 oct 2026)
+// Estas pruebas fabrican muestras REALES de HealthKit (HKQuantitySample,
+// HKWorkout) con y sin la marca de "manual", y comprueban lo que de verdad
+// se manda. Si alguien borra una regla, una de ellas falla.
 
-final class ReglasWorkoutTests: XCTestCase {
+private enum Fab {
+  static let inicio = Date(timeIntervalSince1970: 1_790_000_000)
+  static let manual: [String: Any] = [HKMetadataKeyWasUserEntered: true]
+  static let unidadRitmo = HKUnit.count().unitDivided(by: .minute())
 
-  // MARK: Un workout necesita ritmo cardíaco medido
+  static func paso(_ cantidad: Double, minuto: Int = 0, metadata: [String: Any]? = nil) -> HKQuantitySample {
+    let ini = inicio.addingTimeInterval(Double(minuto) * 60)
+    return HKQuantitySample(
+      type: HKQuantityType(.stepCount), quantity: HKQuantity(unit: .count(), doubleValue: cantidad),
+      start: ini, end: ini.addingTimeInterval(540), metadata: metadata)
+  }
 
+  static func latido(_ bpm: Double, segundo: Int, metadata: [String: Any]? = nil) -> HKQuantitySample {
+    let ini = inicio.addingTimeInterval(Double(segundo))
+    return HKQuantitySample(
+      type: HKQuantityType(.heartRate), quantity: HKQuantity(unit: unidadRitmo, doubleValue: bpm),
+      start: ini, end: ini.addingTimeInterval(5), metadata: metadata)
+  }
+
+  static func workout(minutos: Double = 45, tipo: HKWorkoutActivityType = .running,
+                      metadata: [String: Any]? = nil) -> HKWorkout {
+    HKWorkout(
+      activityType: tipo, start: inicio, end: inicio.addingTimeInterval(minutos * 60),
+      duration: minutos * 60, totalEnergyBurned: nil, totalDistance: nil, metadata: metadata)
+  }
+
+  static func entrada(_ w: HKWorkout, ritmo: [HKQuantitySample]) -> EntradaWorkout {
+    EntradaWorkout(w, tipoActividad: "running", ritmo: ritmo.map { EntradaRitmo($0) })
+  }
+}
+
+final class ReglasManualesTests: XCTestCase {
+  func testUnaLecturaEscritaAManoSeDetecta() {
+    XCTAssertTrue(ReglasManuales.esManual(metadata: [HKMetadataKeyWasUserEntered: true]))
+  }
+
+  func testUnaLecturaMedidaPorUnSensorNoEsManual() {
+    XCTAssertFalse(ReglasManuales.esManual(metadata: [HKMetadataKeyWasUserEntered: false]))
+  }
+
+  func testSinMetadataSeAsumeQueNoFueAMano() {
+    // Un reloj de terceros suele no escribir esa marca: no se le acusa de nada.
+    XCTAssertFalse(ReglasManuales.esManual(metadata: nil))
+    XCTAssertFalse(ReglasManuales.esManual(metadata: [:]))
+    XCTAssertFalse(ReglasManuales.esManual(metadata: ["otra_clave": true]))
+  }
+
+  func testUnaMarcaQueNoEsBooleanaNoCuentaComoManual() {
+    XCTAssertFalse(ReglasManuales.esManual(metadata: [HKMetadataKeyWasUserEntered: "true"]))
+  }
+}
+
+final class PasosManualesTests: XCTestCase {
+  func testLosPasosEscritosAManoNoSeMandan() {
+    let enviados = ReglasMuestras.pasos(de: [
+      EntradaPaso(Fab.paso(3000, minuto: 0)),
+      EntradaPaso(Fab.paso(15_000, minuto: 10, metadata: Fab.manual)),   // "15.000 pasos" inventados
+      EntradaPaso(Fab.paso(500, minuto: 20)),
+    ])
+
+    XCTAssertEqual(enviados.map(\.cantidad), [3000, 500])
+  }
+
+  func testSiTodosLosPasosSonManualesNoSeMandaNada() {
+    let enviados = ReglasMuestras.pasos(de: [
+      EntradaPaso(Fab.paso(9000, metadata: Fab.manual)),
+      EntradaPaso(Fab.paso(9000, minuto: 10, metadata: Fab.manual)),
+    ])
+
+    XCTAssertTrue(enviados.isEmpty)
+  }
+
+  func testUnPasoMedidoSeMandaCompletoYRedondeado() throws {
+    let muestra = Fab.paso(1500.4, minuto: 5)
+
+    let enviado = try XCTUnwrap(ReglasMuestras.pasos(de: [EntradaPaso(muestra)]).first)
+
+    XCTAssertEqual(enviado.external_id, muestra.uuid.uuidString)
+    XCTAssertEqual(enviado.cantidad, 1500)
+    XCTAssertEqual(enviado.inicio, FormatoFechas.iso8601.string(from: muestra.startDate))
+    XCTAssertEqual(enviado.fin, FormatoFechas.iso8601.string(from: muestra.endDate))
+    XCTAssertNil(enviado.dispositivo_modelo)   // sin HKDevice => nulo, nunca vacío
+  }
+
+  func testElOrdenSeConserva() {
+    let enviados = ReglasMuestras.pasos(de: [10, 20, 30].enumerated().map { EntradaPaso(Fab.paso(Double($1), minuto: $0 * 10)) })
+
+    XCTAssertEqual(enviados.map(\.cantidad), [10, 20, 30])
+  }
+}
+
+final class RitmoManualTests: XCTestCase {
+  func testElRitmoEscritoAManoNoSeManda() {
+    let enviados = ReglasMuestras.ritmo(de: [
+      EntradaRitmo(Fab.latido(120, segundo: 0)),
+      EntradaRitmo(Fab.latido(190, segundo: 10, metadata: Fab.manual)),
+    ])
+
+    XCTAssertEqual(enviados.map(\.bpm), [120])
+  }
+
+  func testLasEstadisticasIgnoranLasLecturasManuales() {
+    let stats = ReglasMuestras.estadisticas(de: [
+      EntradaRitmo(Fab.latido(100, segundo: 0)),
+      EntradaRitmo(Fab.latido(140, segundo: 10)),
+      EntradaRitmo(Fab.latido(220, segundo: 20, metadata: Fab.manual)),   // inflaría el máximo
+    ])
+
+    XCTAssertEqual(stats.promedio, 120)
+    XCTAssertEqual(stats.minimo, 100)
+    XCTAssertEqual(stats.maximo, 140)
+  }
+
+  func testSinLecturasMedidasLasEstadisticasSonVacias() {
+    XCTAssertNil(ReglasMuestras.estadisticas(de: []).promedio)
+    XCTAssertNil(ReglasMuestras.estadisticas(
+      de: [EntradaRitmo(Fab.latido(150, segundo: 0, metadata: Fab.manual))]).maximo)
+  }
+}
+
+final class SesionesQueSeMandanTests: XCTestCase {
+  private let ritmoMedido = [Fab.latido(140, segundo: 60), Fab.latido(160, segundo: 120), Fab.latido(150, segundo: 180)]
+
+  func testUnWorkoutMedidoConRitmoSeMandaConSusDatos() throws {
+    let w = Fab.workout(minutos: 45)
+
+    let enviadas = ReglasWorkout.sesiones(de: [Fab.entrada(w, ritmo: ritmoMedido)])
+
+    let sesion = try XCTUnwrap(enviadas.first)
+    XCTAssertEqual(enviadas.count, 1)
+    XCTAssertEqual(sesion.external_id, w.uuid.uuidString)
+    XCTAssertEqual(sesion.duracion_min, 45)
+    XCTAssertEqual(sesion.tipo_actividad, "running")
+    XCTAssertEqual(sesion.fc_promedio, 150)
+    XCTAssertEqual(sesion.fc_maxima, 160)
+  }
+
+  func testUnWorkoutIngresadoAManoNoSeManda() {
+    // Aunque traiga ritmo cardíaco medido en la ventana.
+    let manual = Fab.workout(metadata: Fab.manual)
+
+    XCTAssertTrue(ReglasWorkout.sesiones(de: [Fab.entrada(manual, ritmo: ritmoMedido)]).isEmpty)
+  }
+
+  func testUnWorkoutSinRitmoCardiacoNoSeManda() {
+    // Era el caso del iPhone sin reloj: antes salía con fc_promedio = 0.
+    XCTAssertTrue(ReglasWorkout.sesiones(de: [Fab.entrada(Fab.workout(), ritmo: [])]).isEmpty)
+  }
+
+  func testUnWorkoutCuyoUnicoRitmoFueEscritoAManoNoSeManda() {
+    let inventado = [Fab.latido(150, segundo: 60, metadata: Fab.manual), Fab.latido(170, segundo: 120, metadata: Fab.manual)]
+
+    XCTAssertTrue(ReglasWorkout.sesiones(de: [Fab.entrada(Fab.workout(), ritmo: inventado)]).isEmpty)
+  }
+
+  func testUnaLecturaManualDentroDeUnWorkoutNoCambiaSuRitmo() throws {
+    let mezcla = ritmoMedido + [Fab.latido(230, segundo: 240, metadata: Fab.manual)]
+
+    let sesion = try XCTUnwrap(ReglasWorkout.sesiones(de: [Fab.entrada(Fab.workout(), ritmo: mezcla)]).first)
+
+    XCTAssertEqual(sesion.fc_maxima, 160)    // no 230
+    XCTAssertEqual(sesion.fc_promedio, 150)
+  }
+
+  func testDeVariosWorkoutsSoloSeMandanLosValidosYEnOrden() {
+    let bueno1 = Fab.workout(minutos: 30)
+    let manual = Fab.workout(minutos: 50, metadata: Fab.manual)
+    let sinReloj = Fab.workout(minutos: 40)
+    let bueno2 = Fab.workout(minutos: 60)
+
+    let enviadas = ReglasWorkout.sesiones(de: [
+      Fab.entrada(bueno1, ritmo: ritmoMedido),
+      Fab.entrada(manual, ritmo: ritmoMedido),
+      Fab.entrada(sinReloj, ritmo: []),
+      Fab.entrada(bueno2, ritmo: ritmoMedido),
+    ])
+
+    XCTAssertEqual(enviadas.map(\.external_id), [bueno1.uuid.uuidString, bueno2.uuid.uuidString])
+  }
+
+  func testNuncaSeMandaUnRitmoEnCero() {
+    // El servidor lo descartaría, y un 0 inventado es justo lo que ya no se hace.
+    let enCero = [Fab.latido(0, segundo: 0)]
+
+    XCTAssertTrue(ReglasWorkout.sesiones(de: [Fab.entrada(Fab.workout(), ritmo: enCero)]).isEmpty)
+  }
+}
+
+final class FCParaEnviarTests: XCTestCase {
   func testSinNingunDatoDeRitmoNoHayFC() {
     XCTAssertNil(ReglasWorkout.fcParaEnviar(stats: .vacio))
   }
 
   func testConSoloPromedioONadaMasNoHayFC() {
-    XCTAssertNil(ReglasWorkout.fcParaEnviar(
-      stats: HeartRateStats(promedio: 140, minimo: nil, maximo: nil)))
-    XCTAssertNil(ReglasWorkout.fcParaEnviar(
-      stats: HeartRateStats(promedio: nil, minimo: nil, maximo: 160)))
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(stats: HeartRateStats(promedio: 140, minimo: nil, maximo: nil)))
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(stats: HeartRateStats(promedio: nil, minimo: nil, maximo: 160)))
   }
 
-  func testUnRitmoEnCeroNoSeManda() {
-    // Era el valor inventado que se mandaba cuando no había reloj.
-    XCTAssertNil(ReglasWorkout.fcParaEnviar(
-      stats: HeartRateStats(promedio: 0, minimo: 0, maximo: 0)))
-  }
-
-  func testUnRitmoQueRedondeaACeroNoSeManda() {
-    XCTAssertNil(ReglasWorkout.fcParaEnviar(
-      stats: HeartRateStats(promedio: 0.4, minimo: 0.2, maximo: 0.4)))
+  func testUnRitmoEnCeroONoSeManda() {
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(stats: HeartRateStats(promedio: 0, minimo: 0, maximo: 0)))
+    XCTAssertNil(ReglasWorkout.fcParaEnviar(stats: HeartRateStats(promedio: 0.4, minimo: 0.2, maximo: 0.4)))
   }
 
   func testConRitmoMedidoSeMandaRedondeado() {
-    let fc = ReglasWorkout.fcParaEnviar(
-      stats: HeartRateStats(promedio: 142.6, minimo: 90, maximo: 161.2))
+    let fc = ReglasWorkout.fcParaEnviar(stats: HeartRateStats(promedio: 142.6, minimo: 90, maximo: 161.2))
 
     XCTAssertEqual(fc, ReglasWorkout.FC(promedio: 143, maxima: 161))
   }
-
-  // MARK: Los workouts a mano no cuentan
-
-  func testUnWorkoutIngresadoAManoSeDetecta() {
-    XCTAssertTrue(ReglasWorkout.fueIngresadoAMano(
-      metadata: [HKMetadataKeyWasUserEntered: true]))
-  }
-
-  func testUnWorkoutMedidoPorUnSensorNoEsManual() {
-    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(
-      metadata: [HKMetadataKeyWasUserEntered: false]))
-  }
-
-  func testSinMetadataSeAsumeQueNoFueAMano() {
-    // Un reloj de terceros suele no escribir esa marca: no se le acusa de nada.
-    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(metadata: nil))
-    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(metadata: [:]))
-    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(metadata: ["otra_clave": true]))
-  }
-
-  func testUnaMarcaQueNoEsBooleanaNoCuentaComoManual() {
-    XCTAssertFalse(ReglasWorkout.fueIngresadoAMano(
-      metadata: [HKMetadataKeyWasUserEntered: "true"]))
-  }
-
-  // MARK: "Sin datos" no es un fallo; los demás errores sí
 
   func testNoHayDatosEsUnCasoNormalNoUnFallo() {
     XCTAssertTrue(ReglasWorkout.esSinDatos(HKError(.errorNoData)))
