@@ -13,6 +13,11 @@ confirmarlo primero.
 con los documentos vivos del proyecto. Todo lo de UI y diseño de Daniel quedó
 igual. **Actualizado el 30 de septiembre de 2026 (autenticación por token):**
 la identidad sale del token, el MethodChannel pasa a 3 métodos.
+**Actualizado el 2 de octubre de 2026 (reunión del equipo):** sin racha;
+objetivo semanal que paga por componente y meta de pasos por edad; seasons de
+13 semanas ISO; monedas sin tope que se reinician al cerrar la season; La Liga
+por puntos; login con Google y Apple; cambios de Hoy, Mi Plan, Social y Premios.
+El detalle técnico está en `contrato-tecnico.md`.
 
 **Contrato entre capas (iOS ↔ backend ↔ Flutter), en este repo:**
 `contrato-tecnico.md`. Es el documento oficial: se actualiza ahí y no en copias.
@@ -65,19 +70,24 @@ expresamente por ser de Vitality.
 1. **PUNTOS** — nunca se gastan. Determinan el nivel anual y el % de cashback.
    Nunca aparecen en Premios.
 2. **MONEDAS** (antes "medallas" — si ves ese término en código viejo,
-   migralo) — se gastan en Premios, caducan a los **90 días**. Nunca
-   aparecen en Mi Plan.
+   migralo) — se gastan en Premios y **caducan al final de cada season**: el
+   saldo vuelve a 0 (decidido el 2 de octubre de 2026). Nunca aparecen en
+   Mi Plan.
 
-   Los 90 días los confirmó Daniel en la revisión de UI del 9 de
-   septiembre de 2026 y reemplazan a los 6 meses que decía la versión
-   anterior de este documento. Si encontrás "6 meses" en código,
-   comentarios o mocks, es del plazo viejo y hay que migrarlo.
+   Esto reemplaza la caducidad de **90 días** por ganancia (9 de septiembre)
+   y la de 6 meses de antes. Si encontrás "90 días" o "6 meses" para las
+   monedas en código, comentarios o mocks, es del plazo viejo.
 
-   - Se ganan por cumplir el objetivo semanal y por quedar top 3 en La Liga.
-   - **Tope: 100 monedas acumuladas.** Si una ganancia pasa de 100, el
-     excedente se pierde.
-   - **Aviso al llegar a 80:** modal con un solo botón "OK", tono lúdico. Se
-     dispara con `saldo_resultante >= 80`, no `== 80`.
+   - Se ganan por cumplir el objetivo semanal (**cada componente paga por
+     separado**) y por quedar top 3 en La Liga.
+   - **Sin tope de acumulación** (decidido el 2 de octubre de 2026; antes
+     el tope era 100 y el excedente se perdía).
+   - Al empezar una season, primero se reinicia el saldo y después se paga
+     la semana que cerró: las monedas de la última semana cuentan en la
+     season nueva.
+   - **Aviso de fin de season:** 7 días antes de que termine la season se
+     avisa que las monedas se reinician. Reemplaza el aviso al llegar a 80,
+     que existía por el tope.
    - Un cupón ya canjeado caduca aparte, a los **60 días** de canjeado.
    - Sin póliza verificada se ganan igual, pero **no se pueden canjear**:
      catálogo visible, botón de compra bloqueado con candado.
@@ -192,13 +202,22 @@ Notas sobre la edad:
 de septiembre de 2026. Esto reemplaza a `reglas-puntaje-vivo.md`, sección 4,
 hasta que ese documento se actualice.
 
-- **Dos objetivos por semana:** pasos de la semana y minutos de
-  entrenamiento. Ni uno ni tres.
-- **Hay que cumplir LOS DOS** para que la semana pague. Cumplir uno solo no
-  paga nada ni se arrastra a la semana siguiente.
-- **Cuántas MONEDAS paga cada semana lo manda el servidor**, semana por
-  semana (campo `monedas` de la semana). La app no tiene ninguna regla para
-  calcularlo. Se acuñan bajo el tope de 100 acumuladas.
+- **Dos objetivos por semana:** pasos de la semana y **cantidad de workouts**
+  (así lo definen el contrato y el código; esta línea decía "minutos de
+  entrenamiento"). Ni uno ni tres.
+- **Cada objetivo paga sus monedas por separado** (decidido el 2 de octubre
+  de 2026): cumplir solo los pasos paga lo suyo. La semana se marca
+  **completada** solo cuando se cumplen los dos. Montos provisionales: 5 + 5.
+  (Esto reemplaza la regla de que había que cumplir los dos para cobrar.)
+- **La meta de pasos depende del rango de edad**, de 10 en 10 años
+  (decidido el 2 de octubre de 2026). La manda el servidor; la app nunca la
+  calcula. [PENDIENTE: la tabla de metas por edad — falta investigar los
+  promedios de pasos por edad.]
+- **Cuántas MONEDAS paga cada objetivo lo manda el servidor**, semana por
+  semana. La app no tiene ninguna regla para calcularlo.
+- **Seasons de 13 semanas** que siguen las semanas ISO (la season 1 empieza
+  el lunes de la semana del 4 de enero; si el año tiene semana 53, se suma a
+  la season 4). Detalle en el contrato, "Seasons".
 - **El programa avanza por calendario, igual para todos:** al cerrar la
   semana 1 todos pasan a los objetivos de la semana 2, la hayan cumplido o
   no, y así sucesivamente. No hay progresión propia de cada usuario.
@@ -222,17 +241,20 @@ pero eso ya no cambia la semana cerrada — solo el historial y el acumulado anu
 leía como cuenta regresiva): se dice el avance sobre la meta ("48.000 de 70.000 pasos")
 y el plazo una sola vez, abajo.
 
-[PENDIENTE: la tabla de metas de cada semana (pasos y minutos) y lo que
-paga cada una. La define Luis (L11) — **no inventarla**.]
+[PENDIENTE: la tabla de metas de cada semana (pasos por rango de edad y
+workouts) y lo que paga cada objetivo. La define Luis (L11) con la
+investigación de promedios — **no inventarla**.]
 
 ## Racha
 
-**Las recompensas por constancia ya no existen** (decidido por Alvaro el 22
-de septiembre de 2026): la racha **no da monedas ni puntos** ni tiene hitos.
-Lo que sí queda es la **racha visible en Home, con un fueguito** 🔥 — solo
-como motivación.
+**La racha se eliminó** (reunión del 2 de octubre de 2026): ya no hay
+fueguito 🔥 en Home ni ninguna racha visible. Antes (22 de septiembre) se
+habían quitado las recompensas por constancia y quedaba solo el fueguito como
+motivación; eso también sale. Si aparece en código o mocks, es del modelo
+viejo.
 
-[PENDIENTE: qué cuenta exactamente la racha. No hay rachas diarias.]
+Lo único parecido que queda es el historial de 8 semanas de Progreso (si se
+cumplió cada semana): la reunión dejó Progreso sin cambios.
 
 ## Anti-fraude
 
@@ -302,13 +324,15 @@ la superficie, más pálido el tono.
 | `azulMedio` `#5468BC` | íconos y texto de apoyo |
 | `accent` `#012096` | botones, números grandes, lo que decide |
 
-**El naranja queda reservado a cuatro cosas, y a ninguna más:**
+**El naranja queda reservado a tres cosas, y a ninguna más:**
 
 1. **Monedas** — el ícono, el chip de saldo y los premios del podio. Es el
    único lugar donde el naranja significa algo por sí solo.
-2. **La llama de la racha** — el ícono, nunca el fondo que lo rodea.
-3. **Alertas reales** — datos sin verificar, el teléfono de emergencias.
-4. **El check de una etapa completada** — el ícono suelto sobre azul.
+2. **Alertas reales** — datos sin verificar, el teléfono de emergencias.
+3. **El check de una etapa completada** — el ícono suelto sobre azul.
+
+(La llama de la racha era el cuarto uso; salió el 2 de octubre de 2026 junto
+con la racha.)
 
 Todo lo demás que hoy esté en naranja es del modelo viejo y hay que
 migrarlo. Seleccionar algo es **siempre** azul: si dos pantallas marcan la
@@ -494,8 +518,13 @@ resuelven, no por cómo se ven de fábrica.
 ## Pantallas — estado y contenido
 
 **Home** (`lib/screens/home_screen.dart`) — construida
-- Header + saludo dinámico + racha activa con el fueguito (sin hitos ni
-  monedas por racha)
+- Header + saludo dinámico. **Sin racha ni fueguito** (reunión del 2 de
+  octubre de 2026)
+- **Las cajas de etapas (7.000 / 10.000 / 15.000) se quitan** (reunión del 2
+  de octubre de 2026). Su contenido pasa a un **botón de información** que se
+  expande al tocarlo
+- **El desglose de puntos queda siempre visible**, sin desplegable (reunión
+  del 2 de octubre de 2026)
 - Anillo de pasos (color según nivel, gradiente, marcadores 25%), meta
   diaria, tiempo restante del día
 - Tarjeta de puntos totales (SIN botón de canje)
@@ -532,9 +561,11 @@ resuelven, no por cómo se ven de fábrica.
     pie de todo se leía como patrocinadora de la sección entera; pegada a
     la semana y con "Esta semana" en la frase, queda claro que es solo de
     esa semana
-  - la **regla en un renglón**, en gris: "Cumple los dos para ganar" y a
-    la derecha el **premio: solo "+10" y la moneda** en una pastilla
-    naranja suave (nunca "ganas 10 monedas")
+  - **cada objetivo muestra sus propias monedas** (reunión del 2 de octubre
+    de 2026): solo "+5" y la moneda, en una pastilla naranja suave (nunca
+    "ganas 5 monedas"). Ya no va el renglón "Cumple los dos para ganar" con
+    un premio único: cada objetivo paga aparte, y la semana se marca
+    completada cuando se cumplen los dos
   - los **dos objetivos LADO A LADO**, en dos columnas separadas por una
     línea de un pelo, como las estadísticas de Fitness: nombre corto
     ("Pasos", "Entrenamiento") con su ícono y un chevron en `azulMedio`,
@@ -562,7 +593,15 @@ resuelven, no por cómo se ven de fábrica.
   23:59 con los datos de Apple Health. Nada con forma de casilla: el
   cumplido lleva un check suelto en naranja al final de la píldora — sin
   círculo y sin relleno, que es el cuarto uso permitido del naranja
-- **El camino de las semanas** (`camino_semanas_screen.dart`) va y
+- **Vista tipo battle pass** (reunión del 2 de octubre de 2026): el camino
+  de nodos se reemplaza por **una caja por semana con scroll horizontal**,
+  hacia las semanas pasadas y las que vienen. Muestra las semanas de la
+  season en curso (13, o 14 cuando incluye la semana 53). Se pidió para
+  mostrar mejor el logo del patrocinador. **Las viñetas de abajo sobre la
+  grilla, la cinta y las curvas describen el camino anterior y quedan
+  reemplazadas**; las de semanas patrocinadas (logo, colores `fondo` y
+  `acento`, nunca un hueco donde no hay marca) siguen valiendo
+- **El camino de las semanas** (vista anterior) (`camino_semanas_screen.dart`) va y
   vuelve por FILAS, como un tablero de mesa: 3 nodos por fila, la fila
   siguiente al revés, y el giro siempre en la misma columna. No quedan
   huecos en la grilla y diez semanas entran en 4 filas (antes era una
@@ -678,17 +717,24 @@ que antes era la pestaña Ranking: Mis competencias (Tus Ligas) y Liga local
 | | La Liga | Tus Ligas |
 |---|---|---|
 | Quién la arma | La app, automático | El usuario (crea o se une) |
-| Con quién | Gente random de tu franja de edad | Amigos, familia, colegas |
+| Con quién | Todos los usuarios con póliza verificada, un solo grupo | Amigos, familia, colegas |
 | Ciclo | Mensual (día 1 al último del mes) | Mensual, no configurable |
-| Compite por | Pasos del mes | Pasos del mes |
+| Compite por | **Puntos del mes** (desempate: más pasos) | Pasos del mes |
 | Premio | **Sí** — monedas al top 3 | **No** |
-| Requiere póliza | Sí | Sí |
+| Requiere póliza | Sí | No |
 
-**La Liga** (la de `tipo: desconocidos` en el código): franjas de edad de 10
-años (20–29, 30–39…), máximo 30 personas por grupo, asignación **automática y
-aleatoria** re-sorteada cada mes — sin botón de "unirme". Nunca se muestran los
-puntos de otros miembros. Corre del día 1 al último día del mes, en hora de
-Guatemala. (Antes este documento decía trimestral: eso queda reemplazado.)
+**La Liga** (la de `tipo: desconocidos` en el código): **un solo grupo** con
+todos los usuarios con póliza verificada, sin botón de "unirme" (confirmado el
+2 de octubre de 2026). Compite por **puntos del mes, tal cual** (con el tope
+diario y el bono 60+); a igualdad de puntos gana quien tenga **más pasos**, y
+un **botón de información** lo explica. Nunca se muestran los puntos de otros
+miembros. Corre del día 1 al último día del mes, en hora de Guatemala.
+(Esto reemplaza a la versión anterior de este documento: franjas de edad de 10
+años con grupos de 30 y competencia por pasos, que además contradecía al
+contrato. Antes de eso decía trimestral.)
+
+**Tus Ligas** no exige póliza (así lo dice el contrato desde el 23 de
+septiembre; esta tabla decía lo contrario).
 
 **Tus Ligas** (competencias con conocidos): la duración **no se elige** — el
 selector de 1/2/3 meses se borró.
@@ -696,9 +742,10 @@ selector de 1/2/3 meses se borró.
 El **objetivo semanal** corre aparte (lunes 00:00 a domingo 23:59) y no se
 mezcla con ninguna liga.
 
-Cada ciclo de La Liga puede tener una **marca patrocinadora**: los 3
-primeros ganan un cupón de esa marca ADEMÁS de sus monedas, nunca en lugar
-de ellas. Los datos de patrocinio salen del repositorio, nunca fijos en el
+Cada ciclo de La Liga puede tener una **marca patrocinadora**: es la misma
+Liga, no una aparte. La marca se muestra **arriba, junto al nombre de la liga,
+destacada** (reunión del 2 de octubre de 2026). Los 3 primeros ganan un cupón
+de esa marca ADEMÁS de sus monedas, nunca en lugar de ellas. Los datos de patrocinio salen del repositorio, nunca fijos en el
 widget. [PENDIENTE: el endpoint de patrocinios lo debe Luis; hasta entonces
 sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 
@@ -718,7 +765,8 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
     levantado de la vista. A 7 días de vencer, el "Vence en…" pasa a
     naranja (alerta real). Los que se ganaron llevan un regalo y
     "Semana 1"
-  - los **usados y vencidos** abajo, como lista plana y apagada
+  - los **usados y vencidos** abajo, en una **lista desplegable** (reunión
+    del 2 de octubre de 2026), plana y apagada
   - tocar un boleto abre el **código en grande** en una hoja: el QR con
     las esquinas del visor en azul, el código escrito por si la caja no
     escanea, y cuándo vence
@@ -736,6 +784,10 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
 **Mi Plan** — diseñada, confirmar si está construida en Flutter
 - Cashback acumulado, proyección de fin de año, calendario de cálculo,
   nota regulatoria, tabla de niveles
+- **La gráfica de "en qué nivel vas" se une con la gráfica de barras**, y
+  **debajo va el cashback**, para ver los dos datos juntos (reunión del 2 de
+  octubre de 2026). Cashback en quetzales = **% del nivel × prima mensual ×
+  12**, devuelto después del pago de la prima
 - **Al cambiar de filtro se anima SOLO lo que cambia** (decisión de
   Daniel, 22 de septiembre de 2026): el contenido de abajo entra con su
   transición y el título, el medallón de nivel y la tarjeta del cashback
@@ -750,7 +802,9 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
   asegurado, agrupados en 2-3 tarjetas por tema): número de póliza,
   titular y dependientes, tipo de plan, suma asegurada, deducible,
   coaseguro, vigencia, renovación, prima y forma de pago, red de
-  hospitales/cobertura, estado de la póliza
+  hospitales/cobertura, estado de la póliza. La fecha que manda la
+  aseguradora es la de **renovación**: una póliza médica no vence, solo deja
+  de valer si la cancelan o la suspenden (2 de octubre de 2026)
 - **Sin póliza (cuenta base):** estado vacío con CTA "Ingresa tu póliza para
   acceso completo" + **cotizador express**. "Póliza pendiente de verificación"
   se trata exactamente igual que "sin póliza" — no hay un tercer estado
@@ -776,7 +830,10 @@ llama "Salud", que es su nombre en un iPhone en español.
 /api/v1/registro` y `POST /api/v1/login`; las **pantallas de Flutter no existen
 todavía** (recuperar contraseña tampoco: falta elegir un proveedor de correo).
 Cuenta base: usuario + contraseña + **fecha de nacimiento** (obligatoria, no
-puede ser futura); el email queda para más adelante. El servidor genera el
+puede ser futura); el email queda para más adelante. **Además, "Continuar con
+Google" e "Iniciar sesión con Apple"** (reunión del 2 de octubre de 2026;
+Apple es obligatorio si se ofrece Google). Ninguno de los dos entrega la fecha
+de nacimiento: la primera vez se pide aparte. El servidor genera el
 `usuario_id`, un nombre público que no identifica a quien manda datos. Vincular
 póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
 seguro, lo manda en cada request HTTP y se lo entrega a Swift con
@@ -830,9 +887,9 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 ## Decisiones pendientes
 
 - El "twist propio" del proyecto
-- Tabla de meta de pasos por objetivo semanal — Luis (L11)
+- Tabla de metas de pasos del objetivo semanal por rango de edad (falta
+  investigar promedios) — Luis (L11)
 - Validación médica/actuarial del bonus 60+ y de FCmáx = 219 − edad
-- Qué cuenta la racha del fueguito
 - Datos por persona vs. solo agregados hacia la aseguradora
 - Plausibilidad fisiológica: descartar vs. marcar para revisión
 - Tus Ligas: cupo de miembros y cómo se invita
@@ -855,7 +912,11 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 - Bono 60+ ×1.25, o bono solo sobre intensidad.
 - **Tres objetivos por semana**, retos que **bajan** de nivel, reinicio
   mensual, "metas mensuales".
-- Monedas que caducan a 6 meses; tope de 100 monedas **por semana**.
+- Monedas que caducan a 6 meses o a 90 días por ganancia; tope de 100
+  monedas (por semana o acumuladas). Hoy caducan al cerrar la season y no
+  tienen tope.
+- Racha con fueguito en Home.
+- Seasons cortadas el 1 de enero, abril, julio y octubre (hoy: 13 semanas ISO).
 - Lista blanca de fuentes; "gana la fuente con más pasos **del día**" entre
   todas. (No confundir con la regla vigente: los pasos se deciden **por hora**
   y las horas se suman; ver "Elección de fuente".)
