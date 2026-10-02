@@ -754,6 +754,8 @@ toca el contrato.
   bono 60+). Antes competía por pasos.
 - **Desempate:** a igualdad de puntos gana quien tenga **más pasos** en el mes
   (suma de `pasos_totales_dia`). La app lo explica con un botón de información.
+- **Qué se muestra:** los **puntos** de cada participante sí; la **cantidad de
+  pasos** nunca, ni siquiera para explicar un desempate (decidido 2 oct 2026).
 - **Patrocinio:** algunos meses La Liga tiene una marca. Es la misma Liga, no
   una aparte: la marca se muestra arriba, junto al nombre de la liga,
   destacada, y los 3 primeros ganan además un cupón de esa marca.
@@ -764,7 +766,8 @@ toca el contrato.
   posición, percentil y tramo **una sola vez, al cierre del mes**.
 
 **Tus Ligas:** grupos que crea o a los que se une el usuario. Ranking mensual
-de pasos entre miembros (la reunión del 2 oct solo cambió La Liga), **sin premios y sin exigir póliza** (cambia el 23
+**por puntos** entre miembros (decidido 2 oct 2026, igual que La Liga; antes era
+por pasos), con el mismo desempate por pasos, **sin premios y sin exigir póliza** (cambia el 23
 sep; antes exigían póliza).
 
 **Duelos 1 contra 1:** eliminados del demo 1 — no construir endpoints ni
@@ -1309,7 +1312,8 @@ verificación" son el mismo momento.
   - Seasons por semanas ISO (hoy por trimestre de calendario).
   - Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
     cambia (primero reiniciar, después pagar).
-  - La Liga por puntos, con desempate por pasos.
+  - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
+    devuelven los puntos de cada participante pero nunca sus pasos.
   - Póliza: no rechazar por la fecha de renovación (solo cancelada o
     suspendida), y guardar y devolver nombre, apellido, plan, prima y fecha de
     renovación.
@@ -1379,7 +1383,8 @@ verificación" son el mismo momento.
   premios por percentil (el servidor calcula posición y tramo). **Desde el 2
   oct compite por puntos**, con desempate por pasos y un botón de información
   que lo explique; si el mes está patrocinado, la marca va arriba junto al
-  nombre de la liga. Sin franjas
+  nombre de la liga. **Tus Ligas también compite por puntos.** En La Liga se
+  muestran los puntos de cada participante, **nunca la cantidad de pasos**. Sin franjas
   de edad ni sub-ligas. **Tus Ligas:** cualquiera se une (con o sin póliza),
   sin premios. **Duelos 1 contra 1: eliminar.**
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia

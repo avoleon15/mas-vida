@@ -253,14 +253,15 @@ investigación de promedios — **no inventarla**.]
 
 ## Racha
 
-**La racha se eliminó** (reunión del 2 de octubre de 2026): ya no hay
-fueguito 🔥 en Home ni ninguna racha visible. Antes (22 de septiembre) se
-habían quitado las recompensas por constancia y quedaba solo el fueguito como
-motivación; eso también sale. Si aparece en código o mocks, es del modelo
-viejo.
+**La racha sale de Hoy** (reunión del 2 de octubre de 2026): ya no va el
+fueguito 🔥 bajo el saludo. Antes (22 de septiembre) se habían quitado las
+recompensas por constancia y quedaba solo esa línea como motivación.
 
-Lo único parecido que queda es el historial de 8 semanas de Progreso (si se
-cumplió cada semana): la reunión dejó Progreso sin cambios.
+La tarjeta de racha con su historial de 8 semanas (una casilla por semana:
+cumplido o no) ya había salido de Progreso el 21 de septiembre; el widget
+(`tarjeta_racha.dart`) quedó sin uso. [PENDIENTE: la racha todavía aparece en
+Perfil y en Récords. La reunión solo habló de Hoy: decidir si sale también de
+ahí.]
 
 ## Anti-fraude
 
@@ -694,8 +695,8 @@ resuelven, no por cómo se ven de fábrica.
   como el mismo mapa en Claude Code. Los meses ANTERIORES al primer dato
   sí se dibujan, vacíos: esos días existieron aunque la app no estuviera
   instalada, y son los que le dan al año su forma
-- Racha con historial de 8 semanas (cada casilla refleja si se cumplió),
-  sin hitos de monedas
+- (La tarjeta de racha con historial de 8 semanas salió de Progreso el 21 de
+  septiembre de 2026, decisión de Daniel; ver "Racha".)
 - "Nivel Actual", Monedas del período, Ritmo Cardíaco (obligatorio si se
   pide permiso `.heartRate`)
 - CTA "Ver mis récords" (pantalla de Récords Personales — pendiente)
@@ -725,7 +726,7 @@ que antes era la pestaña Ranking: Mis competencias (Tus Ligas) y Liga local
 | Quién la arma | La app, automático | El usuario (crea o se une) |
 | Con quién | Todos los usuarios con póliza verificada, un solo grupo | Amigos, familia, colegas |
 | Ciclo | Mensual (día 1 al último del mes) | Mensual, no configurable |
-| Compite por | **Puntos del mes** (desempate: más pasos) | Pasos del mes |
+| Compite por | **Puntos del mes** (desempate: más pasos) | **Puntos del mes** (desempate: más pasos) |
 | Premio | **Sí** — monedas al top 3 | **No** |
 | Requiere póliza | Sí | No |
 
@@ -733,14 +734,18 @@ que antes era la pestaña Ranking: Mis competencias (Tus Ligas) y Liga local
 todos los usuarios con póliza verificada, sin botón de "unirme" (confirmado el
 2 de octubre de 2026). Compite por **puntos del mes, tal cual** (con el tope
 diario y el bono 60+); a igualdad de puntos gana quien tenga **más pasos**, y
-un **botón de información** lo explica. Nunca se muestran los puntos de otros
-miembros. Corre del día 1 al último día del mes, en hora de Guatemala.
+un **botón de información** lo explica. **Se muestran los puntos de cada
+participante, pero nunca la cantidad de pasos** (ni siquiera para explicar un
+desempate). Esto reemplaza la regla anterior de no mostrar los puntos de otros
+miembros (2 de octubre de 2026). Corre del día 1 al último día del mes, en hora
+de Guatemala.
 (Esto reemplaza a la versión anterior de este documento: franjas de edad de 10
 años con grupos de 30 y competencia por pasos, que además contradecía al
 contrato. Antes de eso decía trimestral.)
 
 **Tus Ligas** no exige póliza (así lo dice el contrato desde el 23 de
-septiembre; esta tabla decía lo contrario).
+septiembre; esta tabla decía lo contrario) y, desde el 2 de octubre de 2026,
+también **compite por puntos** con el mismo desempate por pasos.
 
 **Tus Ligas** (competencias con conocidos): la duración **no se elige** — el
 selector de 1/2/3 meses se borró.
@@ -922,7 +927,7 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 - Monedas que caducan a 6 meses o a 90 días por ganancia; tope de 100
   monedas (por semana o acumuladas). Hoy caducan al cerrar la season y no
   tienen tope.
-- Racha con fueguito en Home.
+- Racha con fueguito en Hoy.
 - Seasons cortadas el 1 de enero, abril, julio y octubre (hoy: 13 semanas ISO).
 - Lista blanca de fuentes; "gana la fuente con más pasos **del día**" entre
   todas. (No confundir con la regla vigente: los pasos se deciden **por hora**
