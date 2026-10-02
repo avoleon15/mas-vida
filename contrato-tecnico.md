@@ -1105,12 +1105,15 @@ verificación" son el mismo momento.
   resto).
 - **Quitar `usuario_id` del payload** y la constante `"alvaro-001"`.
 - **`actualizarSesion(null)`:** borra el token del Keychain.
-- **Pendiente (1 oct) — workouts:** (1) no mandar una sesión si no hay muestras
-  de ritmo cardíaco en su ventana (hoy manda `fc_promedio`/`fc_maxima` en `0`);
-  (2) no mandar los workouts ingresados a mano
+- **Workouts (1 oct) — hecho:** Swift no manda una sesión si no hay ritmo
+  cardíaco medido en su ventana (antes mandaba `fc_promedio`/`fc_maxima` en
+  `0`), ni los workouts ingresados a mano
   (`metadata[HKMetadataKeyWasUserEntered] == true`). Ver "Qué cuenta como
-  workout". El servidor ya descarta las sesiones con `fc` en `0`, así que lo
-  que falta en Swift es no inventar ese `0`.
+  workout". Un error real al leer el ritmo cardíaco ya no se traga: falla la
+  lectura del día (no se da por enviado) en vez de perder el workout en
+  silencio. "Sin muestras" (`errorNoData`) sí se trata como "sin ritmo
+  cardíaco", que es lo normal en un iPhone sin reloj. El servidor mantiene su
+  descarte de sesiones con `fc` en `0` como red de seguridad.
 
 ---
 

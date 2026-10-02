@@ -66,6 +66,44 @@ struct HeartRateStats {
     static let vacio = HeartRateStats(promedio: nil, minimo: nil, maximo: nil)
 }
 
+/// Qué workouts se mandan al backend (decidido 1 oct 2026; contrato, "Qué
+/// cuenta como workout"). Son funciones puras para poder probarlas sin HealthKit.
+///
+/// - Un workout **necesita ritmo cardíaco medido**, o sea un reloj o una banda.
+///   Con solo el teléfono no se registran workouts. Antes se mandaba
+///   `fc_promedio`/`fc_maxima` en `0`; ahora esa sesión simplemente no se manda.
+/// - Los workouts **ingresados a mano** no cuentan: son demasiado fáciles de
+///   inventar.
+enum ReglasWorkout {
+    struct FC: Equatable {
+        let promedio: Int
+        let maxima: Int
+    }
+
+    /// `true` si el usuario escribió el workout a mano en Salud
+    /// (`HKMetadataKeyWasUserEntered`). Sin metadata se asume que NO fue a mano.
+    static func fueIngresadoAMano(metadata: [String: Any]?) -> Bool {
+        (metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true
+    }
+
+    /// El ritmo cardíaco que viaja con la sesión, o `nil` si no hay uno medido
+    /// (en cuyo caso la sesión no se manda). Nunca devuelve ceros.
+    static func fcParaEnviar(stats: HeartRateStats) -> FC? {
+        guard let promedio = stats.promedio, let maximo = stats.maximo else { return nil }
+        let promedioEntero = Int(promedio.rounded())
+        let maximoEntero = Int(maximo.rounded())
+        guard promedioEntero > 0, maximoEntero > 0 else { return nil }
+        return FC(promedio: promedioEntero, maxima: maximoEntero)
+    }
+
+    /// HealthKit a veces reporta "no hay muestras en este rango" como el error
+    /// `errorNoData` en vez de un resultado vacío. Es lo normal en un iPhone
+    /// sin reloj: no es un fallo, es "sin ritmo cardíaco".
+    static func esSinDatos(_ error: Error) -> Bool {
+        (error as? HKError)?.code == .errorNoData
+    }
+}
+
 /// Errores propios de esta capa, para distinguir el motivo real de un fallo
 /// (permiso vs. rango de fechas) en vez de un mensaje genérico.
 enum HealthKitError: LocalizedError {
@@ -657,7 +695,11 @@ final class HealthKitManager {
                 options: [.discreteAverage, .discreteMin, .discreteMax]
             ) { _, resultado, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    if ReglasWorkout.esSinDatos(error) {
+                        continuation.resume(returning: .vacio)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
                 let stats = HeartRateStats(
@@ -737,12 +779,16 @@ final class HealthKitManager {
 
         var sesiones: [SesionMuestra] = []
         for workout in workouts {
-            // Si el workout no tiene FC asociada (sin reloj emparejado), no
-            // hay forma honesta de llenar fc_promedio/fc_maxima como
-            // "obligatorio sí" dice el contrato. Por ahora se manda 0 —
-            // pendiente de confirmar con Luis cómo debe tratar el backend
-            // este caso (igual que en el spike original).
-            let fc = try? await fetchFrecuenciaCardiaca(desde: workout.startDate, hasta: workout.endDate)
+            // Un workout a mano no cuenta (es fácil de inventar).
+            guard !ReglasWorkout.fueIngresadoAMano(metadata: workout.metadata) else { continue }
+
+            // Un workout necesita ritmo cardíaco medido. Sin reloj no hay FC:
+            // la sesión no se manda (antes se mandaba con 0). Un error real de
+            // HealthKit NO se traga: se propaga, para que el día no se dé por
+            // enviado y no se pierda un workout sin que nadie se entere.
+            let stats = try await fetchFrecuenciaCardiaca(desde: workout.startDate, hasta: workout.endDate)
+            guard let fc = ReglasWorkout.fcParaEnviar(stats: stats) else { continue }
+
             let dispositivo = DatosDispositivo(workout.device)
             sesiones.append(
                 SesionMuestra(
@@ -751,8 +797,8 @@ final class HealthKitManager {
                     fin: FormatoFechas.iso8601.string(from: workout.endDate),
                     duracion_min: Int((workout.duration / 60).rounded()),
                     tipo_actividad: Self.identificadorActividad(for: workout.workoutActivityType),
-                    fc_promedio: Int((fc?.promedio ?? 0).rounded()),
-                    fc_maxima: Int((fc?.maximo ?? 0).rounded()),
+                    fc_promedio: fc.promedio,
+                    fc_maxima: fc.maxima,
                     fuente_bundle: workout.sourceRevision.source.bundleIdentifier,
                     fuente_nombre: workout.sourceRevision.source.name,
                     dispositivo_nombre: dispositivo.nombre,
