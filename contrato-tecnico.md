@@ -4,6 +4,16 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 2 oct 2026** (reunión del equipo): inicio de sesión con Google y
+Apple; el objetivo semanal paga monedas **por componente** y su meta de pasos
+depende de la **edad**; vista de semanas tipo "battle pass"; **seasons de 13
+semanas** que siguen las semanas ISO; **monedas sin tope** que se reinician al
+cerrar cada season; **La Liga compite por puntos**, con desempate por pasos;
+datos que entrega la aseguradora, póliza y **prima anuales**; puntos anuales,
+nivel y cashback **por año de póliza** (no por año calendario); cashback en
+quetzales. Lo que cambia en el código quedó marcado **[PENDIENTE]**. Ver
+"Puntos abiertos".
+
 **Actualizado el 1 oct 2026** (cierre semanal programado): el cierre del objetivo
 semanal ya tiene quién lo corra: el servicio `programador` de Docker Compose
 (lunes 00:00 y 12:00, hora de Guatemala), que además se pone al día si un lunes
@@ -105,6 +115,26 @@ campo dentro del JSON.
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
 (credenciales incorrectas en el login).
+
+### Inicio de sesión con Google y Apple (decidido 2 oct 2026)
+
+Además de usuario y contraseña, la app ofrece **"Continuar con Google"** e
+**"Iniciar sesión con Apple"**. Apple no es opcional: la App Store exige
+ofrecerlo si se ofrece Google (guía 4.8).
+
+- La app recibe del proveedor una credencial firmada y se la manda al servidor;
+  el servidor la verifica con Google o Apple y devuelve **el mismo `token` de
+  siempre**. Desde ahí nada cambia: mismo encabezado, mismo `actualizarSesion`,
+  mismo `sync`.
+- Ni Google ni Apple entregan la fecha de nacimiento. La primera vez se pide en
+  un paso aparte y **sin ella no se crea la cuenta**: la edad decide la FCmáx,
+  el bono 60+ y la meta semanal de pasos.
+- Apple puede ocultar el correo real (entrega uno de reenvío).
+- **[PENDIENTE] (Luis y Daniel):** la forma de los endpoints (propuesta:
+  `POST /api/v1/login/google` y `POST /api/v1/login/apple` con la credencial
+  del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
+  cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
+  cuentas distintas).
 
 ### Reglas del token
 
@@ -404,15 +434,15 @@ HTTP directo contra la API de Luis — no viaja por acá.
 | `puntos_intensidad` | int | FCM = 219 − edad. Escalón de **la mejor sesión del día** (no se suman): 30 min al 60% = 50, 30 min al 70% = 100, 60 min al 60% = 100, 90 min al 60% = 150. Cuentan los workouts y las sesiones que el servidor infiere del ritmo cardíaco. **+25** con 60 años o más si ganó algo por intensidad |
 | `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` |
 | `tope_diario_aplicado` | bool | true si los puntos brutos pasaron de 200 (llegar a 200 justos no es recorte) |
-| `puntos_ano` | int | lo acreditado en el año (suma del ledger), con el techo de 12.000 ya aplicado |
-| `tope_anual_aplicado` | bool | true si el techo anual **recortó lo de este día** |
-| `nivel` | int (0–4) | nivel **anual** de cashback según `puntos_ano`: 0 bajo 2.500, 1 desde 2.500 (5%), 2 desde 5.000 (7,5%), 3 desde 10.000 (10%), 4 desde 15.000 (20%) — no confundir con el **objetivo semanal** (ver abajo) |
+| `puntos_ano` | int | lo acreditado en el **año de póliza** en curso (desde la fecha de inicio o la última renovación de la póliza; suma del ledger), con el techo de 12.000 ya aplicado. **[PENDIENTE] (código):** hoy se cuenta del 1 de enero al 31 de diciembre |
+| `tope_anual_aplicado` | bool | true si el techo del año de póliza **recortó lo de este día** |
+| `nivel` | int (0–4) | nivel de cashback del **año de póliza**, según `puntos_ano`: 0 bajo 2.500, 1 desde 2.500 (5%), 2 desde 5.000 (7,5%), 3 desde 10.000 (10%), 4 desde 15.000 (20%) — no confundir con el **objetivo semanal** (ver abajo) |
 | `pasos_totales_dia` | int | total de pasos del día con la regla por hora (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
 
 No incluye ningún campo que explique *por qué* se descartó una muestra, se
 detectó una sesión intensa, o se aplicó un techo — esa lógica es del backend.
 
-**Techo anual de 12.000:** con el chequeo médico fuera de v1, ese es el máximo
+**Techo anual de 12.000 (por año de póliza):** con el chequeo médico fuera de v1, ese es el máximo
 alcanzable solo por actividad — Nivel 4 (15.000+) queda fuera de alcance en el
 piloto. Consecuencia aceptada y documentada, no un bug.
 
@@ -474,19 +504,74 @@ si aparecen en algún doc de pantallas, es material viejo. La progresión
 numérica (1, 2, 3...) se llama **objetivo semanal** — nunca "nivel", para no
 confundirla con el nivel anual de cashback del JSON #2.
 
-### Demo 1 (temporal, acordado 23 sep) — objetivo fijo, igual para todos
+### Demo 1 (acordado 23 sep; cambios del 2 oct) — objetivo sin progresión
 
-Para el demo 1 **todos los usuarios tienen el mismo objetivo cada semana**,
-hardcodeado. No hay progresión entre objetivos.
+En el demo 1 el objetivo **no progresa**: no sube ni se congela según lo que
+cumpla cada uno.
 
 - **Duración siempre igual:** lunes 00:00 a domingo 23:59.
 - **Dos componentes:** (a) **pasos totales de la semana** y (b) **cantidad de
   workouts**. Ejemplo: "30.000 pasos y mínimo 1 workout".
-- Se cumple al alcanzar **ambas** métricas dentro de la semana.
+- **Cada componente paga sus monedas por separado** (decidido 2 oct 2026):
+  cumplir los pasos paga lo suyo aunque no se cumplan los workouts, y al revés.
+  Montos **provisionales: 5 por pasos + 5 por workouts** (la reunión los dio
+  como ejemplo).
+- La semana se marca **completada** solo si se cumplen **los dos**.
+- **La meta de pasos depende del rango de edad**, de 10 en 10 años (decidido
+  2 oct 2026). La edad sale de la fecha de nacimiento **confirmada por la
+  aseguradora** si hay póliza verificada; si no, de la del registro (la misma
+  regla que usan los puntos). La meta de workouts es igual para todos.
+  **Tabla provisional** (2 oct 2026), ver "Meta de pasos por edad" abajo.
 - **No se sube ni se congela objetivo** en el demo. La sección "Diseño
-  completo" de abajo y las seasons **se mantienen como diseño**.
-- Los valores (meta de pasos y de workouts) viven en una tabla/config
-  hardcodeada del backend, editable a mano — sin cálculo.
+  completo" de abajo **se mantiene como diseño**.
+- Los valores (metas y monedas) viven en una tabla del backend, editable a
+  mano — sin cálculo.
+
+### Meta de pasos por edad — tabla provisional (2 oct 2026)
+
+| Edad | Pasos al día | Meta semanal de pasos |
+|---|---|---|
+| 18 a 29 | 7.000 | 49.000 |
+| 30 a 39 | 7.000 | 49.000 |
+| 40 a 49 | 6.500 | 45.000 |
+| 50 a 59 | 6.000 | 42.000 |
+| 60 a 69 | 5.000 | 35.000 |
+| 70 o más | 4.500 | 31.000 |
+
+**De dónde sale.** Queda entre lo que la gente camina medido con el teléfono y
+lo que recomienda la evidencia de salud:
+
+- Medido con teléfono o podómetro, un adulto camina unos **5.000 pasos al día**:
+  4.961 en promedio con iPhone en 111 países y 4.692 en México (Althoff et al.,
+  *Nature* 2017); entre 5.843 (18 a 29 años) y 4.027 (60 o más) con podómetro en
+  EE. UU. (Bassett et al., 2010). Un acelerómetro en la cintura cuenta casi el
+  doble (10.700 en ocho países de Latinoamérica, estudio ELANS 2021), porque el
+  teléfono no siempre va encima. +Vida mide con iPhone y, a veces, reloj: la
+  referencia que aplica es la del teléfono.
+- El beneficio en mortalidad se aplana en **6.000 a 8.000 pasos al día con 60
+  años o más** y en **8.000 a 10.000 con menos de 60** (Paluch et al., *Lancet
+  Public Health* 2022).
+- Arranca en 7.000 al día porque es el primer escalón de puntos diarios (25
+  puntos). No hay datos publicados de Guatemala.
+
+**Es provisional:** después de 2 a 4 semanas de piloto se ajusta con los pasos
+reales de los usuarios de cada rango, que miden exactamente como mide la app.
+La edad sale de la fecha confirmada por la aseguradora si hay póliza
+verificada; si no, de la del registro. **[PENDIENTE] (Luis):** el código usa hoy
+una sola meta de 30.000 para todos.
+
+### Vista de semanas tipo "battle pass" (decidido 2 oct 2026)
+
+Cada semana es una caja, con scroll horizontal para ver las semanas pasadas y
+las que vienen. Muestra **las semanas de la season en curso** (13, o 14 cuando
+incluye la semana 53). Cada caja necesita: número de semana, fechas, metas,
+monedas de cada componente, estado (completada, un componente cumplido, en
+curso o futura) y el **logo del patrocinador** si esa semana está vendida. Lo
+pidió la reunión para mostrar mejor la marca.
+
+**[PENDIENTE] (Luis):** hoy `GET /api/v1/retos/estado` devuelve solo la semana en
+curso. Falta un endpoint (o ampliar este) que devuelva la lista de semanas de
+la season, y el endpoint de patrocinios, que sigue pendiente desde septiembre.
 
 ### Diseño completo — cómo se mueve el objetivo semanal (se mantiene; vuelve después del demo)
 
@@ -498,29 +583,54 @@ hardcodeado. No hay progresión entre objetivos.
 - La dificultad aumenta con el objetivo — tabla a definir por Luis (L11).
 - Techo real de diseño: **~13 objetivos** (una season dura 13 semanas).
 
-### Seasons
+### Seasons (redefinidas el 2 oct 2026)
 
-El objetivo semanal se reinicia a 1 cada 3 meses, en fechas fijas de
-calendario iguales para todos:
+El año se divide en **4 seasons de 13 semanas completas**, iguales para todos.
+Empiezan siempre un **lunes** y siguen las **semanas ISO** (la semana 1 es la
+que contiene el 4 de enero):
 
-| Season | Arranca | Termina |
-|---|---|---|
-| 1 | 1 de enero | 31 de marzo |
-| 2 | 1 de abril | 30 de junio |
-| 3 | 1 de julio | 30 de septiembre |
-| 4 | 1 de octubre | 31 de diciembre |
+| Season | Semanas ISO |
+|---|---|
+| 1 | 1 a 13 |
+| 2 | 14 a 26 |
+| 3 | 27 a 39 |
+| 4 | 40 a 52, más la **53** en los años que la tienen |
 
-- Afectan **únicamente** el objetivo semanal — no tocan puntos anuales,
-  cashback, ni La Liga.
-- Al cerrar una season, todos vuelven a **objetivo 1**, sin importar dónde
-  llegaron.
+Ejemplos: **2026 tiene 53 semanas**, así que la season 4 de 2026 va del lunes
+28 sep 2026 al domingo 3 ene 2027 (14 semanas). En 2027 la season 1 empieza el
+lunes 4 ene 2027.
+
+- Afectan el **objetivo semanal** y las **monedas** (el saldo se reinicia al
+  cerrar la season; ver "Monedas y seasons"). **No** tocan los puntos anuales
+  ni el cashback, que siguen el **año de póliza**, ni La Liga, que sigue el mes
+  de calendario.
+- Al cerrar una season, todos vuelven a **objetivo 1** (diseño completo).
 - Cada season queda en el historial del usuario, con el **objetivo máximo**
   alcanzado.
-- **El reinicio ocurre el día exacto de la season** (1 de enero/abril/julio/
-  octubre), sin esperar al lunes siguiente — aunque eso parta una semana
-  calendario a la mitad entre dos seasons. Ningún 1° de mes de season cae
-  lunes en 2026-2027, así que esto pasa siempre, no es un caso raro: no
-  importa, el día exacto manda.
+- Como toda season empieza en lunes, **nunca parte una semana**. Esto
+  reemplaza la regla anterior (corte el 1 de enero, abril, julio y octubre,
+  aunque cayera a media semana).
+
+**[PENDIENTE] (Luis):** el código (`services/tiempo.py`) todavía calcula las
+seasons por trimestre de calendario: para el código la season 4 de 2026 empezó
+el jueves 1 oct, y según esta regla empezó el lunes 28 sep.
+
+### Monedas y seasons (decidido 2 oct 2026)
+
+- **Sin tope de acumulación.** Reemplaza el tope de 100.
+- **Todas las monedas caducan al cerrar la season:** el saldo vuelve a 0.
+  Reemplaza la caducidad de 90 días por cada ganancia.
+- **Orden al cambiar de season:** el lunes 00:00 en que empieza una season,
+  primero se reinicia el saldo y **después** se paga la semana que acaba de
+  cerrar. Así las monedas de la última semana cuentan en la season nueva.
+- **Aviso:** se quita el aviso al llegar a 80 (existía por el tope). En su
+  lugar se avisa **7 días antes** de que termine la season.
+- Sin póliza verificada se ganan igual pero no se pueden gastar, y al cerrar la
+  season se reinician como las demás.
+- Los **cupones ya canjeados** no cambian: caducan a los 60 días del canje.
+
+**[PENDIENTE] (Luis):** `services/monedas.py` aplica hoy el tope de 100 y la
+caducidad de 90 días, y nada reinicia el saldo al cambiar de season.
 
 ### Ciclos y cortes
 
@@ -572,13 +682,16 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
 }
 ```
 
-`objetivo.monedas_al_cumplir` es cuántas monedas paga cumplir el objetivo de esa
-semana. **[PENDIENTE]** el 20 de hoy es un valor provisional del backend:
-ningún documento lo fija todavía. Las monedas respetan el tope de 100 acumuladas
-y caducan a los 90 días (ver `CLAUDE.md`); lo que excede el tope se pierde.
+`objetivo.monedas_al_cumplir` es lo que paga **hoy el código**: 20 monedas por
+cumplir los dos componentes. **[PENDIENTE] (2 oct):** pasa a pagarse por
+componente (5 + 5 provisional), así que la respuesta tiene que traer las
+monedas de cada componente y, en `progreso`, si se cumplió cada uno además de
+si la semana quedó completada. Las monedas ya no tienen tope y caducan al
+cerrar la season (ver "Monedas y seasons").
 
-El `objetivo` es **el mismo para todos los usuarios** esa semana; `progreso`
-es del usuario que pregunta. `historial_seasons` viene vacío en el demo (no
+`progreso` es del usuario que pregunta. La meta de workouts es igual para todos;
+la de pasos, desde el 2 oct, depende del rango de edad (**[PENDIENTE]** en el
+código, que hoy usa la misma para todos). `historial_seasons` viene vacío en el demo (no
 hay objetivo máximo que registrar mientras no haya progresión).
 
 **Cómo está construido hoy (backend, 1 oct):**
@@ -594,8 +707,9 @@ hay objetivo máximo que registrar mientras no haya progresión).
   (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces. Lo
   dispara el servicio `programador` (ver "Cierre semanal programado").
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
-  **gastarlas**. Respetan el tope de 100 acumuladas (lo que excede se pierde) y
-  cada ganancia caduca a los 90 días.
+  **gastarlas**. Hoy el código aplica el tope de 100 y la caducidad de 90 días;
+  **[PENDIENTE] (2 oct):** sin tope y con reinicio al cerrar la season (ver
+  "Monedas y seasons").
 - **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
   vinculada") **sí** cuentan para el progreso de la semana en curso. Las
   monedas solo se anulan si la semana entera cerró antes de la verificación.
@@ -649,10 +763,10 @@ externo (por ejemplo uno de AWS) y el reloj del servidor va unos segundos
 atrasado, a las 06:00 en punto el comando todavía vería domingo en Guatemala y no
 cerraría nada hasta el lunes siguiente.
 
-**Las monedas se pagan con la fecha del día en que corre el cierre** (y caducan 90
-días después de esa fecha), no con la fecha de la semana que se cerró. Una semana
-que se cierra con retraso paga igual, pero sus monedas empiezan a caducar desde
-ese día.
+**Las monedas se pagan con la fecha del día en que corre el cierre**, no con la
+fecha de la semana que se cerró. Desde el 2 oct ya no caducan a los 90 días sino
+al cerrar la season (ver "Monedas y seasons"): una semana que se cierra con
+retraso, si mientras tanto empezó otra season, paga en la season nueva.
 
 ---
 
@@ -664,16 +778,27 @@ toca el contrato.
 **La Liga (demo 1, temporal):**
 
 - **Un solo grupo** con todos los usuarios con póliza vinculada y verificada.
-  Sin franja de edad ni sub-ligas (diseño futuro).
-- Ciclo: día 1 al último día del mes calendario. Qué cuenta: suma de
-  `pasos_totales_dia` del mes (el valor ya deduplicado).
+  Sin franja de edad ni sub-ligas (diseño futuro). Confirmado el 2 oct.
+- Ciclo: día 1 al último día del mes calendario.
+- **Compite por puntos** (decidido 2 oct 2026): la suma de los puntos del mes,
+  los mismos que dan el cashback, **tal cual** (con el tope diario de 200 y el
+  bono 60+). Antes competía por pasos.
+- **Desempate:** a igualdad de puntos gana quien tenga **más pasos** en el mes
+  (suma de `pasos_totales_dia`). La app lo explica con un botón de información.
+- **Qué se muestra:** los **puntos** de cada participante sí; la **cantidad de
+  pasos** nunca, ni siquiera para explicar un desempate (decidido 2 oct 2026).
+- **Patrocinio:** algunos meses La Liga tiene una marca. Es la misma Liga, no
+  una aparte: la marca se muestra arriba, junto al nombre de la liga,
+  destacada, y los 3 primeros ganan además un cupón de esa marca.
+  **[PENDIENTE] (Luis):** el endpoint de patrocinios.
 - **Premios por percentil** de la posición final: el corte de cada tramo es
   `max(1, floor(N × percentil_acumulado))`. Tramos de partida: top 3% /
   siguiente 7% (hasta 10%) / 10%–25% / "y así" (por definir). Luis calcula
   posición, percentil y tramo **una sola vez, al cierre del mes**.
 
 **Tus Ligas:** grupos que crea o a los que se une el usuario. Ranking mensual
-de pasos entre miembros, **sin premios y sin exigir póliza** (cambia el 23
+**por puntos** entre miembros (decidido 2 oct 2026, igual que La Liga; antes era
+por pasos), con el mismo desempate por pasos, **sin premios y sin exigir póliza** (cambia el 23
 sep; antes exigían póliza).
 
 **Duelos 1 contra 1:** eliminados del demo 1 — no construir endpoints ni
@@ -1037,6 +1162,47 @@ nunca se edita a mano.
 aseguradora confirma la póliza. `verificada` es el único valor que debe usarse
 para habilitar canje, cashback y La Liga.
 
+### Datos que entrega la aseguradora (decidido 2 oct 2026)
+
+**Nombre, apellido, prima anual, número de póliza, fecha de nacimiento, plan y
+fecha de renovación.** El registro simulado tiene todos (más deducible,
+coaseguro y red), salvo que guarda la prima **mensual**.
+
+- **La póliza es anual:** se renueva cada año, y la **prima es anual**.
+- La fecha de la aseguradora es la de **renovación**, no un vencimiento: una
+  póliza médica no vence. **Solo deja de dar beneficios si la aseguradora la
+  cancela o la suspende.**
+- **[PENDIENTE] (código):**
+  - `services/policy_verification.py` rechaza hoy con `no_vigente` si la fecha
+    de hoy queda fuera de inicio y fin de vigencia. Con esta regla, una póliza
+    pasada su fecha de renovación no se debe rechazar; solo una cancelada o
+    suspendida.
+  - El registro simulado tiene un estado `vencida` (póliza `POL-100004`) que con
+    esta regla no existe, y guarda `prima_mensual_gtq` en vez de la prima
+    anual.
+  - La póliza vinculada guarda hoy solo número, aseguradora, fecha de inicio y
+    fecha de nacimiento confirmada. Falta guardar nombre, apellido, plan, prima
+    y fecha de renovación, y devolverlos en `GET /api/v1/polizas/estado`.
+  - Cómo se entera el sistema de que una póliza ya verificada fue cancelada
+    (depende de la integración real con la aseguradora).
+
+### Cashback en quetzales (decidido 2 oct 2026)
+
+**Monto = % del nivel × prima anual.** Se devuelve como dinero **después** del
+pago de la prima, nunca como descuento (regla regulatoria, ver `CLAUDE.md`). Se
+muestra en Mi Plan, debajo de las gráficas.
+
+**El año del cashback es el año de póliza** (decidido 2 oct 2026): los puntos
+anuales, el techo de 12.000, el nivel y el cashback se cuentan desde la fecha de
+inicio (o la última renovación) de la póliza hasta su siguiente renovación, no
+del 1 de enero al 31 de diciembre. Con varias personas en la misma póliza
+(pólizas familiares), todas comparten esas fechas.
+
+**[PENDIENTE] (Luis):**
+- No hay endpoint que devuelva el cashback.
+- El código cuenta el año por calendario (`fecha__year` en el ledger y en el
+  techo anual); hay que pasarlo al año de póliza.
+
 ### Retroactividad
 
 Al verificarse, la fecha de nacimiento de la **cuenta** (la del registro) se
@@ -1129,20 +1295,23 @@ verificación" son el mismo momento.
   "Cierre semanal programado").
 - **Objetivos semanales (L11) — implementado para el demo 1 (1 oct; ver "Cómo
   está construido hoy"). Lo que sigue vigente del ticket:** un
-  objetivo **fijo e igual para todos** (meta de pasos totales de la semana +
-  meta de workouts), **hardcodeado**, lunes–domingo. Cumplido = ambas
-  métricas alcanzadas. Sin subir ni congelar objetivo en el demo; el
+  objetivo sin progresión (meta de pasos totales de la semana + meta de
+  workouts), editable a mano, lunes–domingo. Completada = ambas métricas
+  alcanzadas; desde el 2 oct cada componente paga por separado y la meta de
+  pasos depende del rango de edad (ver "Demo 1"). Sin subir ni congelar objetivo en el demo; el
   mecanismo completo (progresión que se congela en vez de bajar, tabla de
   dificultad, historial de seasons con objetivo máximo) **queda como diseño
   para después, pero las seasons se mantienen** en el modelo y en la
-  respuesta del endpoint (el reinicio ocurre el día exacto de la season). Se
+  respuesta del endpoint (desde el 2 oct, seasons de 13 semanas ISO). Se
   mantienen las dos corridas programadas (00:00 fija el objetivo, 12:00 solo
   corrige historial/acumulado). Un **workout** = un entrenamiento que
   cuenta (con ritmo cardíaco, no manual y sin duplicar los que dos
   dispositivos registran a la vez — ver "Qué cuenta como workout"), **de
   cualquier duración** (decidido 1 oct 2026).
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
-  vinculada y verificada. Al cierre del mes calcular una vez posición,
+  vinculada y verificada. Desde el 2 oct compite **por puntos** del mes (tal
+  cual, con tope y bono 60+), con desempate por pasos del mes. Al cierre del
+  mes calcular una vez posición,
   percentil y tramo de premio de cada participante
   (`max(1, floor(N × percentil_acumulado))`) y guardarlos. Tabla de tramos y
   premios en configuración — por definir con Diego. Sin franja de edad ni
@@ -1165,6 +1334,24 @@ verificación" son el mismo momento.
 - **Muestras borradas en HealthKit:** si la persona borra una muestra en Apple
   Salud, el servidor la conserva (solo inserta, nunca borra). El día se
   recalcula con lo guardado, así que esa muestra sigue contando.
+- **Reunión del 2 oct — trabajo de backend [PENDIENTE]:**
+  - Inicio de sesión con Google y Apple (ver "Inicio de sesión con Google y
+    Apple").
+  - Objetivo semanal: pago por componente (5 + 5 provisional), meta de pasos
+    por rango de edad y lista de semanas de la season para la vista "battle
+    pass".
+  - Seasons por semanas ISO (hoy por trimestre de calendario).
+  - Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
+    cambia (primero reiniciar, después pagar).
+  - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
+    devuelven los puntos de cada participante pero nunca sus pasos.
+  - Póliza: no rechazar por la fecha de renovación (solo cancelada o
+    suspendida), y guardar y devolver nombre, apellido, plan, prima y fecha de
+    renovación.
+  - Endpoints nuevos: cashback en quetzales, cupones (activos, usados y
+    vencidos) y patrocinios.
+  - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
+    (hoy por año calendario), y prima anual en el registro de la aseguradora.
 
 ## Notas para Daniel (Flutter)
 
@@ -1215,14 +1402,20 @@ verificación" son el mismo momento.
 - El **objetivo semanal** no viene en la respuesta del sync — pedirlo aparte
   con `GET /api/v1/retos/estado`. No confundirlo con `nivel` (el anual, de
   cashback) que sí viene en la respuesta del sync.
-- **Objetivos semanales (D12) — demo 1:** el objetivo es **el mismo para
-  todos**: meta de pasos + meta de workouts de la semana, con el progreso del
-  usuario en cada una. **Sin rango, sin subir/bajar, sin congelamiento, sin
+- **Objetivos semanales (D12) — demo 1:** meta de pasos + meta de workouts de
+  la semana, con el progreso del usuario en cada una. **Desde el 2 oct:** cada
+  componente muestra **sus propias monedas** (cumplir uno paga aunque no se
+  cumpla el otro), la semana se marca completada solo con los dos, y la meta de
+  pasos depende de la edad (la manda el servidor; la app no la calcula). **Sin rango, sin subir/bajar, sin congelamiento, sin
   animación de cambio de objetivo.** Mostrar en qué season está el usuario y
   cuánto falta para que cierre (las seasons se mantienen). La progresión
   completa vuelve después del demo — no construir hoy.
 - **La Liga:** un solo grupo, todos los usuarios con póliza verificada,
-  premios por percentil (el servidor calcula posición y tramo). Sin franjas
+  premios por percentil (el servidor calcula posición y tramo). **Desde el 2
+  oct compite por puntos**, con desempate por pasos y un botón de información
+  que lo explique; si el mes está patrocinado, la marca va arriba junto al
+  nombre de la liga. **Tus Ligas también compite por puntos.** En La Liga se
+  muestran los puntos de cada participante, **nunca la cantidad de pasos**. Sin franjas
   de edad ni sub-ligas. **Tus Ligas:** cualquiera se une (con o sin póliza),
   sin premios. **Duelos 1 contra 1: eliminar.**
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia
@@ -1232,6 +1425,19 @@ verificación" son el mismo momento.
   Swift agrega al payload de sync; Daniel no los toca ni los muestra.
 - Nada de SDKs de terceros (ej. Firebase) puede tocar datos de HealthKit, ni
   indirectamente — Apple lo trata como filtración y remueve la app.
+- **Reunión del 2 oct — pantallas** (el detalle vive en `CLAUDE.md`):
+  - **Login:** botones "Continuar con Google" e "Iniciar sesión con Apple", y un
+    paso para pedir la fecha de nacimiento la primera vez.
+  - **Hoy:** sin racha; las cajas de etapas (7.000 / 10.000 / 15.000) pasan a un
+    botón de información que se expande; el desglose de puntos queda siempre
+    visible.
+  - **Objetivo semanal:** vista tipo "battle pass" con las semanas de la season
+    en scroll horizontal.
+  - **Monedas:** sin tope; se quita el aviso de 80 y se avisa 7 días antes de
+    que termine la season (la fecha de cierre ya viene en `retos/estado`).
+  - **Mi Plan:** la gráfica de nivel y la de barras se unen, con el cashback en
+    quetzales debajo.
+  - **Premios:** lista desplegable con los cupones usados y vencidos.
 
 ---
 
@@ -1278,6 +1484,25 @@ verificación" son el mismo momento.
 
 ## Puntos abiertos
 
+*De la reunión del 2 oct:*
+
+- **Endpoints que faltan definir:** inicio de sesión con Google y Apple, lista de
+  semanas de la season (vista "battle pass"), cashback en quetzales, cupones
+  (activos, usados y vencidos) y patrocinios.
+- **Póliza cancelada después de verificada:** cómo se entera el sistema y qué
+  pasa con los puntos y monedas de ese momento.
+- **Año de póliza y cuentas sin póliza:** una cuenta base no tiene año de
+  póliza. ¿Con qué fechas cuenta sus puntos anuales y su nivel mientras no
+  vincula una póliza?
+- **Puntos de antes del inicio de la póliza:** al verificar con retroactividad,
+  ¿los días anteriores al inicio del año de póliza en curso cuentan para ese
+  año o para el anterior?
+- **Cuándo se paga el cashback:** ¿al cerrar cada año de póliza (en la
+  renovación, después de pagar la prima)?
+- **Transición de la season en curso:** según la regla nueva, la season 4 de
+  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas); el
+  código la empezó el jueves 1 oct. Hay que decidir si se corrige hacia atrás.
+
 *Encontrados en la revisión contra el código (1 oct):*
 
 - **Ritmo cardíaco de Garmin (por verificar en un dispositivo):** según lo
@@ -1299,8 +1524,9 @@ verificación" son el mismo momento.
 - **`zona_horaria` y `app_version`:** el servidor los exige pero no los usa.
   Decidir si se usan (días en la zona del usuario, rechazar versiones viejas)
   o se dejan solo como dato.
-- **Cuánto paga el objetivo semanal:** `monedas_al_cumplir` es 20 de forma
-  provisional.
+- **Cuánto paga el objetivo semanal:** desde el 2 oct, 5 monedas por pasos +
+  5 por workouts, de forma **provisional** (la reunión los dio de ejemplo). El
+  código paga hoy 20 por cumplir los dos.
 - **La Liga, Tus Ligas, Premios y Canje:** las tablas existen en el backend,
   pero no hay cálculo ni endpoints todavía.
 
@@ -1346,9 +1572,12 @@ verificación" son el mismo momento.
   deriva al vuelo para los reportes de la aseguradora. La regla
   `desconocido → telefono` ya no afecta ningún puntaje. Ver "Puntos abiertos"
   en `decision-tipo-dispositivo.md`.
-- **Metas hardcodeadas del objetivo semanal (demo 1):** cuántos pasos y
-  cuántos workouts. (Qué es un workout ya está decidido: cualquier
-  entrenamiento con ritmo cardíaco, de cualquier duración.)
+- **Metas del objetivo semanal:** la tabla de pasos por edad es provisional
+  (ver "Meta de pasos por edad"); falta ajustarla con 2 a 4 semanas de datos
+  del piloto. Falta decidir cuántos workouts y qué meta tiene un menor de 18
+  (la tabla empieza en 18). (Qué es un
+  workout ya está decidido: cualquier entrenamiento con ritmo cardíaco, de
+  cualquier duración.)
 - **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
   y qué premio le toca a cada tramo (Diego).
 - **Endpoints de La Liga y de Tus Ligas:** sin especificar.
