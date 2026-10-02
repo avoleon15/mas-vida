@@ -250,7 +250,8 @@ como motivación.
   dispositivo con más puntos. **Nunca se suma la misma actividad dos veces.**
 - **Un workout necesita ritmo cardíaco** (un reloj): con solo el teléfono no
   hay workouts. Los workouts ingresados a mano no cuentan (son fáciles de
-  inventar).
+  inventar). **Cualquier workout de cualquier duración cuenta** para el
+  objetivo semanal (los 30 min mínimos son solo para los puntos de intensidad).
 - Ya no se usa `tipo_dispositivo` para el puntaje; los dispositivos se
   comparan por `fuente_bundle` + `dispositivo_modelo` + `dispositivo_fabricante`.
 - El día se **recalcula completo en cada sync** de esa fecha: los relojes de
@@ -804,7 +805,8 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   solo para HealthKit.
 - **MethodChannel:** 3 métodos, nada más — `solicitarPermisos`, `sincronizar`
   y `actualizarSesion` (le entrega a Swift el token de la sesión, o `null` al
-  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás va
+  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart` (todavía le falta
+  `actualizarSesion`). Todo lo demás va
   por HTTP directo contra la API.
 - Backend: **Django + PostgreSQL** (decisión final). `TIME_ZONE =
   'America/Guatemala'`.
@@ -851,7 +853,9 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 - **Tres objetivos por semana**, retos que **bajan** de nivel, reinicio
   mensual, "metas mensuales".
 - Monedas que caducan a 6 meses; tope de 100 monedas **por semana**.
-- Lista blanca de fuentes; "gana la fuente con más pasos" entre todas.
+- Lista blanca de fuentes; "gana la fuente con más pasos **del día**" entre
+  todas. (No confundir con la regla vigente: los pasos se deciden **por hora**
+  y las horas se suman; ver "Elección de fuente".)
 - Ventana de datos rezagados de 3 o 6 días.
 - Liga de desconocidos **trimestral**, por zona, u opt-in.
 - Término "medallas" (ahora son monedas).

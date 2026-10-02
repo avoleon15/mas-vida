@@ -4,6 +4,17 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 1 oct 2026** (revisión contra el código): se comparó cada
+sección con lo que hacen el backend (incluido el de Luis, ya en `dev`), Swift y
+Flutter. Donde el código no cumple una regla ya decidida, la regla **no se
+cambió**: se marca **[PENDIENTE]** con lo que pasa hoy. Ver "Puntos abiertos".
+Decidido en esta revisión: **cualquier workout de cualquier duración cuenta**
+(con ritmo cardíaco). Ya cuenta así en el código.
+
+**Actualizado el 1 oct 2026** (cierre de huecos): se documentan
+`GET /api/v1/historial`, el campo `monedas_al_cumplir` de `retos/estado` y qué
+hace el servidor con datos mal formados o imposibles en `sync`.
+
 **Actualizado el 1 oct 2026** (fuentes, workouts y póliza): la elección de
 fuente pasa de "gana el reloj" a **una decisión por hora** para los pasos; un
 workout **necesita ritmo cardíaco** (sin reloj no hay workout, y los workouts
@@ -119,8 +130,10 @@ fila del usuario y no tiene relación con este campo.
 | Token inválido | `401` | `{ "detail": "..." }` |
 | Token válido pero la cuenta no tiene perfil de usuario | `403` | `{ "mensaje": "..." }` |
 
-Los textos salen en inglés y pueden cambiar: los clientes deciden **siempre por
-el código de estado**, nunca por el texto.
+Los textos pueden salir en inglés (los mensajes estándar de Django REST
+Framework, como los de `401` o "This field is required.") o en español (los
+propios del proyecto, como el de `403`), y pueden cambiar: los clientes deciden
+**siempre por el código de estado**, nunca por el texto.
 
 ---
 
@@ -200,8 +213,8 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 
 | Campo | Tipo | Obligatorio | Notas |
 |---|---|---|---|
-| `fecha` | string (YYYY-MM-DD) | sí | día calendario en la zona horaria del usuario, no en UTC |
-| `zona_horaria` | string (IANA) | sí | ej. `America/Guatemala`. Define dónde cae la medianoche para el corte de la semana |
+| `fecha` | string (YYYY-MM-DD) | sí | día calendario que se está sincronizando. El servidor guarda todas las muestras que llegan y **recalcula ese día** con todas las guardadas que **empiezan** dentro de él, en hora de Guatemala |
+| `zona_horaria` | string (IANA) | sí | ej. `America/Guatemala`. El servidor valida que sea una zona IANA real, pero **hoy no la usa**: el día y la semana se cortan siempre en hora de Guatemala (`TIME_ZONE` del servidor). Para el piloto, todo en Guatemala, es lo mismo |
 | `pasos[]` | array | sí (puede ir vacío) | una entrada por muestra de `HKQuantitySample` de tipo `.stepCount` |
 | `pasos[].external_id` | string (UUID) | sí | el `sample.uuid` de HealthKit — clave de idempotencia |
 | `pasos[].inicio` / `.fin` | string (ISO 8601 con offset) | sí | ventana exacta de la muestra |
@@ -212,7 +225,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 | `pasos[].dispositivo_nombre` | string, nullable | no | **nuevo (20 sep 2026)** — `HKDevice.name`, nombre legible del hardware físico. `null` cuando `sample.device` es `nil`, nunca string vacío |
 | `pasos[].dispositivo_modelo` | string, nullable | no | **nuevo** — `HKDevice.model`. Para dispositivos Apple ya es la categoría (`iPhone`/`Watch`/`iPad`), sin tabla ni parseo |
 | `pasos[].dispositivo_fabricante` | string, nullable | no | **nuevo** — `HKDevice.manufacturer`. Puede venir nulo en apps puente de terceros |
-| `sesiones[]` | array | sí (puede ir vacío) | una entrada por `HKWorkout` de ≥30 min continuos **que tenga ritmo cardíaco y no sea manual** (ver "Qué cuenta como workout") |
+| `sesiones[]` | array | sí (puede ir vacío) | una entrada por `HKWorkout` **que tenga ritmo cardíaco y no sea manual** (ver "Qué cuenta como workout"). De **cualquier duración** (decidido 1 oct 2026): los 30 min mínimos solo aplican a los puntos de intensidad, no a contar un workout |
 | `sesiones[].external_id` | string (UUID) | sí | el `sample.uuid` del workout — clave de idempotencia |
 | `sesiones[].inicio` / `.fin` | string (ISO 8601) | sí | ventana del workout |
 | `sesiones[].duracion_min` | int | sí | duración en minutos |
@@ -227,7 +240,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 | `frecuencia_cardiaca[].fuente_bundle` / `.fuente_nombre` | string | sí | mismo criterio que pasos[] |
 | `frecuencia_cardiaca[].dispositivo_nombre` / `.dispositivo_modelo` / `.dispositivo_fabricante` | string, nullable | no | **nuevo** — mismo criterio que pasos[] |
 | `sincronizado_en` | string (ISO 8601) | sí | cuándo el teléfono armó el payload |
-| `app_version` | string | sí | para invalidar syncs de versiones viejas |
+| `app_version` | string | sí | versión de la app. Hoy el servidor solo exige que venga; todavía no rechaza versiones viejas |
 
 **`usuario_id` ya no va en este JSON (30 sep 2026).** El servidor saca al usuario
 del token (ver "Autenticación (token)"). **Transición:** una versión vieja de la
@@ -327,6 +340,13 @@ solo el teléfono no se registran workouts.
   inventar. Swift no los manda (`HKMetadataKeyWasUserEntered`).
 - Un workout que cuenta suma a `workouts_dia` (dashboard) y al objetivo
   semanal, además de a los puntos de intensidad.
+- **Duración (decidido 1 oct 2026):** cualquier workout, de cualquier duración,
+  cuenta para `workouts_dia` y para el objetivo semanal. Los 30 minutos mínimos
+  son solo para ganar **puntos de intensidad** (un workout de 10 min cuenta
+  como workout y da 0 puntos de intensidad).
+- Las sesiones intensas que el servidor **infiere** del ritmo cardíaco (sin un
+  workout registrado) dan puntos de intensidad, pero **no** cuentan como
+  workout.
 
 ---
 
@@ -354,14 +374,14 @@ HTTP directo contra la API de Luis — no viaja por acá.
 | Campo | Tipo | Notas |
 |---|---|---|
 | `fecha` | string (YYYY-MM-DD) | eco del día sincronizado |
-| `puntos_pasos` | int | tabla de pasos: 7.000–10.000 = 25, 10.000–15.000 = 50, 15.000+ = 100. Debajo de 7.000: 0 |
-| `puntos_intensidad` | int | matriz de intensidad, FCM = 219 − edad, sesión ≥30 min continuos al 60-70% de FCM |
-| `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado |
-| `tope_diario_aplicado` | bool | true si el techo de 200/día recortó el resultado |
-| `puntos_ano` | int | acumulado anual, con el techo de 12.000 ya aplicado |
-| `tope_anual_aplicado` | bool | true si el usuario ya llegó al techo anual |
-| `nivel` | int (0–4) | nivel **anual** de cashback (0%/5%/7,5%/10%/20%) — no confundir con el **objetivo semanal** (ver abajo) |
-| `pasos_totales_dia` | int | total de pasos del día, deduplicado por fuente en el servidor (misma lógica que L9). Nunca es una suma cruda de `pasos[].cantidad` de fuentes distintas |
+| `puntos_pasos` | int | tabla de pasos: 7.000–9.999 = 25, 10.000–14.999 = 50, 15.000+ = 100. Debajo de 7.000: 0. **+25** si la persona tiene 60 años o más y ganó algo por pasos |
+| `puntos_intensidad` | int | FCM = 219 − edad. Escalón de **la mejor sesión del día** (no se suman): 30 min al 60% = 50, 30 min al 70% = 100, 60 min al 60% = 100, 90 min al 60% = 150. Cuentan los workouts y las sesiones que el servidor infiere del ritmo cardíaco. **+25** con 60 años o más si ganó algo por intensidad |
+| `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` |
+| `tope_diario_aplicado` | bool | true si los puntos brutos pasaron de 200 (llegar a 200 justos no es recorte) |
+| `puntos_ano` | int | lo acreditado en el año (suma del ledger), con el techo de 12.000 ya aplicado |
+| `tope_anual_aplicado` | bool | true si el techo anual **recortó lo de este día** |
+| `nivel` | int (0–4) | nivel **anual** de cashback según `puntos_ano`: 0 bajo 2.500, 1 desde 2.500 (5%), 2 desde 5.000 (7,5%), 3 desde 10.000 (10%), 4 desde 15.000 (20%) — no confundir con el **objetivo semanal** (ver abajo) |
+| `pasos_totales_dia` | int | total de pasos del día con la regla por hora (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
 
 No incluye ningún campo que explique *por qué* se descartó una muestra, se
 detectó una sesión intensa, o se aplicó un techo — esa lógica es del backend.
@@ -388,8 +408,33 @@ Swift decide **por el código de estado**, nunca por el texto:
 | `408`, `429`, `5xx` | Tiempo agotado, demasiadas peticiones o caída del servidor | Se reintenta (el día va a la cola) |
 | `422` | `fuera_de_ventana` | Ver "Ventana de aceptación de datos rezagados" |
 
-Las filas de `400`, `403`, `408`, `429` y `5xx` describen lo que Swift hace hoy; la
-de `401` es nueva.
+Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep).
+
+#### Qué hace el servidor con datos raros
+
+Hay dos niveles, y no se confunden:
+
+| Caso | Respuesta |
+|---|---|
+| **Mal formado** — falta un campo obligatorio de la raíz (`fecha`, `zona_horaria`, `sincronizado_en`, `app_version`), una muestra no trae un campo requerido (por ejemplo `external_id`), un tipo es incorrecto, `zona_horaria` no es una zona IANA válida, `fecha` es más de un día en el futuro, o un número que no puede ser negativo lo es (`cantidad`, `bpm`, `duracion_min`, `fc_promedio`, `fc_maxima`) | `400` con el detalle por campo, por ejemplo `{ "pasos[0]": { "external_id": ["This field is required."] } }` o `{ "fecha": ["La fecha no puede ser futura."] }`. **Todo el sync se rechaza.** |
+| **Físicamente imposible** — esa muestra se descarta y el resto se acepta | `200`. No hay forma de saber desde el cliente qué se descartó (se cuenta en el log del servidor) |
+
+Una muestra se descarta, sin tumbar el sync, si:
+
+- **pasos:** `cantidad` mayor que 30.000 en una sola muestra (30.000 exactos sí entra), o `fin` anterior a `inicio`;
+- **ritmo cardíaco:** `bpm` menor que 30 o mayor que 230, o `fin` anterior a `inicio`;
+- **sesión:** duración de 0 min o de más de 24 h, `fc_promedio` o `fc_maxima` fuera de 30 a 230, `fc_maxima` menor que `fc_promedio`, o `fin` anterior a `inicio`. Una sesión con `fc_promedio` y `fc_maxima` en `0` se descarta por la regla de "Qué cuenta como workout" y se cuenta aparte en el log.
+
+Ojo con la frontera: un valor **negativo** es un dato mal formado (rechaza todo
+el sync con `400`); un valor positivo pero absurdo (31.000 pasos en una muestra)
+solo se descarta.
+
+Las cifras vienen de lo que ya impone la base de datos (en PostgreSQL una
+restricción rota tumba todo el `INSERT`, y en SQLite se ignora en silencio),
+por eso se aplican antes: el resultado no depende del motor.
+
+Si el servidor no tiene ninguna versión de reglas cargada responde `500`, y
+Swift reintenta los `5xx` (ver "Puntos abiertos").
 
 ---
 
@@ -487,6 +532,7 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
   "objetivo": {
     "meta_pasos": 30000,
     "meta_workouts": 1,
+    "monedas_al_cumplir": 20,
     "fecha_inicio": "2026-09-21",
     "fecha_fin": "2026-09-27"
   },
@@ -500,9 +546,34 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
 }
 ```
 
+`objetivo.monedas_al_cumplir` es cuántas monedas paga cumplir el objetivo de esa
+semana. **[PENDIENTE]** el 20 de hoy es un valor provisional del backend:
+ningún documento lo fija todavía. Las monedas respetan el tope de 100 acumuladas
+y caducan a los 90 días (ver `CLAUDE.md`); lo que excede el tope se pierde.
+
 El `objetivo` es **el mismo para todos los usuarios** esa semana; `progreso`
 es del usuario que pregunta. `historial_seasons` viene vacío en el demo (no
 hay objetivo máximo que registrar mientras no haya progresión).
+
+**Cómo está construido hoy (backend, 1 oct):**
+
+- Las metas de cada semana viven en la tabla `ObjetivoSemanal` y se editan a
+  mano en el admin. Cada semana nueva copia las metas de la anterior; la
+  primera arranca con 30.000 pasos y 1 workout.
+- `progreso` se calcula en vivo: la suma de `pasos_totales_dia` y de workouts
+  de `resumen_diario` de lunes a domingo.
+- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del lunes** fija
+  `cumplido` de la semana que terminó y paga `monedas_al_cumplir` a quien
+  cumplió; con `--correccion`, a las **12:00**, solo actualiza los acumulados
+  (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces.
+  **[PENDIENTE]** nada lo programa todavía: hace falta un cron en el servidor
+  para las dos corridas.
+- Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
+  **gastarlas**. Respetan el tope de 100 acumuladas (lo que excede se pierde) y
+  cada ganancia caduca a los 90 días.
+- **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
+  vinculada") **sí** cuentan para el progreso de la semana en curso. Las
+  monedas solo se anulan si la semana entera cerró antes de la verificación.
 
 ---
 
@@ -609,8 +680,9 @@ Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 es texto técnico para logs, nunca mostrárselo crudo al usuario.
 
 **Sin token, o token rechazado (`401`):** no es `error_permanente`. Swift no pierde
-datos: el día queda pendiente y se envía cuando haya sesión. Qué estado ve
-Flutter en ese caso está por definir (ver "Puntos abiertos").
+datos: el día queda pendiente y se envía cuando haya sesión. **Hoy Flutter ve
+`encolado`** (con un `detalle` que lo explica). Si debe ser un estado propio
+sigue abierto (ver "Puntos abiertos").
 
 ### `actualizarSesion`
 
@@ -651,13 +723,17 @@ método propio. Solo se dispara con acceso confirmado (si no, la bandera de
 "ya hecho" se quemaría con cero datos guardados). Los días que fallen por red
 quedan en la cola de reintentos y drenan solos al volver a primer plano.
 **Si en ese momento no hay sesión, el backfill no se da por hecho** (la bandera de
-"ya hecho" no se enciende) y se reintenta cuando la haya.
+"ya hecho" no se enciende). Ojo: hoy **no** se reintenta solo al iniciar sesión;
+se reintenta la próxima vez que Flutter llame a `solicitarPermisos` y el acceso
+siga concedido. Por eso el orden de pantallas importa: sesión primero, permisos
+después (ver "Notas para Daniel").
 
 ### Wrapper
 
-`lib/datos/healthkit_bridge.dart` expone los tres métodos tipados
+`lib/datos/healthkit_bridge.dart` expone los métodos tipados
 (`EstadoPermisos`, `EstadoSync`, `TiposVisibles` y el resultado de
-`actualizarSesion`). Es la **frontera del
+`actualizarSesion`). **[PENDIENTE]** hoy solo tiene `solicitarPermisos` y
+`sincronizar`; falta agregar `actualizarSesion` (Alvaro). Es la **frontera del
 contrato**, no UI — lo mantiene Alvaro junto con el lado Swift. Daniel lo
 consume, no lo edita: si le falta algo ahí, es un cambio de contrato.
 
@@ -705,7 +781,7 @@ ventana ≥ día más viejo del backfill + holgura para reintentos
 | Cifra | Valor | Qué contesta |
 |---|---|---|
 | Ventana del servidor | 14 días | ¿Hasta qué tan viejo acepto un dato? |
-| Cola de reintentos (cliente) | 14 días | ¿Cuánto sigo intentando mandar un día que falló? |
+| Cola de reintentos (cliente) | 14 días (**[PENDIENTE]** hoy guarda hasta 30 días pendientes, sin caducidad por antigüedad) | ¿Cuánto sigo intentando mandar un día que falló? |
 | Backfill (cliente) | 7 días | ¿Cuánto historial le traigo a un usuario nuevo? |
 
 Ventana y cola comparten cifra a propósito (si la cola fuera más corta,
@@ -722,6 +798,13 @@ HTTP 422
 Un `4xx` genérico haría que el cliente descarte el día **y aborte el
 procesamiento de los días siguientes** — con motivo identificable, descarta
 ese día y sigue con el resto.
+
+**[PENDIENTE] Lo que hace Swift hoy:** todavía no distingue el `422`. Cualquier
+`4xx` que no sea `401`, `408` ni `429` (incluido el `422`) saca el día de la
+cola **y corta** los días que quedaban en esa vuelta, tanto en la cola de
+reintentos como en el backfill. No se pierden: en la cola, los días que
+quedaban siguen ahí y salen en la siguiente vuelta; en el backfill, el backfill
+no se da por hecho y se repite entero la próxima vez que se dispare.
 
 **Frontera de ciclo — decidido:** un ciclo ya cerrado (La Liga u
 objetivo semanal) es **inmutable**. Un dato del 29 de septiembre que llega el
@@ -788,6 +871,46 @@ el dominio de pantallas, no acá.
 
 ---
 
+## Historial de puntos — `GET /api/v1/historial`
+
+Los puntos acreditados día por día. Pide `Authorization: Token <clave>`; el
+usuario sale del token.
+
+| Parámetro | Tipo | Notas |
+|---|---|---|
+| `fecha_desde` | `YYYY-MM-DD`, opcional | incluida |
+| `fecha_hasta` | `YYYY-MM-DD`, opcional | incluida |
+
+```json
+{
+  "historial": [
+    {
+      "fecha": "2026-09-30",
+      "puntos_pasos": 50,
+      "puntos_intensidad": 100,
+      "puntos_brutos": 150,
+      "puntos_dia": 150,
+      "tope_diario_aplicado": false,
+      "version_regla": 1
+    }
+  ]
+}
+```
+
+- Los días vienen del más nuevo al más viejo, y solo los que tienen movimientos.
+- `puntos_dia` es **lo que de verdad se acreditó**: la suma de todas las filas
+  del día en el ledger, incluidos los ajustes por datos tardíos. Nunca pasa de
+  200 por el tope diario.
+- Un día **anulado por retroactivo denegado** (ver "Póliza vinculada") aparece
+  con `puntos_dia` en `0`, pero con `puntos_pasos` y `puntos_intensidad` del
+  cálculo original, para que se vea que hubo actividad.
+- `puntos_brutos` es `puntos_pasos + puntos_intensidad` antes del tope; no es
+  lo acreditado.
+- Errores: `400` si una fecha no tiene formato `YYYY-MM-DD` o si `fecha_desde`
+  es mayor que `fecha_hasta`; `401` sin token; `403` si la cuenta no tiene perfil.
+
+---
+
 ## Póliza vinculada
 
 Una cuenta base (gratis) no tiene póliza. Vincularla es un paso aparte, después
@@ -813,8 +936,13 @@ usuarios (pólizas familiares). `409` si el usuario ya tiene una póliza
 verificada; `400` por campos faltantes; `403` si la cuenta no tiene perfil.
 Una rechazada se puede volver a enviar.
 
-*Hoy la aseguradora es un registro simulado cargado desde un CSV; cuando haya
-integración real se reemplaza sin cambiar este endpoint.*
+*Hoy la aseguradora es un registro simulado cargado desde un CSV (comando
+`cargar_registro_aseguradora`); cuando haya integración real se reemplaza sin
+cambiar este endpoint.* Para el piloto también se puede verificar o rechazar a
+mano desde el admin con las acciones "Verificar" (exige llenar antes la fecha
+de nacimiento confirmada y aplica la misma regla de retroactividad) y
+"Rechazar". El estado
+nunca se edita a mano.
 
 ### `GET /api/v1/polizas/estado`
 
@@ -889,15 +1017,17 @@ verificación" son el mismo momento.
   el dashboard (`resumen_diario`, historial), si `tipo_actividad` es `null`
   se representa como `"no_registrado"` para que Daniel lo muestre como
   "No registrado" / "Workout sin nombre" — la sesión existe y cuenta, solo no
-  tiene nombre.
-- **`pasos_totales_dia`** usa la misma función de deduplicación que el motor
-  de puntos (L6/L9) — no es un cálculo nuevo y separado.
+  tiene nombre. **Hoy ni el dashboard ni el historial devuelven
+  `tipo_actividad`** (el dashboard agrega los workouts del día); la regla
+  aplica cuando exista una lista de workouts.
+- **`pasos_totales_dia`** usa la misma regla por hora que el motor de puntos —
+  no es un cálculo nuevo y separado.
 - **Sesión intensa sin workout (L7):** se detecta en el backend sobre
   `frecuencia_cardiaca[]` cruda. Umbral: ≥30 min continuos al 60-70% de FCM,
   FCM = 219 − edad. La edad vive en el servidor, nunca la manda el teléfono.
 - **Techos:** diario 200 pts (pasos + intensidad), anual 12.000 pts.
-- **Nivel anual (0–4):** confirmar con Alvaro/Diego el mapeo exacto puntos →
-  nivel → % cashback si no está cerrado en la nota técnica de puntaje.
+- **Nivel anual (0–4):** implementado con los pisos de `CLAUDE.md`: 2.500 /
+  5.000 / 10.000 / 15.000 puntos → 5% / 7,5% / 10% / 20%.
 - **Ventana de sync:** mismo endpoint para sync diario y backfill de 7 días —
   cada día es una llamada independiente con su propio `fecha`.
 - **Ventana de aceptación (L14):** 14 días, no 3. Rechazo por antigüedad
@@ -917,7 +1047,8 @@ verificación" son el mismo momento.
   acepta datos atrasados para el acumulado anual y el historial. El motor de
   objetivos necesita **dos corridas programadas** (00:00 y 12:00), no un cálculo
   en vivo al cierre del domingo.
-- **Objetivos semanales (L11) — reescribir el ticket (demo 1):** un
+- **Objetivos semanales (L11) — implementado para el demo 1 (1 oct; ver "Cómo
+  está construido hoy"). Lo que sigue vigente del ticket:** un
   objetivo **fijo e igual para todos** (meta de pasos totales de la semana +
   meta de workouts), **hardcodeado**, lunes–domingo. Cumplido = ambas
   métricas alcanzadas. Sin subir ni congelar objetivo en el demo; el
@@ -927,9 +1058,9 @@ verificación" son el mismo momento.
   respuesta del endpoint (el reinicio ocurre el día exacto de la season). Se
   mantienen las dos corridas programadas (00:00 fija el objetivo, 12:00 solo
   corrige historial/acumulado). Un **workout** = un entrenamiento que
-  cuenta (≥30 min continuos, con ritmo cardíaco, no manual y sin duplicar los
-  que dos dispositivos registran a la vez — ver "Qué cuenta como workout") —
-  si además debe ser "intenso" por FC, es un punto abierto.
+  cuenta (con ritmo cardíaco, no manual y sin duplicar los que dos
+  dispositivos registran a la vez — ver "Qué cuenta como workout"), **de
+  cualquier duración** (decidido 1 oct 2026).
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
   vinculada y verificada. Al cierre del mes calcular una vez posición,
   percentil y tramo de premio de cada participante
@@ -940,13 +1071,20 @@ verificación" son el mismo momento.
   **sin premios y sin exigir póliza**. **Duelos 1 contra 1: no construir.**
 - **Endpoint de resumen para el dashboard (decidido):** tabla `resumen_diario`
   (`usuario_id` + `fecha`), upsert en cada sync con lo que el sync ya calcula
-  — `pasos_totales_dia`, agregado de `sesiones[]` del día (cantidad, duración
-  total, fc_promedio, fc_maxima), `puntos_dia`. Sin lógica nueva de
+  — `pasos_totales_dia`, agregado de los workouts del día que cuentan
+  (cantidad, duración total, fc_promedio, fc_maxima), `puntos_dia`. Sin lógica nueva de
   agregación. `GET /api/v1/dashboard/resumen?desde=&hasta=` devuelve el rango.
   Ver sección "Endpoint de resumen del dashboard" arriba para el shape
   completo.
 - **Ledger append-only:** cada acreditación es una fila nueva con la versión
-  de la regla que la generó — nunca `UPDATE` sobre una fila existente.
+  de la regla que la generó — nunca `UPDATE` sobre una fila existente. Tipos:
+  `pasos` e `intensidad` (el primer cálculo del día), `ajuste_manual` (cada
+  corrección por datos tardíos, positiva o negativa; el nombre se presta a
+  confusión porque también lo usa el sistema), `retroactivo_denegado` y
+  `chequeo_medico` (fuera de v1).
+- **Muestras borradas en HealthKit:** si la persona borra una muestra en Apple
+  Salud, el servidor la conserva (solo inserta, nunca borra). El día se
+  recalcula con lo guardado, así que esa muestra sigue contando.
 
 ## Notas para Daniel (Flutter)
 
@@ -989,7 +1127,8 @@ verificación" son el mismo momento.
   logran clasificarlo (ej. WHOOP). Mostrarlo como **"No registrado"** o
   **"Workout sin nombre"** en vez de dejar el campo en blanco o romper la
   tarjeta del workout — la sesión sí cuenta para intensidad/puntos, solo no
-  tiene nombre de actividad.
+  tiene nombre de actividad. (Hoy ningún endpoint devuelve `tipo_actividad`;
+  aplica cuando haya una lista de workouts.)
 - `encolado` **no** es una falla — el dato quedó a salvo y se reintenta solo.
 - **No implementar reintentos propios** — ya corren del lado nativo cuando la
   app vuelve a primer plano.
@@ -1025,20 +1164,53 @@ verificación" son el mismo momento.
 - **Sin token:** no enviar. El día queda pendiente. Aplica a los tres caminos de
   envío: el sync de hoy, la cola de reintentos y el backfill.
 - **`401`:** no es error permanente. El día queda pendiente y **no se corta el
-  procesamiento de los demás días** (hoy un `4xx` saca el día de la cola y aborta el
-  resto).
-- **Quitar `usuario_id` del payload** y la constante `"alvaro-001"`.
-- **`actualizarSesion(null)`:** borra el token del Keychain.
-- **Pendiente (1 oct) — workouts:** (1) no mandar una sesión si no hay muestras
-  de ritmo cardíaco en su ventana (hoy manda `fc_promedio`/`fc_maxima` en `0`);
-  (2) no mandar los workouts ingresados a mano
+  procesamiento de los demás días**. Hecho (A24).
+- **`usuario_id` fuera del payload** y sin la constante `"alvaro-001"`. Hecho (A24).
+- **`actualizarSesion(null)`:** borra el token del Keychain. Hecho (A24).
+- **[PENDIENTE] Cola, caducidad:** la regla es 14 días (confirmado el 1 oct).
+  Hoy Swift guarda hasta 30 días pendientes, sin mirar la antigüedad de cada
+  uno.
+- **[PENDIENTE] Cola, error `422`:** cuando el servidor rechaza un día por
+  viejo, Swift debería sacar solo ese día y **seguir** con los demás. Hoy
+  cualquier `4xx` que no sea `401`/`408`/`429` corta toda la vuelta: los días
+  que quedaban esperan a la siguiente vez que la app vuelve a primer plano.
+- **[PENDIENTE] Wrapper de Dart:** agregar `actualizarSesion` a
+  `lib/datos/healthkit_bridge.dart`. Es el puente por el que Flutter le entrega
+  el token a Swift: sin él, Swift no puede enviar el `sync` con sesión y todo
+  queda `encolado`.
+- **[PENDIENTE] Backfill después del login:** hoy solo se reintenta en la
+  siguiente llamada a `solicitarPermisos`. Decidir si `actualizarSesion` con un
+  token debe dispararlo.
+- **Workouts (1 oct) — hecho:** Swift no manda una sesión si no hay ritmo
+  cardíaco medido en su ventana (antes mandaba `fc_promedio`/`fc_maxima` en
+  `0`), ni los workouts ingresados a mano
   (`metadata[HKMetadataKeyWasUserEntered] == true`). Ver "Qué cuenta como
-  workout". El servidor ya descarta las sesiones con `fc` en `0`, así que lo
-  que falta en Swift es no inventar ese `0`.
+  workout". Un error real al leer el ritmo cardíaco ya no se traga: falla la
+  lectura del día (no se da por enviado) en vez de perder el workout en
+  silencio. "Sin muestras" (`errorNoData`) sí se trata como "sin ritmo
+  cardíaco", que es lo normal en un iPhone sin reloj. El servidor mantiene su
+  descarte de sesiones con `fc` en `0` como red de seguridad.
 
 ---
 
 ## Puntos abiertos
+
+*Encontrados en la revisión contra el código (1 oct):*
+
+- **Días anulados y objetivo semanal:** un día anulado por retroactivo denegado
+  sigue contando para el progreso de la semana en curso. ¿Debe contar?
+- **Programar `cerrar_semana`:** el comando existe pero nada lo corre. Hace
+  falta un cron (lunes 00:00 y 12:00, hora de Guatemala) en el servidor.
+  Confirmado el 1 oct: es un pendiente real, sin responsable asignado todavía.
+- **`zona_horaria` y `app_version`:** el servidor los exige pero no los usa.
+  Decidir si se usan (días en la zona del usuario, rechazar versiones viejas)
+  o se dejan solo como dato.
+- **Cuánto paga el objetivo semanal:** `monedas_al_cumplir` es 20 de forma
+  provisional.
+- **La Liga, Tus Ligas, Premios y Canje:** las tablas existen en el backend,
+  pero no hay cálculo ni endpoints todavía.
+
+*Abiertos desde antes:*
 
 - **Aviso al usuario cuando se deniega el retroactivo (1 oct):**
   `POST /polizas/vincular` responde `verificada` sin decir que se anularon los
@@ -1060,8 +1232,8 @@ verificación" son el mismo momento.
   hay un token por cuenta, borrarlo cerraría la sesión en **todos** los
   dispositivos de esa persona. Mientras tanto, cerrar sesión en la app solo borra
   las copias locales (`actualizarSesion(null)`).
-- **Qué estado ve Flutter cuando Swift no tiene sesión:** reusar `encolado` (no
-  cambia `sincronizar`) o agregar un estado nuevo (cambia el contrato).
+- **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
+  Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
 - **Cola y backfill al cerrar sesión o entrar otra cuenta:** HealthKit pertenece
   al teléfono, no a la cuenta. Sin una regla, los días pendientes de una cuenta se
   subirían a nombre de la siguiente. Propuesta: al cerrar sesión, Swift vacía la
@@ -1081,8 +1253,8 @@ verificación" son el mismo momento.
   `desconocido → telefono` ya no afecta ningún puntaje. Ver "Puntos abiertos"
   en `decision-tipo-dispositivo.md`.
 - **Metas hardcodeadas del objetivo semanal (demo 1):** cuántos pasos y
-  cuántos workouts, y si un workout debe ser "intenso" por FC o basta con que
-  exista la sesión.
+  cuántos workouts. (Qué es un workout ya está decidido: cualquier
+  entrenamiento con ritmo cardíaco, de cualquier duración.)
 - **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
   y qué premio le toca a cada tramo (Diego).
 - **Endpoints de La Liga y de Tus Ligas:** sin especificar.
