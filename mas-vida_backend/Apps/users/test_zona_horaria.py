@@ -111,7 +111,7 @@ class FechasConHoraTests(TestCase):
         usuario = Usuario.objects.create(
             user=user, usuario_id="id-ana", birth_date=datetime.date(1990, 1, 1)
         )
-        version = VersionRegla.objects.create(version=1, vigente_desde=datetime.date(2026, 1, 1))
+        version = VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": datetime.date(2026, 1, 1)})[0]
 
         with ahora_es(a_las(2026, 10, 1, 5, 0)):
             ledger = Ledger.objects.create(
