@@ -804,7 +804,8 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   solo para HealthKit.
 - **MethodChannel:** 3 métodos, nada más — `solicitarPermisos`, `sincronizar`
   y `actualizarSesion` (le entrega a Swift el token de la sesión, o `null` al
-  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás va
+  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart` (todavía le falta
+  `actualizarSesion`). Todo lo demás va
   por HTTP directo contra la API.
 - Backend: **Django + PostgreSQL** (decisión final). `TIME_ZONE =
   'America/Guatemala'`.
