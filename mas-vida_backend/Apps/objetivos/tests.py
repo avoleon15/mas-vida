@@ -342,3 +342,134 @@ class RetosEstadoTests(APITestCase):
         for _ in range(3):
             self.client.get(self.url)
         self.assertEqual(ObjetivoSemanal.objects.count(), 1)
+
+
+class PonerseAlDiaTests(TestCase):
+    """Cerrar todas las semanas pendientes, no solo la anterior.
+
+    Semanas usadas (lunes): 7 sep, 14 sep, 21 sep y 28 sep de 2026.
+    """
+
+    S0, S1, S2, S3 = date(2026, 9, 7), date(2026, 9, 14), date(2026, 9, 21), date(2026, 9, 28)
+    LUNES_5_OCT = date(2026, 10, 5)  # la última semana terminada es la del 28 sep
+
+    def setUp(self):
+        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        self.ana = crear_usuario("ana")
+
+    def _cumple(self, lunes):
+        dia(self.ana, lunes, 31_000, workouts=1)
+
+    # --- qué semanas faltan ---------------------------------------------------
+
+    def test_sin_datos_ni_objetivos_no_hay_nada_pendiente(self):
+        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [])
+
+    def test_sin_nada_cerrado_empieza_por_la_primera_semana_con_datos(self):
+        self._cumple(self.S1)
+        self.assertEqual(
+            goals.semanas_pendientes(self.LUNES_5_OCT), [self.S1, self.S2, self.S3]
+        )
+
+    def test_tras_cerrar_una_semana_solo_faltan_las_siguientes(self):
+        self._cumple(self.S0)
+        goals.cerrar_semana(self.S0, self.LUNES_5_OCT)
+        self.assertEqual(
+            goals.semanas_pendientes(self.LUNES_5_OCT), [self.S1, self.S2, self.S3]
+        )
+
+    def test_la_semana_en_curso_nunca_entra(self):
+        self._cumple(self.S3)
+        # Un jueves de la semana del 5 oct: la última terminada sigue siendo la del 28 sep.
+        self.assertEqual(goals.semanas_pendientes(date(2026, 10, 8)), [self.S3])
+
+    def test_el_domingo_la_semana_todavia_no_termino(self):
+        self._cumple(self.S3)
+        # Domingo 4 oct: la semana del 28 sep cierra hoy 23:59, aún no es "terminada".
+        self.assertEqual(goals.semanas_pendientes(date(2026, 10, 4)), [])
+
+    def test_el_lunes_la_semana_anterior_ya_esta_pendiente(self):
+        self._cumple(self.S3)
+        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [self.S3])
+
+    def test_si_todo_esta_cerrado_no_queda_nada(self):
+        self._cumple(self.S3)
+        goals.cerrar_semana(self.S3, self.LUNES_5_OCT)
+        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [])
+
+    def test_una_semana_anterior_a_la_ultima_cerrada_no_se_reabre(self):
+        self._cumple(self.S2)
+        goals.cerrar_semana(self.S2, self.LUNES_5_OCT)
+        dia(self.ana, self.S0, 31_000, workouts=1)  # dato viejo que aparece después
+        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [self.S3])
+
+    def test_el_tope_limita_cuantas_semanas_atrasadas_se_cierran(self):
+        self._cumple(self.S0)
+        lunes_nov = date(2026, 11, 2)  # la última terminada es la del 26 oct
+        pendientes = goals.semanas_pendientes(lunes_nov)
+        self.assertEqual(len(pendientes), goals.MAX_SEMANAS_ATRASADAS)
+        self.assertEqual(pendientes[-1], date(2026, 10, 26))
+        self.assertEqual(pendientes[0], date(2026, 10, 5))
+
+    # --- ponerse al día -------------------------------------------------------
+
+    def test_cierra_todas_las_pendientes_en_orden_y_paga_cada_una(self):
+        self._cumple(self.S1)
+        self._cumple(self.S2)
+        cerradas = goals.ponerse_al_dia(self.LUNES_5_OCT)
+
+        self.assertEqual([l for l, _ in cerradas], [self.S1, self.S2, self.S3])
+        self.assertEqual([r["cumplidos"] for _, r in cerradas], [1, 1, 0])
+        self.assertEqual(monedas.saldo(self.ana, self.LUNES_5_OCT), 40)
+
+    def test_es_idempotente(self):
+        self._cumple(self.S1)
+        goals.ponerse_al_dia(self.LUNES_5_OCT)
+        self.assertEqual(goals.ponerse_al_dia(self.LUNES_5_OCT), [])
+        self.assertEqual(monedas.saldo(self.ana, self.LUNES_5_OCT), 20)
+
+    def test_crea_el_objetivo_de_las_semanas_que_no_tenian(self):
+        self._cumple(self.S1)
+        goals.ponerse_al_dia(self.LUNES_5_OCT)
+        inicios = set(ObjetivoSemanal.objects.values_list("fecha_inicio", flat=True))
+        self.assertTrue({self.S1, self.S2, self.S3, self.LUNES_5_OCT} <= inicios)
+
+    def test_un_cron_que_fallo_un_lunes_se_recupera_el_siguiente(self):
+        self._cumple(self.S2)
+        goals.cerrar_semana(self.S2, date(2026, 9, 28))   # el lunes 28 sí corrió
+        self._cumple(self.S3)                              # el lunes 5 oct NO corrió
+        # Corre el lunes 12 oct: debe cerrar la del 28 sep que se quedó sin cerrar.
+        cerradas = goals.ponerse_al_dia(date(2026, 10, 12))
+        self.assertEqual([l for l, _ in cerradas], [self.S3, self.LUNES_5_OCT])
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 12)), 40)
+
+    # --- comando --------------------------------------------------------------
+
+    def test_el_comando_cierra_todas_con_ponerse_al_dia(self):
+        self._cumple(self.S1)
+        salida = StringIO()
+        call_command("cerrar_semana", "--ponerse-al-dia", "--fecha", "2026-10-05", stdout=salida)
+        texto = salida.getvalue()
+        for lunes in ("2026-09-14", "2026-09-21", "2026-09-28"):
+            self.assertIn(f"Semana {lunes}", texto)
+        self.assertEqual(monedas.saldo(self.ana, self.LUNES_5_OCT), 20)
+
+    def test_el_comando_avisa_cuando_no_hay_nada_pendiente(self):
+        salida = StringIO()
+        call_command("cerrar_semana", "--ponerse-al-dia", "--fecha", "2026-10-05", stdout=salida)
+        self.assertIn("No hay semanas pendientes", salida.getvalue())
+
+    def test_ponerse_al_dia_no_se_combina_con_correccion(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "cerrar_semana", "--ponerse-al-dia", "--correccion",
+                "--fecha", "2026-10-05", stdout=StringIO(),
+            )
+
+    def test_el_comando_sin_la_bandera_sigue_cerrando_solo_la_anterior(self):
+        self._cumple(self.S1)
+        call_command("cerrar_semana", "--fecha", "2026-10-05", stdout=StringIO())
+        self.assertEqual(
+            CumplimientoSemanal.objects.values_list("objetivo_semanal__fecha_inicio", flat=True).distinct().count(),
+            1,
+        )

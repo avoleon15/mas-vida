@@ -17,11 +17,12 @@ Pasos y workouts salen de ResumenDiario, no de las muestras crudas: ahí ya
 está resuelto qué dispositivo gana cada métrica, así que un entrenamiento
 registrado por el reloj y por el teléfono cuenta una sola vez.
 """
+import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Max, Min, Sum
 
 from Apps.activities.models import ResumenDiario
 from Apps.coins.models import MonedaLedger
@@ -31,12 +32,18 @@ from services import monedas
 from services.polizas import fecha_corte_sin_retroactivo
 from services.tiempo import fin_semana, inicio_semana, numero_season, rango_season
 
+logger = logging.getLogger(__name__)
+
 # [PENDIENTE] metas definitivas del demo. Son las del ejemplo del contrato.
 META_PASOS_INICIAL = 30_000
 META_WORKOUTS_INICIAL = 1
 
 # [PENDIENTE] ningún documento fija cuántas monedas paga cumplir el objetivo.
 MONEDAS_POR_OBJETIVO = 20
+
+# Cuántas semanas atrasadas se cierran como máximo al ponerse al día. Sin tope,
+# la primera vez que corra con datos viejos pagaría monedas de hace meses.
+MAX_SEMANAS_ATRASADAS = 4
 
 
 @dataclass
@@ -179,3 +186,57 @@ def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
     # El objetivo de la semana que arranca queda fijado desde las 00:00.
     objetivo_de_la_semana(objetivo.fecha_fin + timedelta(days=1))
     return resumen
+
+
+def semanas_pendientes(hoy: date) -> list[date]:
+    """Lunes de las semanas ya terminadas que todavía no se cerraron.
+
+    "Cerrada" = existe al menos un CumplimientoSemanal de esa semana. La semana
+    en curso nunca entra: el lunes `hoy` ya cuenta como semana nueva y la
+    anterior es la última que terminó. Si nunca se cerró ninguna, se empieza
+    por la primera semana con datos (o con objetivo), sin pasar de
+    MAX_SEMANAS_ATRASADAS hacia atrás.
+    """
+    ultima_terminada = inicio_semana(hoy) - timedelta(days=7)
+
+    ultima_cerrada = ObjetivoSemanal.objects.filter(
+        cumplimientosemanal__isnull=False
+    ).aggregate(m=Max("fecha_inicio"))["m"]
+
+    if ultima_cerrada is not None:
+        primera = ultima_cerrada + timedelta(days=7)
+    else:
+        candidatas = []
+        primer_objetivo = ObjetivoSemanal.objects.aggregate(m=Min("fecha_inicio"))["m"]
+        primer_dato = ResumenDiario.objects.aggregate(m=Min("fecha"))["m"]
+        if primer_objetivo is not None:
+            candidatas.append(primer_objetivo)
+        if primer_dato is not None:
+            candidatas.append(inicio_semana(primer_dato))
+        if not candidatas:
+            return []
+        primera = min(candidatas)
+
+    mas_vieja_permitida = ultima_terminada - timedelta(days=7 * (MAX_SEMANAS_ATRASADAS - 1))
+    if primera < mas_vieja_permitida:
+        logger.warning(
+            "Se omiten las semanas anteriores al %s: pasan del tope de %d semanas atrasadas",
+            mas_vieja_permitida, MAX_SEMANAS_ATRASADAS,
+        )
+        primera = mas_vieja_permitida
+
+    semanas = []
+    lunes = primera
+    while lunes <= ultima_terminada:
+        semanas.append(lunes)
+        lunes += timedelta(days=7)
+    return semanas
+
+
+def ponerse_al_dia(hoy: date) -> list[tuple[date, dict]]:
+    """Cierra todas las semanas pendientes, de la más vieja a la más nueva.
+
+    Es lo que salva a un cron que falló un lunes: la siguiente corrida cierra
+    también la semana que se quedó sin cerrar. Idempotente.
+    """
+    return [(lunes, cerrar_semana(lunes, hoy)) for lunes in semanas_pendientes(hoy)]

@@ -4,6 +4,11 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 1 oct 2026** (cierre semanal programado): el cierre del objetivo
+semanal ya tiene quién lo corra: el servicio `programador` de Docker Compose
+(lunes 00:00 y 12:00, hora de Guatemala), que además se pone al día si un lunes
+falló. Ver "Cierre semanal programado".
+
 **Actualizado el 1 oct 2026** (revisión contra el código): se comparó cada
 sección con lo que hacen el backend (incluido el de Luis, ya en `dev`), Swift y
 Flutter. Donde el código no cumple una regla ya decidida, la regla **no se
@@ -586,15 +591,68 @@ hay objetivo máximo que registrar mientras no haya progresión).
 - El cierre lo hace el comando `cerrar_semana`: a las **00:00 del lunes** fija
   `cumplido` de la semana que terminó y paga `monedas_al_cumplir` a quien
   cumplió; con `--correccion`, a las **12:00**, solo actualiza los acumulados
-  (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces.
-  **[PENDIENTE]** nada lo programa todavía: hace falta un cron en el servidor
-  para las dos corridas.
+  (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces. Lo
+  dispara el servicio `programador` (ver "Cierre semanal programado").
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
   **gastarlas**. Respetan el tope de 100 acumuladas (lo que excede se pierde) y
   cada ganancia caduca a los 90 días.
 - **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
   vinculada") **sí** cuentan para el progreso de la semana en curso. Las
   monedas solo se anulan si la semana entera cerró antes de la verificación.
+
+### Cierre semanal programado (1 oct)
+
+**Quién lo corre.** El servicio `programador` de `mas-vida_backend/compose.yaml`,
+que ejecuta `python manage.py programador`:
+
+- **Al arrancar se pone al día:** cierra las semanas ya terminadas que sigan sin
+  cerrar, hasta **4 semanas atrasadas** (más viejas se omiten y queda un aviso en
+  el log, para no pagar monedas de hace meses al arrancar por primera vez).
+- **Lunes 00:00** → cierre: fija `cumplido` y paga. También pone al día lo que
+  haya quedado pendiente, así que **un lunes que falló se recupera solo** en la
+  corrida siguiente.
+- **Lunes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
+- Siempre **hora de Guatemala**, sin importar en qué zona esté el servidor.
+- Si una corrida falla (por ejemplo la base de datos caída un momento) reintenta
+  cada 5 minutos, hasta 12 veces, y nunca se cae por un error. Si el servidor
+  estuvo suspendido, dispara las corridas atrasadas en orden, sin saltarse ni
+  repetir ninguna. Docker lo reinicia si el proceso se cae.
+- Escribe una línea en el log por cada corrida y la hora de la siguiente. Para
+  comprobar que está vivo: `docker compose logs programador` debe mostrar
+  `Próxima corrida: ... (hora de Guatemala)`.
+- Con una sola instancia basta; correr dos no paga dos veces (todo es
+  idempotente).
+
+**Comando manual** (`python manage.py cerrar_semana`):
+
+| Opción | Qué hace |
+|---|---|
+| (ninguna) | Cierra solo la semana anterior a hoy |
+| `--ponerse-al-dia` | Cierra todas las semanas terminadas sin cerrar (tope de 4) |
+| `--correccion` | Corrida de las 12:00: solo actualiza acumulados |
+| `--fecha AAAA-MM-DD` | Trata esa fecha como "hoy" (para simular o recuperar) |
+
+`--ponerse-al-dia` no se combina con `--correccion`. `programador --una-vez` hace
+solo la puesta al día de arranque y termina.
+
+**Si el despliegue no usa Docker Compose**, no hace falta el servicio: se
+programan dos tareas semanales en el servidor. Guatemala es UTC−6 todo el año
+(sin horario de verano), así que la hora UTC es fija:
+
+| Cuándo | Hora UTC | Comando |
+|---|---|---|
+| Lunes, cierre | 06:05 | `python manage.py cerrar_semana --ponerse-al-dia` |
+| Lunes, corrección | 18:05 | `python manage.py cerrar_semana --correccion` |
+
+Los cinco minutos de margen son a propósito. Si lo dispara un programador
+externo (por ejemplo uno de AWS) y el reloj del servidor va unos segundos
+atrasado, a las 06:00 en punto el comando todavía vería domingo en Guatemala y no
+cerraría nada hasta el lunes siguiente.
+
+**Las monedas se pagan con la fecha del día en que corre el cierre** (y caducan 90
+días después de esa fecha), no con la fecha de la semana que se cerró. Una semana
+que se cierra con retraso paga igual, pero sus monedas empiezan a caducar desde
+ese día.
 
 ---
 
@@ -1067,7 +1125,8 @@ verificación" son el mismo momento.
   corrida a las **12:00 del lunes**, pero esa ya no cambia el objetivo — solo
   acepta datos atrasados para el acumulado anual y el historial. El motor de
   objetivos necesita **dos corridas programadas** (00:00 y 12:00), no un cálculo
-  en vivo al cierre del domingo.
+  en vivo al cierre del domingo. Ya las programa el servicio `programador` (ver
+  "Cierre semanal programado").
 - **Objetivos semanales (L11) — implementado para el demo 1 (1 oct; ver "Cómo
   está construido hoy"). Lo que sigue vigente del ticket:** un
   objetivo **fijo e igual para todos** (meta de pasos totales de la semana +
@@ -1233,9 +1292,10 @@ verificación" son el mismo momento.
 
 - **Días anulados y objetivo semanal:** un día anulado por retroactivo denegado
   sigue contando para el progreso de la semana en curso. ¿Debe contar?
-- **Programar `cerrar_semana`:** el comando existe pero nada lo corre. Hace
-  falta un cron (lunes 00:00 y 12:00, hora de Guatemala) en el servidor.
-  Confirmado el 1 oct: es un pendiente real, sin responsable asignado todavía.
+- **Programar `cerrar_semana` — resuelto en el repo (1 oct):** lo corre el
+  servicio `programador` de Compose (ver "Cierre semanal programado"). Falta
+  confirmar con quien despliegue que producción usa Compose; si no, hay que
+  programar las dos tareas de la tabla de esa sección.
 - **`zona_horaria` y `app_version`:** el servidor los exige pero no los usa.
   Decidir si se usan (días en la zona del usuario, rechazar versiones viejas)
   o se dejan solo como dato.
