@@ -16,7 +16,8 @@ la identidad sale del token, el MethodChannel pasa a 3 métodos.
 **Actualizado el 2 de octubre de 2026 (reunión del equipo):** sin racha;
 objetivo semanal que paga por componente y meta de pasos por edad; seasons de
 13 semanas ISO; monedas sin tope que se reinician al cerrar la season; La Liga
-por puntos; login con Google y Apple; cambios de Hoy, Mi Plan, Social y Premios.
+por puntos; puntos anuales, nivel y cashback por año de póliza, con prima
+anual; login con Google y Apple; cambios de Hoy, Mi Plan, Social y Premios.
 El detalle técnico está en `contrato-tecnico.md`.
 
 **Contrato entre capas (iOS ↔ backend ↔ Flutter), en este repo:**
@@ -100,6 +101,11 @@ Fuente de verdad: `reglas-puntaje-vivo.md`, sección 6.
 Vitality, no de +Vida. El nivel es un entero de 0 a 4 y en la UI se dice
 "Nivel 3", nunca un nombre en inglés.
 
+**El año se cuenta por año de póliza** (decidido el 2 de octubre de 2026):
+desde la fecha de inicio o la última renovación de la póliza hasta la
+siguiente renovación, no del 1 de enero al 31 de diciembre. La póliza se renueva
+cada año y su prima es anual.
+
 | Nivel | Puntos anuales | % Cashback |
 |---|---|---|
 | 0 | 0 – 2,499 | 0% |
@@ -121,7 +127,7 @@ Nivel(4, 15000, 15000, 20),
 (En el nivel 4, el tercer número es el tope de la tabla para dibujar la
 escalera, no un límite de lo que el usuario puede acumular.)
 
-**Techo anual: 12.000 puntos**, sumando solo actividad (pasos + intensidad).
+**Techo anual: 12.000 puntos por año de póliza**, sumando solo actividad (pasos + intensidad).
 **El chequeo médico está fuera de v1**: no suma puntos en el piloto (se simula
 con acreditación manual en el panel admin, si hace falta para una demo).
 
@@ -181,7 +187,7 @@ vías y los bonos. Un día que genere más puntos brutos acredita 200 y marca el
 `tope_diario_aplicado`. Llegar a exactamente 200 NO cuenta como recorte.
 Ningún dato de ejemplo debe superar 200 pts en un solo día.
 
-**Techo anual: 12.000 pts**, con su propia bandera `tope_anual_aplicado`.
+**Techo anual: 12.000 pts por año de póliza**, con su propia bandera `tope_anual_aplicado`.
 
 Los puntos acreditados se pueden revertir hasta **2 semanas** después; el
 saldo nunca queda negativo tras una reversión.
@@ -782,12 +788,12 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
   cupones"
 
 **Mi Plan** — diseñada, confirmar si está construida en Flutter
-- Cashback acumulado, proyección de fin de año, calendario de cálculo,
-  nota regulatoria, tabla de niveles
+- Cashback acumulado, proyección al cierre del año de póliza, calendario de
+  cálculo, nota regulatoria, tabla de niveles
 - **La gráfica de "en qué nivel vas" se une con la gráfica de barras**, y
   **debajo va el cashback**, para ver los dos datos juntos (reunión del 2 de
-  octubre de 2026). Cashback en quetzales = **% del nivel × prima mensual ×
-  12**, devuelto después del pago de la prima
+  octubre de 2026). Cashback en quetzales = **% del nivel × prima anual**,
+  devuelto después del pago de la prima
 - **Al cambiar de filtro se anima SOLO lo que cambia** (decisión de
   Daniel, 22 de septiembre de 2026): el contenido de abajo entra con su
   transición y el título, el medallón de nivel y la tarjeta del cashback
@@ -802,9 +808,10 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
   asegurado, agrupados en 2-3 tarjetas por tema): número de póliza,
   titular y dependientes, tipo de plan, suma asegurada, deducible,
   coaseguro, vigencia, renovación, prima y forma de pago, red de
-  hospitales/cobertura, estado de la póliza. La fecha que manda la
-  aseguradora es la de **renovación**: una póliza médica no vence, solo deja
-  de valer si la cancelan o la suspenden (2 de octubre de 2026)
+  hospitales/cobertura, estado de la póliza. La póliza es **anual**: la
+  fecha que manda la aseguradora es la de su **renovación** anual; una
+  póliza médica no vence, solo deja de valer si la cancelan o la suspenden
+  (2 de octubre de 2026)
 - **Sin póliza (cuenta base):** estado vacío con CTA "Ingresa tu póliza para
   acceso completo" + **cotizador express**. "Póliza pendiente de verificación"
   se trata exactamente igual que "sin póliza" — no hay un tercer estado
