@@ -8,6 +8,8 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 sección con lo que hacen el backend (incluido el de Luis, ya en `dev`), Swift y
 Flutter. Donde el código no cumple una regla ya decidida, la regla **no se
 cambió**: se marca **[PENDIENTE]** con lo que pasa hoy. Ver "Puntos abiertos".
+Decidido en esta revisión: **cualquier workout de cualquier duración cuenta**
+(con ritmo cardíaco). Ya cuenta así en el código.
 
 **Actualizado el 1 oct 2026** (cierre de huecos): se documentan
 `GET /api/v1/historial`, el campo `monedas_al_cumplir` de `retos/estado` y qué
@@ -223,7 +225,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 | `pasos[].dispositivo_nombre` | string, nullable | no | **nuevo (20 sep 2026)** — `HKDevice.name`, nombre legible del hardware físico. `null` cuando `sample.device` es `nil`, nunca string vacío |
 | `pasos[].dispositivo_modelo` | string, nullable | no | **nuevo** — `HKDevice.model`. Para dispositivos Apple ya es la categoría (`iPhone`/`Watch`/`iPad`), sin tabla ni parseo |
 | `pasos[].dispositivo_fabricante` | string, nullable | no | **nuevo** — `HKDevice.manufacturer`. Puede venir nulo en apps puente de terceros |
-| `sesiones[]` | array | sí (puede ir vacío) | una entrada por `HKWorkout` **que tenga ritmo cardíaco y no sea manual** (ver "Qué cuenta como workout"). **[PENDIENTE]** antes decía "de ≥30 min continuos", pero ni Swift ni el servidor filtran por duración |
+| `sesiones[]` | array | sí (puede ir vacío) | una entrada por `HKWorkout` **que tenga ritmo cardíaco y no sea manual** (ver "Qué cuenta como workout"). De **cualquier duración** (decidido 1 oct 2026): los 30 min mínimos solo aplican a los puntos de intensidad, no a contar un workout |
 | `sesiones[].external_id` | string (UUID) | sí | el `sample.uuid` del workout — clave de idempotencia |
 | `sesiones[].inicio` / `.fin` | string (ISO 8601) | sí | ventana del workout |
 | `sesiones[].duracion_min` | int | sí | duración en minutos |
@@ -338,10 +340,10 @@ solo el teléfono no se registran workouts.
   inventar. Swift no los manda (`HKMetadataKeyWasUserEntered`).
 - Un workout que cuenta suma a `workouts_dia` (dashboard) y al objetivo
   semanal, además de a los puntos de intensidad.
-- **[PENDIENTE] Duración mínima:** hoy un workout cuenta **sin importar cuánto
-  dure** (comprobado: uno de 10 min con ritmo cardíaco suma 1 workout a la
-  semana, aunque da 0 puntos de intensidad, que sí exigen 30 min). Falta
-  decidir si para el objetivo semanal debe durar al menos 30 min.
+- **Duración (decidido 1 oct 2026):** cualquier workout, de cualquier duración,
+  cuenta para `workouts_dia` y para el objetivo semanal. Los 30 minutos mínimos
+  son solo para ganar **puntos de intensidad** (un workout de 10 min cuenta
+  como workout y da 0 puntos de intensidad).
 - Las sesiones intensas que el servidor **infiere** del ritmo cardíaco (sin un
   workout registrado) dan puntos de intensidad, pero **no** cuentan como
   workout.
@@ -1057,8 +1059,8 @@ verificación" son el mismo momento.
   mantienen las dos corridas programadas (00:00 fija el objetivo, 12:00 solo
   corrige historial/acumulado). Un **workout** = un entrenamiento que
   cuenta (con ritmo cardíaco, no manual y sin duplicar los que dos
-  dispositivos registran a la vez — ver "Qué cuenta como workout"). Si además
-  debe durar 30 min o ser "intenso" por FC, es un punto abierto.
+  dispositivos registran a la vez — ver "Qué cuenta como workout"), **de
+  cualquier duración** (decidido 1 oct 2026).
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
   vinculada y verificada. Al cierre del mes calcular una vez posición,
   percentil y tramo de premio de cada participante
@@ -1165,11 +1167,17 @@ verificación" son el mismo momento.
   procesamiento de los demás días**. Hecho (A24).
 - **`usuario_id` fuera del payload** y sin la constante `"alvaro-001"`. Hecho (A24).
 - **`actualizarSesion(null)`:** borra el token del Keychain. Hecho (A24).
-- **[PENDIENTE] Cola:** caducar los días con más de 14 días (hoy guarda hasta
-  30, sin mirar la antigüedad) y, ante un `422`, sacar ese día y **seguir** con
-  los demás (hoy cualquier `4xx` que no sea `401`/`408`/`429` corta la vuelta).
+- **[PENDIENTE] Cola, caducidad:** la regla es 14 días (confirmado el 1 oct).
+  Hoy Swift guarda hasta 30 días pendientes, sin mirar la antigüedad de cada
+  uno.
+- **[PENDIENTE] Cola, error `422`:** cuando el servidor rechaza un día por
+  viejo, Swift debería sacar solo ese día y **seguir** con los demás. Hoy
+  cualquier `4xx` que no sea `401`/`408`/`429` corta toda la vuelta: los días
+  que quedaban esperan a la siguiente vez que la app vuelve a primer plano.
 - **[PENDIENTE] Wrapper de Dart:** agregar `actualizarSesion` a
-  `lib/datos/healthkit_bridge.dart`.
+  `lib/datos/healthkit_bridge.dart`. Es el puente por el que Flutter le entrega
+  el token a Swift: sin él, Swift no puede enviar el `sync` con sesión y todo
+  queda `encolado`.
 - **[PENDIENTE] Backfill después del login:** hoy solo se reintenta en la
   siguiente llamada a `solicitarPermisos`. Decidir si `actualizarSesion` con un
   token debe dispararlo.
@@ -1189,12 +1197,11 @@ verificación" son el mismo momento.
 
 *Encontrados en la revisión contra el código (1 oct):*
 
-- **Duración mínima de un workout:** hoy un workout de cualquier duración (con
-  ritmo cardíaco) suma al objetivo semanal. ¿Debe durar al menos 30 min?
 - **Días anulados y objetivo semanal:** un día anulado por retroactivo denegado
   sigue contando para el progreso de la semana en curso. ¿Debe contar?
 - **Programar `cerrar_semana`:** el comando existe pero nada lo corre. Hace
   falta un cron (lunes 00:00 y 12:00, hora de Guatemala) en el servidor.
+  Confirmado el 1 oct: es un pendiente real, sin responsable asignado todavía.
 - **`zona_horaria` y `app_version`:** el servidor los exige pero no los usa.
   Decidir si se usan (días en la zona del usuario, rechazar versiones viejas)
   o se dejan solo como dato.
@@ -1246,8 +1253,8 @@ verificación" son el mismo momento.
   `desconocido → telefono` ya no afecta ningún puntaje. Ver "Puntos abiertos"
   en `decision-tipo-dispositivo.md`.
 - **Metas hardcodeadas del objetivo semanal (demo 1):** cuántos pasos y
-  cuántos workouts, y si un workout debe ser "intenso" por FC o basta con que
-  exista la sesión.
+  cuántos workouts. (Qué es un workout ya está decidido: cualquier
+  entrenamiento con ritmo cardíaco, de cualquier duración.)
 - **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
   y qué premio le toca a cada tramo (Diego).
 - **Endpoints de La Liga y de Tus Ligas:** sin especificar.

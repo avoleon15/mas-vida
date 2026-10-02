@@ -250,7 +250,8 @@ como motivación.
   dispositivo con más puntos. **Nunca se suma la misma actividad dos veces.**
 - **Un workout necesita ritmo cardíaco** (un reloj): con solo el teléfono no
   hay workouts. Los workouts ingresados a mano no cuentan (son fáciles de
-  inventar).
+  inventar). **Cualquier workout de cualquier duración cuenta** para el
+  objetivo semanal (los 30 min mínimos son solo para los puntos de intensidad).
 - Ya no se usa `tipo_dispositivo` para el puntaje; los dispositivos se
   comparan por `fuente_bundle` + `dispositivo_modelo` + `dispositivo_fabricante`.
 - El día se **recalcula completo en cada sync** de esa fecha: los relojes de
