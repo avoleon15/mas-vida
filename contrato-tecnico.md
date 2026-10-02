@@ -215,7 +215,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 |---|---|---|---|
 | `fecha` | string (YYYY-MM-DD) | sí | día calendario que se está sincronizando. El servidor guarda todas las muestras que llegan y **recalcula ese día** con todas las guardadas que **empiezan** dentro de él, en hora de Guatemala |
 | `zona_horaria` | string (IANA) | sí | ej. `America/Guatemala`. El servidor valida que sea una zona IANA real, pero **hoy no la usa**: el día y la semana se cortan siempre en hora de Guatemala (`TIME_ZONE` del servidor). Para el piloto, todo en Guatemala, es lo mismo |
-| `pasos[]` | array | sí (puede ir vacío) | una entrada por muestra de `HKQuantitySample` de tipo `.stepCount` |
+| `pasos[]` | array | sí (puede ir vacío) | una entrada por muestra de `HKQuantitySample` de tipo `.stepCount` **medida por un sensor**: las escritas a mano en Salud no se mandan (ver "Lo escrito a mano no cuenta") |
 | `pasos[].external_id` | string (UUID) | sí | el `sample.uuid` de HealthKit — clave de idempotencia |
 | `pasos[].inicio` / `.fin` | string (ISO 8601 con offset) | sí | ventana exacta de la muestra |
 | `pasos[].cantidad` | int | sí | pasos en esa ventana, nunca un total ya sumado |
@@ -233,7 +233,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 | `sesiones[].fc_promedio` / `.fc_maxima` | int (bpm) | sí | FC durante la ventana de la sesión. **Siempre un valor medido**: si no hubo muestras de ritmo cardíaco en la ventana, Swift no manda la sesión (nunca manda `0`) |
 | `sesiones[].fuente_bundle` / `.fuente_nombre` | string | sí | mismo criterio que pasos[] |
 | `sesiones[].dispositivo_nombre` / `.dispositivo_modelo` / `.dispositivo_fabricante` | string, nullable | no | **nuevo** — mismo criterio que pasos[] |
-| `frecuencia_cardiaca[]` | array | sí (puede ir vacío) | una entrada por muestra `.heartRate` del día completo, esté o no dentro de un workout |
+| `frecuencia_cardiaca[]` | array | sí (puede ir vacío) | una entrada por muestra `.heartRate` **medida** del día completo, esté o no dentro de un workout. Las escritas a mano no se mandan |
 | `frecuencia_cardiaca[].external_id` | string (UUID) | sí | misma clave de idempotencia |
 | `frecuencia_cardiaca[].inicio` / `.fin` | string (ISO 8601) | sí | ventana exacta |
 | `frecuencia_cardiaca[].bpm` | int | sí | valor de la muestra |
@@ -337,7 +337,10 @@ solo el teléfono no se registran workouts.
   se cuenta aparte en el log como `sesiones_sin_ritmo_cardiaco`, distinto de un
   dato imposible).
 - **Los workouts ingresados a mano no cuentan.** Son demasiado fáciles de
-  inventar. Swift no los manda (`HKMetadataKeyWasUserEntered`).
+  inventar. Swift no los manda (`HKMetadataKeyWasUserEntered`). Tampoco cuenta
+  el ritmo cardíaco escrito a mano dentro de un workout: `fc_promedio` y
+  `fc_maxima` salen solo de las lecturas medidas dentro de su ventana (promedio
+  simple de esas lecturas).
 - Un workout que cuenta suma a `workouts_dia` (dashboard) y al objetivo
   semanal, además de a los puntos de intensidad.
 - **Duración (decidido 1 oct 2026):** cualquier workout, de cualquier duración,
@@ -347,6 +350,24 @@ solo el teléfono no se registran workouts.
 - Las sesiones intensas que el servidor **infiere** del ritmo cardíaco (sin un
   workout registrado) dan puntos de intensidad, pero **no** cuentan como
   workout.
+
+### Lo escrito a mano no cuenta (decidido 1 oct 2026)
+
+Cualquiera puede inventar datos en la app Salud (Explorar › Actividad ›
+Pasos › Añadir datos) en menos de un minuto: 15.000 pasos escritos a mano darían
+100 puntos y cashback. Por eso **Swift no manda nada que la persona haya
+escrito a mano**, sea cual sea el tipo: pasos, ritmo cardíaco o workouts. Apple
+marca esas lecturas con `HKMetadataKeyWasUserEntered`; sin esa marca se asume
+que la lectura es medida (un reloj de terceros suele no escribirla).
+
+El filtro está en Swift y no en el servidor porque el servidor no recibe esa
+marca: el JSON #1 no la trae. Así se mantiene el principio de que el teléfono
+no manda conclusiones, solo datos crudos: lo manual simplemente no es un dato
+medido.
+
+**Alcance honesto:** esto frena el engaño fácil, no todo. Una app que escriba
+datos falsos por programa no viene marcada como manual y HealthKit no puede
+probar su origen. Ver "Puntos abiertos".
 
 ---
 
@@ -1181,21 +1202,34 @@ verificación" son el mismo momento.
 - **[PENDIENTE] Backfill después del login:** hoy solo se reintenta en la
   siguiente llamada a `solicitarPermisos`. Decidir si `actualizarSesion` con un
   token debe dispararlo.
-- **Workouts (1 oct) — hecho:** Swift no manda una sesión si no hay ritmo
-  cardíaco medido en su ventana (antes mandaba `fc_promedio`/`fc_maxima` en
-  `0`), ni los workouts ingresados a mano
+- **Workouts y lo manual (1 oct) — hecho:** Swift no manda una sesión si no hay
+  ritmo cardíaco medido en su ventana (antes mandaba `fc_promedio`/`fc_maxima`
+  en `0`), ni los workouts, pasos o lecturas de ritmo cardíaco escritos a mano
   (`metadata[HKMetadataKeyWasUserEntered] == true`). Ver "Qué cuenta como
-  workout". Un error real al leer el ritmo cardíaco ya no se traga: falla la
-  lectura del día (no se da por enviado) en vez de perder el workout en
-  silencio. "Sin muestras" (`errorNoData`) sí se trata como "sin ritmo
-  cardíaco", que es lo normal en un iPhone sin reloj. El servidor mantiene su
-  descarte de sesiones con `fc` en `0` como red de seguridad.
+  workout" y "Lo escrito a mano no cuenta". `fc_promedio` y `fc_maxima` ahora se
+  calculan a partir de las lecturas medidas dentro del workout (antes salían de
+  una consulta de estadísticas de HealthKit que no permitía excluir lo manual).
+  Un error real al leer el ritmo cardíaco no se traga: falla la lectura del día
+  (no se da por enviado) en vez de perder el workout en silencio. "Sin muestras"
+  se trata como "sin ritmo cardíaco", que es lo normal en un iPhone sin reloj.
+  El servidor mantiene su descarte de sesiones con `fc` en `0` como red de
+  seguridad.
 
 ---
 
 ## Puntos abiertos
 
 *Encontrados en la revisión contra el código (1 oct):*
+
+- **Ritmo cardíaco de Garmin (por verificar en un dispositivo):** según lo
+  publicado, Garmin sincroniza a Apple Salud solo el ritmo cardíaco alto y bajo
+  de una actividad. Si es así, el `fc_promedio` de un workout de Garmin sería
+  el punto medio entre dos lecturas y no su promedio real, y podría subestimar
+  la intensidad. Se aclara con un reloj Garmin real.
+- **Datos falsos escritos por programa:** el filtro de lo manual no detecta una
+  app que escriba pasos o workouts falsos en HealthKit sin marcarlos. Es un
+  límite de HealthKit; se mitiga con las reglas del servidor (topes por muestra,
+  ventana de 14 días), no se resuelve.
 
 - **Días anulados y objetivo semanal:** un día anulado por retroactivo denegado
   sigue contando para el progreso de la semana en curso. ¿Debe contar?

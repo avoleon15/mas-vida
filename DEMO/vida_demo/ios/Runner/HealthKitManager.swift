@@ -66,24 +66,179 @@ struct HeartRateStats {
     static let vacio = HeartRateStats(promedio: nil, minimo: nil, maximo: nil)
 }
 
+/// Lo que la persona escribió a mano en Salud no cuenta (decidido 1 oct 2026).
+///
+/// Apple marca esas lecturas con `HKMetadataKeyWasUserEntered`. Aplica a los
+/// pasos, al ritmo cardíaco y a los workouts: cualquiera se puede inventar en
+/// un minuto desde Salud › Explorar › Añadir datos. Sin metadata se asume que
+/// NO fue a mano (un reloj de terceros suele no escribir esa marca).
+///
+/// Esto frena el engaño fácil, no todo: una app que escriba datos falsos por
+/// programa no viene marcada. Eso HealthKit no lo puede probar.
+enum ReglasManuales {
+    static func esManual(metadata: [String: Any]?) -> Bool {
+        (metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true
+    }
+}
+
+// MARK: - Lecturas de Salud copiadas a valores simples
+// HealthKit solo se LEE en un lugar; todo lo que se decide va en funciones
+// puras (abajo) que reciben estos valores. Así las reglas se prueban de punta
+// a punta sin un iPhone, y quien las borre rompe un test.
+
+struct EntradaPaso {
+    let uuid: String
+    let inicio: Date
+    let fin: Date
+    let cantidad: Double
+    let fuenteBundle: String
+    let fuenteNombre: String
+    let fuenteVersion: String?
+    let dispositivo: DatosDispositivo
+    let metadata: [String: Any]?
+}
+
+extension EntradaPaso {
+    init(_ muestra: HKQuantitySample) {
+        self.init(
+            uuid: muestra.uuid.uuidString,
+            inicio: muestra.startDate,
+            fin: muestra.endDate,
+            cantidad: muestra.quantity.doubleValue(for: .count()),
+            fuenteBundle: muestra.sourceRevision.source.bundleIdentifier,
+            fuenteNombre: muestra.sourceRevision.source.name,
+            fuenteVersion: muestra.sourceRevision.version,
+            dispositivo: DatosDispositivo(muestra.device),
+            metadata: muestra.metadata
+        )
+    }
+}
+
+struct EntradaRitmo {
+    let uuid: String
+    let inicio: Date
+    let fin: Date
+    let bpm: Double
+    let fuenteBundle: String
+    let fuenteNombre: String
+    let dispositivo: DatosDispositivo
+    let metadata: [String: Any]?
+}
+
+extension EntradaRitmo {
+    init(_ muestra: HKQuantitySample) {
+        self.init(
+            uuid: muestra.uuid.uuidString,
+            inicio: muestra.startDate,
+            fin: muestra.endDate,
+            bpm: muestra.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())),
+            fuenteBundle: muestra.sourceRevision.source.bundleIdentifier,
+            fuenteNombre: muestra.sourceRevision.source.name,
+            dispositivo: DatosDispositivo(muestra.device),
+            metadata: muestra.metadata
+        )
+    }
+}
+
+struct EntradaWorkout {
+    let uuid: String
+    let inicio: Date
+    let fin: Date
+    let duracionSegundos: Double
+    let tipoActividad: String
+    let fuenteBundle: String
+    let fuenteNombre: String
+    let dispositivo: DatosDispositivo
+    let metadata: [String: Any]?
+    /// Las lecturas de ritmo cardíaco dentro de la ventana del workout.
+    let ritmo: [EntradaRitmo]
+}
+
+extension EntradaWorkout {
+    init(_ workout: HKWorkout, tipoActividad: String, ritmo: [EntradaRitmo]) {
+        self.init(
+            uuid: workout.uuid.uuidString,
+            inicio: workout.startDate,
+            fin: workout.endDate,
+            duracionSegundos: workout.duration,
+            tipoActividad: tipoActividad,
+            fuenteBundle: workout.sourceRevision.source.bundleIdentifier,
+            fuenteNombre: workout.sourceRevision.source.name,
+            dispositivo: DatosDispositivo(workout.device),
+            metadata: workout.metadata,
+            ritmo: ritmo
+        )
+    }
+}
+
+// MARK: - Qué se manda al backend (funciones puras)
+
+/// Pasos y ritmo cardíaco crudos del día: lo escrito a mano no se manda.
+enum ReglasMuestras {
+    static func pasos(de entradas: [EntradaPaso]) -> [PasoMuestra] {
+        entradas
+            .filter { !ReglasManuales.esManual(metadata: $0.metadata) }
+            .map { entrada in
+                PasoMuestra(
+                    external_id: entrada.uuid,
+                    inicio: FormatoFechas.iso8601.string(from: entrada.inicio),
+                    fin: FormatoFechas.iso8601.string(from: entrada.fin),
+                    cantidad: Int(entrada.cantidad.rounded()),
+                    fuente_bundle: entrada.fuenteBundle,
+                    fuente_nombre: entrada.fuenteNombre,
+                    fuente_version: entrada.fuenteVersion,
+                    dispositivo_nombre: entrada.dispositivo.nombre,
+                    dispositivo_modelo: entrada.dispositivo.modelo,
+                    dispositivo_fabricante: entrada.dispositivo.fabricante
+                )
+            }
+    }
+
+    static func ritmo(de entradas: [EntradaRitmo]) -> [FrecuenciaCardiacaMuestra] {
+        entradas
+            .filter { !ReglasManuales.esManual(metadata: $0.metadata) }
+            .map { entrada in
+                FrecuenciaCardiacaMuestra(
+                    external_id: entrada.uuid,
+                    inicio: FormatoFechas.iso8601.string(from: entrada.inicio),
+                    fin: FormatoFechas.iso8601.string(from: entrada.fin),
+                    bpm: Int(entrada.bpm.rounded()),
+                    fuente_bundle: entrada.fuenteBundle,
+                    fuente_nombre: entrada.fuenteNombre,
+                    dispositivo_nombre: entrada.dispositivo.nombre,
+                    dispositivo_modelo: entrada.dispositivo.modelo,
+                    dispositivo_fabricante: entrada.dispositivo.fabricante
+                )
+            }
+    }
+
+    /// Promedio, mínimo y máximo de las lecturas MEDIDAS. Una lectura escrita
+    /// a mano dentro del workout no puede inflar el ritmo.
+    static func estadisticas(de lecturas: [EntradaRitmo]) -> HeartRateStats {
+        let valores = lecturas
+            .filter { !ReglasManuales.esManual(metadata: $0.metadata) }
+            .map(\.bpm)
+        guard !valores.isEmpty else { return .vacio }
+        return HeartRateStats(
+            promedio: valores.reduce(0, +) / Double(valores.count),
+            minimo: valores.min(),
+            maximo: valores.max()
+        )
+    }
+}
+
 /// Qué workouts se mandan al backend (decidido 1 oct 2026; contrato, "Qué
-/// cuenta como workout"). Son funciones puras para poder probarlas sin HealthKit.
+/// cuenta como workout").
 ///
 /// - Un workout **necesita ritmo cardíaco medido**, o sea un reloj o una banda.
 ///   Con solo el teléfono no se registran workouts. Antes se mandaba
 ///   `fc_promedio`/`fc_maxima` en `0`; ahora esa sesión simplemente no se manda.
-/// - Los workouts **ingresados a mano** no cuentan: son demasiado fáciles de
-///   inventar.
+/// - Los workouts **ingresados a mano** no cuentan, ni cuenta el ritmo cardíaco
+///   escrito a mano dentro de uno.
 enum ReglasWorkout {
     struct FC: Equatable {
         let promedio: Int
         let maxima: Int
-    }
-
-    /// `true` si el usuario escribió el workout a mano en Salud
-    /// (`HKMetadataKeyWasUserEntered`). Sin metadata se asume que NO fue a mano.
-    static func fueIngresadoAMano(metadata: [String: Any]?) -> Bool {
-        (metadata?[HKMetadataKeyWasUserEntered] as? Bool) == true
     }
 
     /// El ritmo cardíaco que viaja con la sesión, o `nil` si no hay uno medido
@@ -94,6 +249,30 @@ enum ReglasWorkout {
         let maximoEntero = Int(maximo.rounded())
         guard promedioEntero > 0, maximoEntero > 0 else { return nil }
         return FC(promedio: promedioEntero, maxima: maximoEntero)
+    }
+
+    /// Los workouts que se mandan, en el mismo orden en que llegaron.
+    static func sesiones(de entradas: [EntradaWorkout]) -> [SesionMuestra] {
+        entradas.compactMap { entrada in
+            guard !ReglasManuales.esManual(metadata: entrada.metadata) else { return nil }
+            guard let fc = fcParaEnviar(stats: ReglasMuestras.estadisticas(de: entrada.ritmo)) else {
+                return nil
+            }
+            return SesionMuestra(
+                external_id: entrada.uuid,
+                inicio: FormatoFechas.iso8601.string(from: entrada.inicio),
+                fin: FormatoFechas.iso8601.string(from: entrada.fin),
+                duracion_min: Int((entrada.duracionSegundos / 60).rounded()),
+                tipo_actividad: entrada.tipoActividad,
+                fc_promedio: fc.promedio,
+                fc_maxima: fc.maxima,
+                fuente_bundle: entrada.fuenteBundle,
+                fuente_nombre: entrada.fuenteNombre,
+                dispositivo_nombre: entrada.dispositivo.nombre,
+                dispositivo_modelo: entrada.dispositivo.modelo,
+                dispositivo_fabricante: entrada.dispositivo.fabricante
+            )
+        }
     }
 
     /// HealthKit a veces reporta "no hay muestras en este rango" como el error
@@ -665,63 +844,18 @@ final class HealthKitManager {
             healthStore.execute(query)
         }
 
-        return muestras.map { muestra in
-            let dispositivo = DatosDispositivo(muestra.device)
-            return PasoMuestra(
-                external_id: muestra.uuid.uuidString,
-                inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
-                fin: FormatoFechas.iso8601.string(from: muestra.endDate),
-                cantidad: Int(muestra.quantity.doubleValue(for: .count()).rounded()),
-                fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
-                fuente_nombre: muestra.sourceRevision.source.name,
-                fuente_version: muestra.sourceRevision.version,
-                dispositivo_nombre: dispositivo.nombre,
-                dispositivo_modelo: dispositivo.modelo,
-                dispositivo_fabricante: dispositivo.fabricante
-            )
-        }
+        // Lo escrito a mano no se manda (ver ReglasManuales).
+        return ReglasMuestras.pasos(de: muestras.map { EntradaPaso($0) })
     }
 
-    // MARK: - Ritmo cardíaco: promedio, mínimo y máximo en un rango (para fc_promedio/fc_maxima de una sesión)
+    // MARK: - Ritmo cardíaco: lectura de HealthKit (sin decidir nada)
+    // Un solo lector para el ritmo del día y para el de cada workout. Qué se
+    // manda lo deciden ReglasMuestras / ReglasWorkout: una lectura escrita a
+    // mano no cuenta, ni para el día ni para el promedio de un workout.
 
-    private func fetchFrecuenciaCardiaca(desde inicio: Date, hasta fin: Date) async throws -> HeartRateStats {
-        let predicado = HKQuery.predicateForSamples(withStart: inicio, end: fin, options: .strictStartDate)
-        let unidad = HKUnit.count().unitDivided(by: .minute())
-
-        return try await withCheckedThrowingContinuation { continuation in
-            let query = HKStatisticsQuery(
-                quantityType: tipoFrecuenciaCardiaca,
-                quantitySamplePredicate: predicado,
-                options: [.discreteAverage, .discreteMin, .discreteMax]
-            ) { _, resultado, error in
-                if let error {
-                    if ReglasWorkout.esSinDatos(error) {
-                        continuation.resume(returning: .vacio)
-                    } else {
-                        continuation.resume(throwing: error)
-                    }
-                    return
-                }
-                let stats = HeartRateStats(
-                    promedio: resultado?.averageQuantity()?.doubleValue(for: unidad),
-                    minimo: resultado?.minimumQuantity()?.doubleValue(for: unidad),
-                    maximo: resultado?.maximumQuantity()?.doubleValue(for: unidad)
-                )
-                continuation.resume(returning: stats)
-            }
-            healthStore.execute(query)
-        }
-    }
-
-    // MARK: - Frecuencia cardíaca cruda del día (una entrada por HKQuantitySample)
-    // Reemplaza lo que iba a ser el ticket A4 ("detectar sesión intensa en
-    // Swift"): la detección de sesiones intensas sin workout la hace el
-    // backend (L7) sobre este dato crudo.
-
-    private func fetchFrecuenciaCardiacaCruda(desde inicio: Date, hasta fin: Date) async throws -> [FrecuenciaCardiacaMuestra] {
+    private func leerRitmo(desde inicio: Date, hasta fin: Date) async throws -> [EntradaRitmo] {
         let predicado = HKQuery.predicateForSamples(withStart: inicio, end: fin, options: .strictStartDate)
         let ordenar = [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
-        let unidad = HKUnit.count().unitDivided(by: .minute())
 
         let muestras: [HKQuantitySample] = try await withCheckedThrowingContinuation { continuation in
             let query = HKSampleQuery(
@@ -731,28 +865,29 @@ final class HealthKitManager {
                 sortDescriptors: ordenar
             ) { _, resultados, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    // "Sin muestras" no es un fallo (un iPhone sin reloj); un
+                    // error real sí se propaga para no perder datos en silencio.
+                    if ReglasWorkout.esSinDatos(error) {
+                        continuation.resume(returning: [])
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
                 continuation.resume(returning: (resultados as? [HKQuantitySample]) ?? [])
             }
             healthStore.execute(query)
         }
+        return muestras.map { EntradaRitmo($0) }
+    }
 
-        return muestras.map { muestra in
-            let dispositivo = DatosDispositivo(muestra.device)
-            return FrecuenciaCardiacaMuestra(
-                external_id: muestra.uuid.uuidString,
-                inicio: FormatoFechas.iso8601.string(from: muestra.startDate),
-                fin: FormatoFechas.iso8601.string(from: muestra.endDate),
-                bpm: Int(muestra.quantity.doubleValue(for: unidad).rounded()),
-                fuente_bundle: muestra.sourceRevision.source.bundleIdentifier,
-                fuente_nombre: muestra.sourceRevision.source.name,
-                dispositivo_nombre: dispositivo.nombre,
-                dispositivo_modelo: dispositivo.modelo,
-                dispositivo_fabricante: dispositivo.fabricante
-            )
-        }
+    // MARK: - Frecuencia cardíaca cruda del día (una entrada por HKQuantitySample)
+    // Reemplaza lo que iba a ser el ticket A4 ("detectar sesión intensa en
+    // Swift"): la detección de sesiones intensas sin workout la hace el
+    // backend (L7) sobre este dato crudo.
+
+    private func fetchFrecuenciaCardiacaCruda(desde inicio: Date, hasta fin: Date) async throws -> [FrecuenciaCardiacaMuestra] {
+        ReglasMuestras.ritmo(de: try await leerRitmo(desde: inicio, hasta: fin))
     }
 
     // MARK: - Sesiones (HKWorkout) de un día calendario, para el export del contrato v3
@@ -777,37 +912,20 @@ final class HealthKitManager {
             healthStore.execute(query)
         }
 
-        var sesiones: [SesionMuestra] = []
+        // Se lee todo y se decide después, en ReglasWorkout.sesiones: sin ritmo
+        // cardíaco medido o escrito a mano, el workout no se manda. Un error
+        // real de HealthKit al leer el ritmo se propaga (no se traga), para que
+        // el día no se dé por enviado y no se pierda un workout en silencio.
+        var entradas: [EntradaWorkout] = []
         for workout in workouts {
-            // Un workout a mano no cuenta (es fácil de inventar).
-            guard !ReglasWorkout.fueIngresadoAMano(metadata: workout.metadata) else { continue }
-
-            // Un workout necesita ritmo cardíaco medido. Sin reloj no hay FC:
-            // la sesión no se manda (antes se mandaba con 0). Un error real de
-            // HealthKit NO se traga: se propaga, para que el día no se dé por
-            // enviado y no se pierda un workout sin que nadie se entere.
-            let stats = try await fetchFrecuenciaCardiaca(desde: workout.startDate, hasta: workout.endDate)
-            guard let fc = ReglasWorkout.fcParaEnviar(stats: stats) else { continue }
-
-            let dispositivo = DatosDispositivo(workout.device)
-            sesiones.append(
-                SesionMuestra(
-                    external_id: workout.uuid.uuidString,
-                    inicio: FormatoFechas.iso8601.string(from: workout.startDate),
-                    fin: FormatoFechas.iso8601.string(from: workout.endDate),
-                    duracion_min: Int((workout.duration / 60).rounded()),
-                    tipo_actividad: Self.identificadorActividad(for: workout.workoutActivityType),
-                    fc_promedio: fc.promedio,
-                    fc_maxima: fc.maxima,
-                    fuente_bundle: workout.sourceRevision.source.bundleIdentifier,
-                    fuente_nombre: workout.sourceRevision.source.name,
-                    dispositivo_nombre: dispositivo.nombre,
-                    dispositivo_modelo: dispositivo.modelo,
-                    dispositivo_fabricante: dispositivo.fabricante
-                )
-            )
+            let ritmo = try await leerRitmo(desde: workout.startDate, hasta: workout.endDate)
+            entradas.append(EntradaWorkout(
+                workout,
+                tipoActividad: Self.identificadorActividad(for: workout.workoutActivityType),
+                ritmo: ritmo
+            ))
         }
-        return sesiones
+        return ReglasWorkout.sesiones(de: entradas)
     }
 
     /// `tipo_actividad` en texto plano para el contrato — nombres del caso de
