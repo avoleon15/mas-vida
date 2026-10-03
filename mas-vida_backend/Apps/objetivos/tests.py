@@ -139,11 +139,26 @@ class CerrarSemanaTests(TestCase):
         self.assertEqual(monedas.saldo(self.ana, HOY), 20)
         self.assertEqual(MonedaLedger.objects.filter(usuario=self.ana).count(), 1)
 
-    def test_respeta_el_tope_de_100_monedas(self):
-        monedas.acreditar(self.ana, 90, MonedaLedger.Tipo.AJUSTE_MANUAL, fecha=date(2026, 9, 1))
+    def test_no_hay_tope_el_pago_se_suma_completo(self):
+        monedas.acreditar(self.ana, 90, MonedaLedger.Tipo.AJUSTE_MANUAL, fecha=HOY)
         resumen = self._cerrar()
-        self.assertEqual(resumen["monedas_pagadas"], 10)
-        self.assertEqual(monedas.saldo(self.ana, HOY), 100)
+        self.assertEqual(resumen["monedas_pagadas"], goals.MONEDAS_POR_OBJETIVO)
+        self.assertEqual(monedas.saldo(self.ana, HOY), 90 + goals.MONEDAS_POR_OBJETIVO)
+
+    def test_el_cierre_que_cae_en_la_season_nueva_reinicia_primero_y_paga_despues(self):
+        # HOY es el lunes 28 sep: empieza la season 4. Las monedas de la season 3
+        # (ganadas el 1 sep) se reinician y lo de la semana que cerró cuenta ya
+        # en la season 4.
+        monedas.acreditar(self.ana, 90, MonedaLedger.Tipo.AJUSTE_MANUAL, fecha=date(2026, 9, 1))
+        self._cerrar()
+        self.assertEqual(monedas.saldo(self.ana, HOY), goals.MONEDAS_POR_OBJETIVO)
+        tipos = list(
+            MonedaLedger.objects.filter(usuario=self.ana).order_by("id").values_list("tipo", flat=True)
+        )
+        self.assertEqual(
+            tipos,
+            ["ajuste_manual", "expiracion", "objetivo_cumplido"],
+        )
 
     def test_una_semana_que_no_termino_no_se_evalua(self):
         with self.assertRaises(ValueError):
