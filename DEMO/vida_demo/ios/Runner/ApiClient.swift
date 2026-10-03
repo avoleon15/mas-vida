@@ -16,7 +16,15 @@
 //
 
 import Foundation
+import os
 import Security
+
+/// Diagnóstico de los envíos al servidor. Misma regla que `logSalud`: acá
+/// nunca entra un valor de salud, el token ni el cuerpo de una respuesta.
+private let logSync = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.assures.masvida",
+    category: "Sync"
+)
 
 enum ApiError: LocalizedError {
     case urlInvalida
@@ -73,7 +81,7 @@ enum ApiError: LocalizedError {
 }
 
 /// Qué hacer con un día cuyo envío falló. Es la ÚNICA regla: la usan el sync
-/// de hoy, la cola de reintentos y el backfill (ver `RecorridoDias` en
+/// de hoy, la cola de reintentos y ponerse al día (ver `RecorridoDias` en
 /// SyncQueue.swift y HealthKitManager.swift).
 enum AccionDiaFallido: Equatable {
     /// El día queda pendiente y se vuelve a intentar: sin red, sin sesión,
@@ -88,12 +96,19 @@ enum AccionDiaFallido: Equatable {
     /// probable es que rechace igual los días siguientes; esos no se pierden,
     /// siguen en la cola para la próxima vuelta.
     case descartarYCortar
+    /// No es una falla del envío: el servidor respondió 2xx (ya guardó el
+    /// día) y lo único que no se entendió fue su respuesta. Se cuenta como
+    /// enviado y la vuelta sigue (decidido 3 oct 2026; es lo que hacen
+    /// Google, Stripe y los clientes HTTP bien hechos: un éxito no se
+    /// reintenta). `ApiClient` lo deja anotado en el log.
+    case tomarComoEnviado
 
     static func para(_ error: Error) -> AccionDiaFallido {
         // Un error que no es de `ApiError` (red caída, tiempo agotado, lectura
         // de HealthKit) se reintenta.
         guard let error = error as? ApiError else { return .reintentarDespues }
         if case .fueraDeVentana = error { return .descartarYSeguir }
+        if case .respuestaIlegible = error { return .tomarComoEnviado }
         return error.esReintentable ? .reintentarDespues : .descartarYCortar
     }
 }
@@ -213,6 +228,26 @@ enum Sesion {
             return .errorAlmacenamiento(detalle: detalle)
         }
     }
+
+    /// Lo mismo, y además: si la cuenta cambió (otro token, o se cerró la
+    /// sesión) se olvida hasta qué día se había mandado, para que la cuenta
+    /// que sigue empiece como la primera vez. El mismo token que Flutter
+    /// manda en cada arranque no cambia nada. Devuelve también si quedó una
+    /// sesión, para saber si ponerse al día.
+    static func aplicar(
+        token: String?,
+        en almacen: AlmacenSesion,
+        marca: MarcaEnvios
+    ) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
+        let anterior = almacen.leerToken()
+        let resultado = aplicar(token: token, en: almacen)
+        let actual = almacen.leerToken()
+        // Si falló el Keychain, el token anterior sigue ahí: no cambió nada.
+        if resultado == .ok && actual != anterior {
+            marca.olvidar()
+        }
+        return (resultado, actual != nil)
+    }
 }
 
 final class ApiClient {
@@ -287,6 +322,13 @@ final class ApiClient {
         do {
             return try JSONDecoder().decode(RespuestaSincronizacion.self, from: datos)
         } catch {
+            // El día se da por enviado (`AccionDiaFallido.tomarComoEnviado`),
+            // así que sin esta línea nadie se enteraría de que el servidor y
+            // la app ya no están de acuerdo en el formato. Solo la fecha y el
+            // código: el cuerpo trae datos de salud.
+            logSync.error(
+                "Respuesta ilegible del servidor (HTTP \(http.statusCode, privacy: .public)) para el día \(payload.fecha, privacy: .public): el día quedó guardado. Revisar que el contrato y el servidor coincidan."
+            )
             throw ApiError.respuestaIlegible
         }
     }

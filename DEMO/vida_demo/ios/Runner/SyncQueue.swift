@@ -93,7 +93,7 @@ final class SyncQueue {
     }
 
     /// Aplica a un día lo que decidió `DesenlaceDia` (ver `efectoEnReintento`
-    /// y `efectoEnBackfill`).
+    /// y `efectoAlPonerseAlDia`).
     func aplicar(_ efecto: EfectoEnCola, a fecha: String) {
         switch efecto {
         case .sacar: remover(fecha: fecha)
@@ -149,26 +149,107 @@ enum DesenlaceDia {
         }
     }
 
-    /// En el backfill, donde el día puede no estar en la cola.
-    var efectoEnBackfill: EfectoEnCola {
+    /// Al ponerse al día, donde el día puede no estar en la cola.
+    var efectoAlPonerseAlDia: EfectoEnCola {
         switch self {
         case .enviado, .descartado: return .sacar
         case .reintentarDespues: return .encolar
-        // Vacío: no se anota. Cortado: la vuelta entera se repite la próxima
-        // vez (la bandera de "ya hecho" no se enciende), no hace falta la cola.
+        // Vacío: no se anota. Cortado: la marca no avanza, así que la próxima
+        // vez se vuelve a intentar desde ahí; no hace falta la cola.
         case .saltado, .cortado: return .dejar
         }
     }
 
-    /// ¿Repetir el backfill podría arreglar este día? Solo tras un corte. Un
-    /// día descartado por la ventana no entra nunca: repetir no sirve.
-    var dejaBackfillIncompleto: Bool {
-        if case .cortado = self { return true }
-        return false
+    /// ¿Mueve la marca de "último día enviado" (`MarcaEnvios`)? Solo lo que
+    /// ya no hay que volver a mandar: lo que llegó, y lo que el servidor ya no
+    /// acepta por viejo. Un día vacío no la mueve: puede ser un permiso de
+    /// Salud que todavía no se dio, y ese día tiene que poder salir después.
+    var avanzaMarca: Bool {
+        switch self {
+        case .enviado, .descartado: return true
+        case .saltado, .reintentarDespues, .cortado: return false
+        }
     }
 }
 
-/// La vuelta día por día que comparten la cola de reintentos y el backfill.
+/// Hasta qué día llegó todo al servidor, para saber desde dónde ponerse al
+/// día (decidido 3 oct 2026, ver "Cuándo se manda cada día" en el contrato).
+///
+/// Reemplaza a la bandera de "backfill ya hecho": un teléfono que nunca
+/// mandó nada no tiene marca, y entonces se mandan los últimos
+/// `diasPrimeraVez` días (los 7 del backfill de siempre, que dan puntos).
+/// Con marca, se manda desde ese día (otra vez, porque pudo seguir sumando
+/// pasos después del envío) hasta hoy, sin pasar de la ventana del servidor.
+final class MarcaEnvios {
+    private static let clave = "vida.ultimoDiaEnviado"
+
+    /// Cuántos días se mandan la primera vez, hoy incluido.
+    static let diasPrimeraVez = 7
+
+    private let almacen: UserDefaults
+    private let hoy: () -> Date
+    private let calendario: Calendar
+
+    init(almacen: UserDefaults = .standard,
+         hoy: @escaping () -> Date = Date.init,
+         calendario: Calendar = .current) {
+        self.almacen = almacen
+        self.hoy = hoy
+        self.calendario = calendario
+    }
+
+    /// `yyyy-MM-dd` del último día que llegó, o `nil` si este teléfono (con
+    /// esta cuenta) nunca mandó nada.
+    var ultimoDiaEnviado: String? {
+        guard let texto = almacen.string(forKey: Self.clave),
+              FormatoFechas.diaCalendario.date(from: texto) != nil else { return nil }
+        return texto
+    }
+
+    /// Anota que `fecha` ya llegó. Solo avanza: los días se recorren del más
+    /// viejo al más nuevo, y uno viejo que llegue tarde no la hace retroceder.
+    func registrarEnviado(_ fecha: String) {
+        guard FormatoFechas.diaCalendario.date(from: fecha) != nil else { return }
+        if let actual = ultimoDiaEnviado, actual >= fecha { return }
+        almacen.set(fecha, forKey: Self.clave)
+    }
+
+    /// Al cerrar sesión o cambiar de cuenta: la próxima cuenta empieza como
+    /// la primera vez. Si vuelve a entrar la misma, se reenvían 7 días y el
+    /// servidor ignora lo que ya tenía.
+    func olvidar() {
+        almacen.removeObject(forKey: Self.clave)
+    }
+
+    /// Los días que hay que mandar, del más viejo a hoy.
+    func diasPorMandar() -> [String] {
+        let hoyInicio = calendario.startOfDay(for: hoy())
+        guard let masViejoAceptado = calendario.date(
+            byAdding: .day, value: -SyncQueue.ventanaDias, to: hoyInicio) else { return [] }
+
+        let desde: Date
+        if let texto = ultimoDiaEnviado,
+           let marca = FormatoFechas.diaCalendario.date(from: texto) {
+            // Una marca en el futuro (el reloj del teléfono se movió) no puede
+            // dejar a hoy afuera.
+            desde = min(max(calendario.startOfDay(for: marca), masViejoAceptado), hoyInicio)
+        } else {
+            desde = calendario.date(
+                byAdding: .day, value: -(Self.diasPrimeraVez - 1), to: hoyInicio) ?? hoyInicio
+        }
+
+        var dias: [String] = []
+        var dia = desde
+        while dia <= hoyInicio {
+            dias.append(FormatoFechas.diaCalendario.string(from: dia))
+            guard let siguiente = calendario.date(byAdding: .day, value: 1, to: dia) else { break }
+            dia = siguiente
+        }
+        return dias
+    }
+}
+
+/// La vuelta día por día que comparten la cola de reintentos y ponerse al día.
 /// Vive aparte (sin HealthKit ni red) para poder probar cuándo sigue y cuándo
 /// corta: antes cada uno tenía su propio `for` con su propio `break`.
 enum RecorridoDias {
@@ -195,6 +276,10 @@ enum RecorridoDias {
                     registrar(dia, .reintentarDespues(error))
                 case .descartarYSeguir:
                     registrar(dia, .descartado(error))
+                case .tomarComoEnviado:
+                    // El servidor ya lo guardó; solo no se entendió su
+                    // respuesta (ApiClient lo anota en el log).
+                    registrar(dia, .enviado)
                 case .descartarYCortar:
                     registrar(dia, .cortado(error))
                     // `return`, no `break`: dentro de un `switch`, `break` solo

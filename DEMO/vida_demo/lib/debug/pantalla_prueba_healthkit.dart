@@ -17,10 +17,11 @@
 //      del canal en AppDelegate solo truena en debug)
 //   3. Tarjeta 0 PRIMERO: pegar un token y "Entregar token" -> estado=ok.
 //      Sin token el sync nunca firma y el boton 2 siempre da encolado.
-//      Boton 1 -> espera estado=concedido, y hasta 7 POST de backfill
+//      Boton 1 -> espera estado=concedido, y hasta 7 POST (la primera vez)
 //      Boton 2 -> espera estado=ok
 //      Boton 2 con el backend apagado -> espera estado=encolado
-//      App a background y de vuelta -> el dia encolado llega solo (SceneDelegate)
+//      App a background y de vuelta -> el dia encolado llega solo, y se manda
+//      desde el ultimo dia enviado hasta hoy (SceneDelegate, ponerseAlDia)
 //   4. git checkout lib/main.dart para dejarlo como estaba
 //
 // Verificado asi el 6 de septiembre de 2026 (todavia sin token, contra
@@ -130,7 +131,10 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
     _fijar(tag, texto, r.estado == EstadoPermisos.concedido);
     _anotar(tag, texto.replaceAll('\n', '  '));
     if (r.estado == EstadoPermisos.concedido) {
-      _anotar(tag, 'backfill de 7 dias disparado, mira el mock server');
+      _anotar(
+        tag,
+        'ponerse al dia disparado (la primera vez, 7 dias), mira el backend',
+      );
     }
   });
 

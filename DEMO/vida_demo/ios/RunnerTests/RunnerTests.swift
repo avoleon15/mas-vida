@@ -567,7 +567,11 @@ final class AccionDiaFallidoTests: XCTestCase {
     }
     XCTAssertEqual(AccionDiaFallido.para(ApiError.urlInvalida), .descartarYCortar)
     XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaInvalida), .descartarYCortar)
-    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaIlegible), .descartarYCortar)
+  }
+
+  func testUnaRespuestaIlegible_SeTomaComoEnviada() {
+    // El servidor respondió 2xx: el día ya está guardado (decidido 3 oct 2026).
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaIlegible), .tomarComoEnviado)
   }
 }
 
@@ -660,6 +664,13 @@ final class RecorridoDiasTests: XCTestCase {
 
     XCTAssertEqual(r.vistos, [.enviado, .descartado, .reintentar, .cortado])
     XCTAssertEqual(r.intentados.last, "d4", "d5 nunca se intenta")
+  }
+
+  func testUnaRespuestaIlegible_CuentaComoEnviadaYSigue() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(ApiError.respuestaIlegible)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"], "No corta la vuelta")
+    XCTAssertEqual(r.vistos, [.enviado, .enviado, .enviado])
   }
 
   func testSinDias_NoLlamaANada() async {
@@ -823,22 +834,213 @@ final class EfectoDeCadaDesenlaceTests: XCTestCase {
     XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoEnReintento, .dejar)
   }
 
-  func testEnElBackfill() {
-    XCTAssertEqual(DesenlaceDia.enviado.efectoEnBackfill, .sacar)
-    XCTAssertEqual(DesenlaceDia.descartado(error).efectoEnBackfill, .sacar)
-    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoEnBackfill, .encolar)
-    XCTAssertEqual(DesenlaceDia.saltado.efectoEnBackfill, .dejar, "Un día vacío no se anota")
-    XCTAssertEqual(DesenlaceDia.cortado(error).efectoEnBackfill, .dejar,
-                   "Tras un corte se repite el backfill entero, no hace falta la cola")
+  func testAlPonerseAlDia() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoAlPonerseAlDia, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoAlPonerseAlDia, .sacar)
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoAlPonerseAlDia, .encolar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoAlPonerseAlDia, .dejar, "Un día vacío no se anota")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoAlPonerseAlDia, .dejar,
+                   "Tras un corte la marca no avanza: se reintenta desde ahí, sin la cola")
   }
 
-  func testSoloUnCorteDejaElBackfillIncompleto() {
-    XCTAssertTrue(DesenlaceDia.cortado(error).dejaBackfillIncompleto)
-    XCTAssertFalse(DesenlaceDia.descartado(error).dejaBackfillIncompleto,
-                   "Repetir el backfill no arregla un día fuera de la ventana")
-    XCTAssertFalse(DesenlaceDia.enviado.dejaBackfillIncompleto)
-    XCTAssertFalse(DesenlaceDia.saltado.dejaBackfillIncompleto)
-    XCTAssertFalse(DesenlaceDia.reintentarDespues(error).dejaBackfillIncompleto)
+  func testSoloLoQueYaNoHayQueMandarMueveLaMarca() {
+    XCTAssertTrue(DesenlaceDia.enviado.avanzaMarca)
+    XCTAssertTrue(DesenlaceDia.descartado(error).avanzaMarca,
+                  "Un día fuera de la ventana no va a entrar nunca")
+    XCTAssertFalse(DesenlaceDia.saltado.avanzaMarca,
+                   "Un día vacío puede ser un permiso que todavía no se dio")
+    XCTAssertFalse(DesenlaceDia.reintentarDespues(error).avanzaMarca)
+    XCTAssertFalse(DesenlaceDia.cortado(error).avanzaMarca)
+  }
+}
+
+/// Desde qué día ponerse al día (decidido 3 oct 2026): la primera vez, los
+/// últimos 7 días; después, desde el último enviado (otra vez) hasta hoy,
+/// sin pasar de la ventana de 14 días del servidor.
+final class MarcaEnviosTests: XCTestCase {
+
+  private var almacen: UserDefaults!
+  private var nombreAlmacen: String!
+  private var ahora: Date!
+  private var marca: MarcaEnvios!
+
+  private static func dia(_ texto: String, hora: Int = 15) -> Date {
+    FormatoFechas.diaCalendario.date(from: texto)!.addingTimeInterval(Double(hora) * 3600)
+  }
+
+  override func setUp() {
+    super.setUp()
+    nombreAlmacen = "pruebas.marca.\(UUID().uuidString)"
+    almacen = UserDefaults(suiteName: nombreAlmacen)
+    ahora = Self.dia("2026-10-03")
+    marca = MarcaEnvios(almacen: almacen, hoy: { self.ahora })
+  }
+
+  override func tearDown() {
+    almacen.removePersistentDomain(forName: nombreAlmacen)
+    super.tearDown()
+  }
+
+  func testLaPrimeraVez_LosUltimos7Dias_DelMasViejoAHoy() {
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar(), [
+      "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30",
+      "2026-10-01", "2026-10-02", "2026-10-03",
+    ])
+  }
+
+  func testConMarca_DesdeEseDiaOtraVezHastaHoy() {
+    marca.registrarEnviado("2026-10-01")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-01", "2026-10-02", "2026-10-03"],
+                   "El último enviado se repite: pudo sumar pasos después del envío")
+  }
+
+  func testEnviadoHoy_SoloHoy() {
+    marca.registrarEnviado("2026-10-03")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-03"])
+  }
+
+  func testUnaMarcaMuyVieja_SeRecortaALaVentanaDelServidor() {
+    marca.registrarEnviado("2026-08-01")
+
+    let dias = marca.diasPorMandar()
+    XCTAssertEqual(dias.first, "2026-09-19", "hoy - 14: el más viejo que el servidor acepta")
+    XCTAssertEqual(dias.last, "2026-10-03")
+    XCTAssertEqual(dias.count, 15)
+  }
+
+  func testUnaMarcaEnElFuturo_NoDejaAHoyAfuera() {
+    marca.registrarEnviado("2026-10-09")   // el reloj del teléfono se movió
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-03"])
+  }
+
+  func testLaMarcaSoloAvanza() {
+    marca.registrarEnviado("2026-10-02")
+    marca.registrarEnviado("2026-09-30")   // un día viejo que llegó tarde
+
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
+  }
+
+  func testOlvidar_VuelveAEmpezarComoLaPrimeraVez() {
+    marca.registrarEnviado("2026-10-02")
+
+    marca.olvidar()
+
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar().count, MarcaEnvios.diasPrimeraVez)
+  }
+
+  func testUnaFechaIlegibleNoSeGuarda_YLaGuardadaSeIgnora() {
+    marca.registrarEnviado("no-es-fecha")
+    XCTAssertNil(marca.ultimoDiaEnviado)
+
+    almacen.set("basura", forKey: "vida.ultimoDiaEnviado")
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar().count, MarcaEnvios.diasPrimeraVez)
+  }
+
+  func testCruzandoElCambioDeMes() {
+    ahora = Self.dia("2026-11-01")
+    marca.registrarEnviado("2026-10-30")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-30", "2026-10-31", "2026-11-01"])
+  }
+
+  func testLaHoraDelDiaNoCambiaLaCuenta() {
+    marca.registrarEnviado("2026-10-02")
+    for hora in [0, 1, 23] {
+      ahora = Self.dia("2026-10-03", hora: hora)
+      XCTAssertEqual(marca.diasPorMandar(), ["2026-10-02", "2026-10-03"], "a las \(hora)h")
+    }
+  }
+
+  func testLaMarcaDePruebaNoTocaLaReal() {
+    let real = UserDefaults.standard.string(forKey: "vida.ultimoDiaEnviado")
+
+    marca.registrarEnviado("2026-10-02")
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: "vida.ultimoDiaEnviado"), real)
+  }
+}
+
+/// Al cambiar de cuenta se olvida hasta qué día se había mandado: la cuenta
+/// nueva tiene que recibir sus 7 días.
+final class SesionYMarcaTests: XCTestCase {
+
+  private var almacen: AlmacenEnMemoria!
+  private var defaults: UserDefaults!
+  private var nombre: String!
+  private var marca: MarcaEnvios!
+
+  override func setUp() {
+    super.setUp()
+    almacen = AlmacenEnMemoria()
+    nombre = "pruebas.sesionmarca.\(UUID().uuidString)"
+    defaults = UserDefaults(suiteName: nombre)
+    marca = MarcaEnvios(almacen: defaults, hoy: {
+      FormatoFechas.diaCalendario.date(from: "2026-10-03")!.addingTimeInterval(15 * 3600)
+    })
+  }
+
+  override func tearDown() {
+    defaults.removePersistentDomain(forName: nombre)
+    super.tearDown()
+  }
+
+  func testElMismoTokenEnCadaArranque_NoOlvidaLaMarca() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    marca.registrarEnviado("2026-10-02")
+
+    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertTrue(r.haySesion)
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
+  }
+
+  func testOtraCuenta_OlvidaLaMarca() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    marca.registrarEnviado("2026-10-02")
+
+    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca)
+
+    XCTAssertTrue(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
+  }
+
+  func testCerrarSesion_OlvidaLaMarca_YNoHaySesion() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    marca.registrarEnviado("2026-10-02")
+
+    let r = Sesion.aplicar(token: nil, en: almacen, marca: marca)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertFalse(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
+  }
+
+  func testSiFallaElKeychain_NoSeOlvidaNada() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    marca.registrarEnviado("2026-10-02")
+    almacen.falla = ErrorAlmacenSesion(operacion: "guardar", estado: -25308)
+
+    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca)
+
+    guard case .errorAlmacenamiento = r.resultado else { return XCTFail("Debió fallar") }
+    XCTAssertTrue(r.haySesion, "Sigue el token anterior")
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02",
+                   "El token no cambió, así que la cuenta tampoco")
+  }
+
+  func testElPrimerLogin_NoTeniaMarca_YQuedaSesion() {
+    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertTrue(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
   }
 }
 
