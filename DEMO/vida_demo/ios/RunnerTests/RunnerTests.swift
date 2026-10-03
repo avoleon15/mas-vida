@@ -670,6 +670,178 @@ final class RecorridoDiasTests: XCTestCase {
   }
 }
 
+/// La cola de reintentos: orden, duplicados, tope, y que los días caduquen
+/// a los 14 días, igual que la ventana del servidor.
+final class SyncQueueTests: XCTestCase {
+
+  private var almacen: UserDefaults!
+  private var nombreAlmacen: String!
+  private var ahora: Date!
+  private var cola: SyncQueue!
+
+  private static func dia(_ texto: String, hora: Int = 15) -> Date {
+    FormatoFechas.diaCalendario.date(from: texto)!.addingTimeInterval(Double(hora) * 3600)
+  }
+
+  /// `yyyy-MM-dd` de hace `n` días respecto de `ahora`.
+  private func haceDias(_ n: Int) -> String {
+    FormatoFechas.diaCalendario.string(from: Calendar.current.date(byAdding: .day, value: -n, to: ahora)!)
+  }
+
+  override func setUp() {
+    super.setUp()
+    nombreAlmacen = "pruebas.cola.\(UUID().uuidString)"
+    almacen = UserDefaults(suiteName: nombreAlmacen)
+    ahora = Self.dia("2026-10-03")
+    cola = SyncQueue(almacen: almacen, hoy: { self.ahora })
+  }
+
+  override func tearDown() {
+    almacen.removePersistentDomain(forName: nombreAlmacen)
+    super.tearDown()
+  }
+
+  private var guardado: [String] { almacen.stringArray(forKey: "vida.diasPendientes") ?? [] }
+
+  func testEncolarGuardaEnOrden_SinDuplicar() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-09-30")
+    cola.encolar(fecha: "2026-10-01")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01", "2026-09-30"])
+  }
+
+  func testRemover() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-09-30")
+
+    cola.remover(fecha: "2026-10-01")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-09-30"])
+  }
+
+  func testElDiaDeHace14DiasSigue_ElDeHace15Caduca() {
+    XCTAssertEqual(haceDias(14), "2026-09-19")
+    cola.encolar(fecha: haceDias(14))
+    cola.encolar(fecha: haceDias(15))
+
+    XCTAssertEqual(cola.pendientes(), ["2026-09-19"])
+  }
+
+  func testLaCuentaEsLaMismaQueLaDelServidor() {
+    // views.py: rechaza si fecha < hoy - 14.
+    for n in 0...20 {
+      XCTAssertEqual(cola.vencido(haceDias(n)), n > 14, "hace \(n) días")
+    }
+  }
+
+  func testLaHoraDelDiaNoCambiaLaCuenta() {
+    for hora in [0, 1, 12, 23] {
+      ahora = Self.dia("2026-10-03", hora: hora)
+      XCTAssertFalse(cola.vencido("2026-09-19"), "a las \(hora)h")
+      XCTAssertTrue(cola.vencido("2026-09-18"), "a las \(hora)h")
+    }
+  }
+
+  func testUnDiaYaVencidoNoSeEncola() {
+    cola.encolar(fecha: "2026-09-01")
+
+    XCTAssertTrue(guardado.isEmpty)
+  }
+
+  func testLosDiasCaducanSolosConElTiempo() {
+    cola.encolar(fecha: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    ahora = Self.dia("2026-10-15")   // hace 14 días: sigue
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    ahora = Self.dia("2026-10-16")   // hace 15 días: fuera
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testLeerLaColaBorraDelDiscoLosVencidos() {
+    // Como quedaría una cola guardada por la versión anterior (sin caducidad).
+    almacen.set(["2026-08-01", "2026-10-01", "2026-09-01"], forKey: "vida.diasPendientes")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+    XCTAssertEqual(guardado, ["2026-10-01"], "Los vencidos se borran, no solo se esconden")
+  }
+
+  func testUnaFechaIlegibleNoSeDaPorVencida() {
+    // La saca reintentarPendientes(), que sabe que no se puede mandar.
+    almacen.set(["no-es-fecha", "2026-10-01"], forKey: "vida.diasPendientes")
+
+    XCTAssertEqual(cola.pendientes(), ["no-es-fecha", "2026-10-01"])
+  }
+
+  func testElTopeEs15_YSaleElPrimeroQueEntro() {
+    XCTAssertEqual(SyncQueue.maximoDias, 15)
+    for n in (0...14).reversed() { cola.encolar(fecha: haceDias(n)) }   // 15 días válidos
+    XCTAssertEqual(cola.pendientes().count, 15)
+
+    cola.encolar(fecha: "2026-10-10")   // uno más (futuro, solo para pasar el tope)
+
+    XCTAssertEqual(cola.pendientes().count, 15)
+    XCTAssertFalse(cola.pendientes().contains(haceDias(14)), "Sale el que entró primero")
+    XCTAssertTrue(cola.pendientes().contains("2026-10-10"))
+  }
+
+  func testLaColaDePruebaNoTocaLaReal() {
+    let real = UserDefaults.standard.stringArray(forKey: "vida.diasPendientes")
+
+    cola.encolar(fecha: "2026-10-01")
+
+    XCTAssertEqual(UserDefaults.standard.stringArray(forKey: "vida.diasPendientes"), real)
+  }
+
+  func testAplicarCadaEfecto() {
+    cola.encolar(fecha: "2026-10-01")
+
+    cola.aplicar(.dejar, a: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    cola.aplicar(.encolar, a: "2026-10-02")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01", "2026-10-02"])
+
+    cola.aplicar(.sacar, a: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-02"])
+  }
+}
+
+/// Qué le pasa a un día en la cola según cómo terminó, en cada camino.
+final class EfectoDeCadaDesenlaceTests: XCTestCase {
+
+  private struct Falla: Error {}
+  private let error = Falla()
+
+  func testEnLaColaDeReintentos() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoEnReintento, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoEnReintento, .sacar, "Un 422 sale de la cola")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoEnReintento, .sacar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoEnReintento, .dejar, "Ante la duda, un día vacío se queda")
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoEnReintento, .dejar)
+  }
+
+  func testEnElBackfill() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoEnBackfill, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoEnBackfill, .sacar)
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoEnBackfill, .encolar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoEnBackfill, .dejar, "Un día vacío no se anota")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoEnBackfill, .dejar,
+                   "Tras un corte se repite el backfill entero, no hace falta la cola")
+  }
+
+  func testSoloUnCorteDejaElBackfillIncompleto() {
+    XCTAssertTrue(DesenlaceDia.cortado(error).dejaBackfillIncompleto)
+    XCTAssertFalse(DesenlaceDia.descartado(error).dejaBackfillIncompleto,
+                   "Repetir el backfill no arregla un día fuera de la ventana")
+    XCTAssertFalse(DesenlaceDia.enviado.dejaBackfillIncompleto)
+    XCTAssertFalse(DesenlaceDia.saltado.dejaBackfillIncompleto)
+    XCTAssertFalse(DesenlaceDia.reintentarDespues(error).dejaBackfillIncompleto)
+  }
+}
+
 /// `actualizarSesion`: qué hace Swift con lo que entrega Flutter.
 final class SesionAplicarTests: XCTestCase {
 

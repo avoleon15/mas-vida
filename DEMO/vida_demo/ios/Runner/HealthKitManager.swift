@@ -713,20 +713,20 @@ final class HealthKitManager {
                 return true
             },
             registrar: { dia, desenlace in
+                // Qué pasa con el día en la cola: `DesenlaceDia.efectoEnReintento`.
+                self.syncQueue.aplicar(desenlace.efectoEnReintento, a: dia)
                 switch desenlace {
                 case .enviado:
-                    self.syncQueue.remover(fecha: dia)
+                    break
                 case .saltado, .reintentarDespues:
                     fallaron += 1
                 case .descartado:
                     // Demasiado viejo: no va a entrar nunca. Los demás días
                     // de la vuelta siguen.
-                    self.syncQueue.remover(fecha: dia)
                     descartados += 1
                 case .cortado(let error):
                     // Los días que quedaban siguen en la cola y salen en la
                     // próxima vuelta.
-                    self.syncQueue.remover(fecha: dia)
                     fallaron += 1
                     self.errorReintento = "Día \(dia): \(error.localizedDescription)"
                 }
@@ -805,21 +805,18 @@ final class HealthKitManager {
                 return true
             },
             registrar: { dia, desenlace in
-                switch desenlace {
-                case .enviado:
-                    self.syncQueue.remover(fecha: dia)
-                case .saltado:
-                    break
-                case .reintentarDespues:
-                    self.syncQueue.encolar(fecha: dia)
+                // Qué pasa con el día en la cola: `DesenlaceDia.efectoEnBackfill`.
+                self.syncQueue.aplicar(desenlace.efectoEnBackfill, a: dia)
+                if case .reintentarDespues = desenlace {
                     encolados += 1
-                case .descartado:
-                    // No va a entrar nunca: repetir el backfill no lo arregla,
-                    // así que no cuenta como recorrido incompleto.
-                    self.syncQueue.remover(fecha: dia)
-                case .cortado(let error):
-                    self.errorBackfill = "Día \(dia): \(error.localizedDescription)"
+                }
+                // Un día descartado por la ventana no entra nunca: repetir el
+                // backfill no lo arregla, así que no lo deja incompleto.
+                if desenlace.dejaBackfillIncompleto {
                     self.huboRecorridoCompleto = false
+                    if case .cortado(let error) = desenlace {
+                        self.errorBackfill = "Día \(dia): \(error.localizedDescription)"
+                    }
                 }
             }
         )

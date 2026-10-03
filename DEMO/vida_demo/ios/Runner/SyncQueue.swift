@@ -32,12 +32,36 @@ final class SyncQueue {
     /// payloads serializados bajo otra clave, y ese formato ya no se lee.
     private static let clave = "vida.diasPendientes"
 
-    /// Techo de seguridad. Un usuario meses sin red no debería acumular una
-    /// lista infinita; con 30 días hay de sobra para el piloto.
-    private static let maximoDias = 30
+    /// La misma ventana del servidor (`VENTANA_DIAS` en
+    /// Apps/activities/views.py): acepta un día si `fecha >= hoy - 14`. Un día
+    /// más viejo ya no entra nunca, así que no tiene sentido seguir
+    /// intentándolo. Ver "Ventana de aceptación de datos rezagados" en el
+    /// contrato: ventana y cola comparten cifra a propósito.
+    static let ventanaDias = 14
+
+    /// Techo de seguridad: hoy + los 14 días de la ventana = 15 fechas válidas
+    /// como mucho. Solo se alcanzaría con fechas raras (futuras o ilegibles).
+    static let maximoDias = ventanaDias + 1
+
+    private let almacen: UserDefaults
+    private let hoy: () -> Date
+    private let calendario: Calendar
+
+    /// `almacen` y `hoy` se cambian en las pruebas: otro `UserDefaults` para
+    /// no tocar la cola real, y un "hoy" fijo.
+    init(almacen: UserDefaults = .standard,
+         hoy: @escaping () -> Date = Date.init,
+         calendario: Calendar = .current) {
+        self.almacen = almacen
+        self.hoy = hoy
+        self.calendario = calendario
+    }
 
     /// Anota un día como pendiente de reenviar. Si ya estaba, no se duplica.
+    /// Un día que ya quedó fuera de la ventana no se anota.
     func encolar(fecha: String) {
+        guard !vencido(fecha) else { return }
+
         var actuales = pendientes()
         guard !actuales.contains(fecha) else { return }
 
@@ -50,8 +74,16 @@ final class SyncQueue {
 
     /// Los días que siguen esperando, en el orden en que se encolaron.
     /// Formato `yyyy-MM-dd`, el mismo del campo `fecha` del contrato.
+    ///
+    /// De paso borra de la cola los que ya quedaron fuera de la ventana: así
+    /// caducan solos aunque nunca se vuelva a intentar mandarlos.
     func pendientes() -> [String] {
-        UserDefaults.standard.stringArray(forKey: Self.clave) ?? []
+        let guardados = almacen.stringArray(forKey: Self.clave) ?? []
+        let vigentes = guardados.filter { !vencido($0) }
+        if vigentes.count != guardados.count {
+            guardar(vigentes)
+        }
+        return vigentes
     }
 
     /// Saca un día de la cola: o porque el reenvío llegó bien, o porque el
@@ -60,9 +92,39 @@ final class SyncQueue {
         guardar(pendientes().filter { $0 != fecha })
     }
 
-    private func guardar(_ fechas: [String]) {
-        UserDefaults.standard.set(fechas, forKey: Self.clave)
+    /// Aplica a un día lo que decidió `DesenlaceDia` (ver `efectoEnReintento`
+    /// y `efectoEnBackfill`).
+    func aplicar(_ efecto: EfectoEnCola, a fecha: String) {
+        switch efecto {
+        case .sacar: remover(fecha: fecha)
+        case .encolar: encolar(fecha: fecha)
+        case .dejar: break
+        }
     }
+
+    /// ¿El servidor ya rechazaría este día? Misma cuenta que el servidor:
+    /// `fecha < hoy - 14`, en días calendario de la zona del teléfono.
+    ///
+    /// Una fecha que no se puede leer NO se da por vencida acá: la saca
+    /// `reintentarPendientes()`, que es quien sabe que no se puede mandar.
+    func vencido(_ fecha: String) -> Bool {
+        guard let dia = FormatoFechas.diaCalendario.date(from: fecha),
+              let limite = calendario.date(
+                byAdding: .day, value: -Self.ventanaDias,
+                to: calendario.startOfDay(for: hoy())) else { return false }
+        return dia < limite
+    }
+
+    private func guardar(_ fechas: [String]) {
+        almacen.set(fechas, forKey: Self.clave)
+    }
+}
+
+/// Qué le pasa a un día en la cola después de intentar mandarlo.
+enum EfectoEnCola: Equatable {
+    case sacar
+    case dejar
+    case encolar
 }
 
 /// Cómo terminó un día dentro de una vuelta de envíos.
@@ -75,6 +137,35 @@ enum DesenlaceDia {
     case descartado(Error)
     /// Error permanente: la vuelta se corta después de este día.
     case cortado(Error)
+
+    /// En la cola de reintentos, donde el día ya está anotado.
+    var efectoEnReintento: EfectoEnCola {
+        switch self {
+        // Llegó, o no va a llegar nunca: fuera.
+        case .enviado, .descartado, .cortado: return .sacar
+        // Ante la duda se queda: un día vacío puede ser un permiso todavía
+        // no concedido, y sin red se vuelve a intentar.
+        case .saltado, .reintentarDespues: return .dejar
+        }
+    }
+
+    /// En el backfill, donde el día puede no estar en la cola.
+    var efectoEnBackfill: EfectoEnCola {
+        switch self {
+        case .enviado, .descartado: return .sacar
+        case .reintentarDespues: return .encolar
+        // Vacío: no se anota. Cortado: la vuelta entera se repite la próxima
+        // vez (la bandera de "ya hecho" no se enciende), no hace falta la cola.
+        case .saltado, .cortado: return .dejar
+        }
+    }
+
+    /// ¿Repetir el backfill podría arreglar este día? Solo tras un corte. Un
+    /// día descartado por la ventana no entra nunca: repetir no sirve.
+    var dejaBackfillIncompleto: Bool {
+        if case .cortado = self { return true }
+        return false
+    }
 }
 
 /// La vuelta día por día que comparten la cola de reintentos y el backfill.
