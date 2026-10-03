@@ -89,7 +89,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         const _Separador(),
                         _Fila(titulo: 'Forma de pago', valor: poliza.formaPago),
                         const _Separador(),
-                        _Fila(titulo: 'Vigencia', valor: poliza.vigencia),
+                        _Fila(titulo: 'Año de póliza', valor: poliza.vigencia),
                         const _Separador(),
                         _Fila(
                           titulo: 'Renovación',

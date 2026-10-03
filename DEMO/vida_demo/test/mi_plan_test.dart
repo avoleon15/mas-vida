@@ -109,29 +109,6 @@ void main() {
   // La zona fija
   // ----------------------------------------------------------
 
-  testWidgets('el cabezal y el riel no se van con el scroll', (tester) async {
-    await montar(tester, size: const Size(390, 844));
-    await _elegir(tester, 'Contacto');
-
-    final montoAntes = tester.getTopLeft(find.text('Q1,800')).dy;
-    final rielAntes = tester.getTopLeft(_boton('Pagos')).dy;
-
-    // Se scrollea la zona de abajo hasta el fondo.
-    await tester.drag(find.text('Tu aseguradora'), const Offset(0, -400));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester.getTopLeft(find.text('Q1,800')).dy,
-      montoAntes,
-      reason: 'el monto del año se movio',
-    );
-    expect(
-      tester.getTopLeft(_boton('Pagos')).dy,
-      rielAntes,
-      reason: 'el riel se movio',
-    );
-  });
-
   testWidgets('los cuatro botones miden lo mismo y van en una fila', (
     tester,
   ) async {
@@ -173,9 +150,8 @@ void main() {
   ) async {
     await montar(tester);
 
-    // En el nivel 3 del mock no hay siguiente alcanzable: el bloque es
-    // "Tu nivel del año" y no la proyección al nivel 4.
-    expect(find.text('Tu nivel del año'), findsOneWidget);
+    // La escalera va adentro de la tarjeta del cashback, arriba del riel.
+    expect(find.byType(EscaleraCashback), findsOneWidget);
     expect(find.text('Calendario de pagos'), findsOneWidget);
 
     for (final faja in fajas) {
@@ -269,55 +245,37 @@ void main() {
   // El cabezal: la plata
   // ----------------------------------------------------------
 
-  testWidgets('el cabezal muestra el monto y el nivel en el medallon', (
+  testWidgets('el monto y el nivel van en UNA tarjeta, sin repetirse', (
     tester,
   ) async {
     await montar(tester);
-    // 10% de la prima de Q18,000.
+    // 10% de la prima de Q18,000, una sola vez en la pantalla.
     expect(find.text('Q1,800'), findsOneWidget);
-    // El medallon: la etiqueta y el nivel, no un nombre en ingles.
-    expect(find.text('NIVEL'), findsOneWidget);
-    // El medallón abre la escalera de niveles, así que su etiqueta de
-    // accesibilidad dice también qué pasa al tocarlo.
-    expect(
-      find.bySemanticsLabel('Nivel 3, ver la escalera de niveles'),
-      findsOneWidget,
+    // La escalera, adentro de la MISMA tarjeta que el monto (pedido de
+    // Daniel, 2 de octubre de 2026).
+    final tarjeta = find.ancestor(
+      of: find.byType(EscaleraCashback),
+      matching: find.ancestor(
+        of: find.text('Q1,800'),
+        matching: find.byType(Container),
+      ),
     );
+    expect(tarjeta, findsWidgets);
+    // Sin medallón: el nivel lo dice la escalera.
+    expect(find.text('NIVEL'), findsNothing);
     expect(find.textContaining('Bronze'), findsNothing);
     expect(find.textContaining('Silver'), findsNothing);
     expect(find.textContaining('Gold'), findsNothing);
     expect(find.textContaining('Platinum'), findsNothing);
   });
 
-  testWidgets('tocar el medallón abre la escalera de niveles', (tester) async {
-    await montar(tester);
-
-    // La gráfica de los cinco niveles vivía siempre abierta en Hoy.
-    // Ahora se abre donde alguien pregunta por su nivel: acá.
-    expect(find.byType(EscaleraCashback), findsNothing);
-
-    await tester.tap(
-      find.bySemanticsLabel('Nivel 3, ver la escalera de niveles'),
-    );
-    // Dos pumps y NO pumpAndSettle: adentro de la hoja hay animación que
-    // no termina de asentarse nunca.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-
-    expect(find.byType(EscaleraCashback), findsOneWidget);
-    expect(find.textContaining('PUNTOS ACUMULADOS'), findsOneWidget);
-  });
-
-  testWidgets('la nota regulatoria nunca se va de la pantalla', (tester) async {
+  testWidgets('la nota regulatoria va pegada al monto', (tester) async {
     await montar(tester, size: const Size(390, 844));
     expect(find.textContaining('se devuelve como dinero'), findsOneWidget);
-
-    // Vive en el cabezal, que es fijo: sigue ahi con una categoria
-    // abierta y despues de scrollear.
-    await _elegir(tester, 'Contacto');
-    await tester.drag(find.text('Tu aseguradora'), const Offset(0, -400));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('se devuelve como dinero'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.textContaining('se devuelve como dinero')).dy,
+      greaterThan(tester.getTopLeft(find.text('Q1,800')).dy),
+    );
   });
 
   testWidgets('la prima va completa y sin tachar, y nunca dice descuento', (
@@ -408,11 +366,11 @@ void main() {
     await montar(tester);
     await _elegir(tester, 'Póliza');
     expect(find.textContaining('1 ene 2026'), findsOneWidget);
-    expect(find.text('Vigencia'), findsOneWidget);
+    expect(find.text('Año de póliza'), findsOneWidget);
     expect(find.text('Al día'), findsOneWidget);
 
     await _elegir(tester, 'Pagos');
-    expect(find.text('Vigencia'), findsNothing);
+    expect(find.text('Año de póliza'), findsNothing);
     expect(find.text('Forma de pago'), findsOneWidget);
   });
 
@@ -480,7 +438,7 @@ void main() {
     // Dicen lo mismo con cualquier filtro puesto. Una pieza que se
     // desvanece y vuelve se lee como que cambió, y ahí el usuario la
     // vuelve a leer para nada.
-    for (final quieto in ['MI PLAN', 'TU CASHBACK DE ESTE AÑO']) {
+    for (final quieto in ['MI PLAN', 'TU CASHBACK DE ESTE AÑO DE PÓLIZA']) {
       expect(
         find.ancestor(
           of: find.text(quieto),

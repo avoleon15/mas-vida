@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 ///
 /// 1. **La física.** Las cinco pantallas de la barra de abajo pasaban
 ///    `fisicaConRefresco` (rebote de iOS) a mano, pero las de adentro
-///    —Récords, Perfil, el camino de las semanas, el detalle de un
+///    —Récords, Perfil, las semanas de la temporada, el detalle de un
 ///    premio— no pasaban ninguna. Sin física explícita, Flutter usa la
 ///    del sistema, y fuera de iOS eso es `ClampingScrollPhysics`: el
 ///    scroll FRENA EN SECO contra el borde en vez de rebotar. Media app
@@ -50,11 +50,15 @@ class ComportamientoVida extends MaterialScrollBehavior {
   };
 }
 
-/// Cuánto tarda el cruce entre dos pestañas de la barra de abajo.
+/// Cuánto tarda el cruce entre dos pestañas: NADA.
 ///
-/// Corto: es un cambio de pestaña, no un viaje. Pasado un cuarto de
-/// segundo se siente como que la app está pensando.
-const Duration duracionCambioDePestana = Duration(milliseconds: 180);
+/// Antes era un fundido de 180 ms de la pantalla entera. Durante ese
+/// cruce se veían las dos pantallas encimadas, una a media opacidad
+/// sobre la otra, y eso se leía como una app transparente o trabada
+/// (pedido de Daniel, 2 de octubre de 2026). Ahora la pestaña cambia de
+/// una, como en iOS, y lo que se anima es el CONTENIDO de la que llega
+/// (`despliegue.dart`): la barra de abajo y el encabezado no se mueven.
+const Duration duracionCambioDePestana = Duration.zero;
 
 /// Las cinco rutas de la barra de abajo.
 ///
@@ -68,39 +72,19 @@ const Set<String> rutasDePestana = {
   '/mi-plan',
 };
 
-/// La ruta de una pestaña: cruza con un fundido, sin deslizarse.
+/// La ruta de una pestaña: cambia de una, sin cruce.
 ///
-/// POR QUÉ FUNDIDO Y NO EL DESLIZAMIENTO DE SIEMPRE. Con rutas nombradas
-/// a secas, cada toque en la barra de abajo empujaba una
-/// `MaterialPageRoute`, que entra deslizándose DESDE LA DERECHA como
-/// entra el detalle de un premio. O sea: cambiar de pestaña se veía
-/// igual que entrar a una pantalla más adentro, y además había que
-/// animar el deslizamiento de una pantalla entera recién construida —
-/// que es el cuadro más caro que existe— así que el tirón caía justo
-/// ahí. Un fundido no mueve píxeles de lugar: se nota mucho menos si el
-/// primer cuadro tarda.
-///
-/// En iOS una barra de pestañas cambia SIN animación. Acá hay un
-/// fundido corto y no un corte seco porque la app se ve sobre todo en
-/// Web durante la demo, y ahí el corte se lee como un parpadeo.
+/// Las pestañas son HERMANAS, no una adentro de la otra: no entran
+/// deslizándose como el detalle de un premio. Y no se funden: el fundido
+/// dejaba ver dos pantallas encimadas. El movimiento lo pone el contenido
+/// de cada pantalla al desplegarse.
 Route<T> rutaDePestana<T>(Widget pantalla, RouteSettings ajustes) {
   return PageRouteBuilder<T>(
     settings: ajustes,
     transitionDuration: duracionCambioDePestana,
     reverseTransitionDuration: duracionCambioDePestana,
-    // Opaca: sin esto Flutter mantiene pintada la pantalla de abajo
-    // durante todo el cruce, y se pagan dos pantallas por cuadro.
     opaque: true,
     pageBuilder: (context, entra, sale) => pantalla,
-    transitionsBuilder: (context, entra, sale, hijo) {
-      // Con "Reducir movimiento" el cambio es seco: ahí el fundido es
-      // justo lo que esa opción pide que no hagamos.
-      if (MediaQuery.disableAnimationsOf(context)) return hijo;
-      return FadeTransition(
-        opacity: CurvedAnimation(parent: entra, curve: Curves.easeOut),
-        child: hijo,
-      );
-    },
   );
 }
 
@@ -114,5 +98,78 @@ Route<T> rutaInterna<T>(Widget pantalla, RouteSettings ajustes) {
   return CupertinoPageRoute<T>(
     settings: ajustes,
     builder: (context) => pantalla,
+  );
+}
+
+/// La ruta de una pantalla PESADA de adentro (las semanas de la
+/// temporada: fotos, un carrusel y monedas animadas).
+///
+/// Entra deslizándose desde la derecha, como iOS. Al VOLVER, la pantalla
+/// se convierte en una imagen quieta y lo que se desliza es esa imagen:
+/// con la `CupertinoPageRoute` cada cuadro repintaba las dos pantallas
+/// enteras, la de atrás corrida y sombreada, y la vuelta se trababa y se
+/// veía a medio pintar (pedido de Daniel, 2 de octubre de 2026). La de
+/// atrás no se mueve ni se oscurece: no hay nada transparente.
+Route<T> rutaPesada<T>(Widget pantalla) {
+  return PageRouteBuilder<T>(
+    transitionDuration: const Duration(milliseconds: 340),
+    reverseTransitionDuration: const Duration(milliseconds: 260),
+    opaque: true,
+    pageBuilder: (context, entra, sale) => pantalla,
+    transitionsBuilder: (context, entra, sale, hijo) {
+      if (MediaQuery.disableAnimationsOf(context)) return hijo;
+      return SlideTransition(
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+              CurvedAnimation(
+                parent: entra,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeInCubic,
+              ),
+            ),
+        child: _FotoAlSalir(animacion: entra, child: hijo),
+      );
+    },
+  );
+}
+
+/// Mientras la ruta se va, [child] se pinta como una imagen quieta.
+class _FotoAlSalir extends StatefulWidget {
+  const _FotoAlSalir({required this.animacion, required this.child});
+
+  final Animation<double> animacion;
+  final Widget child;
+
+  @override
+  State<_FotoAlSalir> createState() => _FotoAlSalirState();
+}
+
+class _FotoAlSalirState extends State<_FotoAlSalir> {
+  final SnapshotController _foto = SnapshotController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.animacion.addStatusListener(_alCambiar);
+  }
+
+  void _alCambiar(AnimationStatus estado) {
+    _foto.allowSnapshotting = estado == AnimationStatus.reverse;
+  }
+
+  @override
+  void dispose() {
+    widget.animacion.removeStatusListener(_alCambiar);
+    _foto.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SnapshotWidget(
+    controller: _foto,
+    // Si algo de adentro no se puede fotografiar, se pinta normal en vez
+    // de fallar.
+    mode: SnapshotMode.permissive,
+    child: widget.child,
   );
 }

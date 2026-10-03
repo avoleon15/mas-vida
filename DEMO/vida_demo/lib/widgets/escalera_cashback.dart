@@ -33,6 +33,12 @@ const double _anchoFlecha = 12;
 /// alto que el anterior, y un solo renglón de detalle abajo que cambia
 /// según el escalón que se toque.
 ///
+/// SE DIBUJA SOBRE EL AZUL DE MARCA: vive adentro de la tarjeta del
+/// cashback de Mi Plan, sin panel propio (pedido de Daniel, 2 de octubre
+/// de 2026: el fondo blanco partía la tarjeta en dos). Todo va en blanco
+/// a distintas opacidades —un solo color en varias luminosidades, como
+/// la escala de azules—, así que la tarjeta se lee como una sola pieza.
+///
 /// Es interactiva a propósito: en vez de escupir de una todas las reglas
 /// de todos los niveles, muestra una línea a la vez y deja que el usuario
 /// explore la escalera con el dedo.
@@ -81,7 +87,20 @@ class _EscaleraCashbackState extends State<EscaleraCashback>
       // del ciclo y el resto es descanso. Un brillo continuo sobre fondo
       // claro cansa, y la app tiene que transmitir calma.
       duration: const Duration(seconds: 7),
-    )..repeat();
+    );
+  }
+
+  /// Con "Reducir movimiento" de iOS el brillo no corre: es un
+  /// movimiento perpetuo y decorativo. Ahora que la escalera vive en la
+  /// vista principal de Mi Plan, se ve todos los días.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _brillo.stop();
+    } else if (!_brillo.isAnimating) {
+      _brillo.repeat();
+    }
   }
 
   @override
@@ -173,14 +192,16 @@ class _Escalon extends StatelessWidget {
     // usuario entre entera adentro del escalón más bajo, que es donde
     // arranca cualquiera que abre la app por primera vez.
     final altura = 44.0 + posicion * 18.0;
-    // Verdes del sistema para el logro. El azul queda para la selección,
-    // que es una acción del usuario.
-    //
-    // El nivel 0 nunca se pinta de verde aunque se haya "alcanzado":
-    // paga 0% de cashback, y rellenarlo diría que ganaste algo.
+    // El nivel 0 nunca se rellena aunque se haya "alcanzado": paga 0% de
+    // cashback, y rellenarlo diría que ganaste algo.
     final premia = nivel.numero > 0;
     final lleno = alcanzado && premia;
-    final verde = AppColors.colorForNivel(nivel.numero);
+    // Blanco que se va encendiendo de escalón en escalón: lo que separa
+    // un nivel del siguiente es la luminosidad, como en el resto de la
+    // app. El escalón donde estás va entero.
+    final relleno = esActual
+        ? Colors.white
+        : Colors.white.withValues(alpha: 0.22 + posicion * 0.12);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -197,8 +218,8 @@ class _Escalon extends StatelessWidget {
             nivel.definido ? '${_formatoPct(nivel.porcentajeCashback!)}%' : '—',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: alcanzado
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.55),
               fontWeight: seleccionado ? FontWeight.w800 : FontWeight.w600,
             ),
           ),
@@ -208,16 +229,17 @@ class _Escalon extends StatelessWidget {
             curve: Curves.easeOutCubic,
             height: altura,
             decoration: BoxDecoration(
-              color: lleno
-                  ? verde
-                  : AppColors.cardBorder.withValues(alpha: 0.6),
+              // Lo que todavía no ganaste es apenas un vidrio sobre el
+              // azul: se ve la forma de la escalera sin que compita.
+              color: lleno || esActual
+                  ? relleno
+                  : Colors.white.withValues(alpha: 0.10),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(8),
               ),
-              // El azul marca lo que el usuario está tocando; el verde,
-              // lo que ya ganó. Nunca al revés.
+              // El escalón que se está mirando lleva un filete blanco.
               border: seleccionado
-                  ? Border.all(color: AppColors.accent, width: 2.5)
+                  ? Border.all(color: Colors.white, width: 2)
                   : null,
             ),
             // El contenido se recorta al escalón: el brillo no puede
@@ -236,17 +258,16 @@ class _Escalon extends StatelessWidget {
                 // en todas las pantallas. Lo que antes era una etiqueta
                 // pasa a ser él parado en la escalera.
                 //
-                // El aro es lo que la separa de la barra: sobre el azul
-                // lleno va blanco, y sobre el escalón vacío del nivel 0
-                // —que es gris clarito— el blanco desaparecería, así que
-                // ahí va el azul de marca.
+                // El aro es lo que la separa de la barra: el escalón
+                // donde estás es blanco entero, así que va en azul de
+                // marca.
                 if (esActual)
                   Center(
                     child: Semantics(
                       label: 'Estás en el nivel ${nivel.numero}',
                       child: _FotoParadaEnElEscalon(
                         diametro: diametroFotoEnEscalon(altura),
-                        color: lleno ? Colors.white : AppColors.accent,
+                        color: AppColors.accent,
                       ),
                     ),
                   ),
@@ -257,7 +278,9 @@ class _Escalon extends StatelessWidget {
           Text(
             '${nivel.numero}',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: seleccionado ? AppColors.accent : AppColors.textSecondary,
+              color: seleccionado
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.6),
               fontWeight: seleccionado ? FontWeight.w800 : FontWeight.w500,
             ),
           ),
@@ -460,13 +483,17 @@ class _Detalle extends StatelessWidget {
       );
     }
     if (n.numero == nivelActual) {
-      // El aviso regulatorio (se devuelve DESPUÉS de pagar la prima) ya
-      // no vive acá: es permanente y va al pie de la tarjeta, para que no
-      // dependa de qué escalón esté tocando el usuario.
+      // Sin el porcentaje: lo dice el monto que va arriba de la escalera,
+      // y repetirlo a dos centímetros es una vez de más. Lo que aporta
+      // este renglón es cuánto falta para el siguiente.
+      final siguiente = siguienteNivelAlcanzable(nivelActual);
       return (
-        'Acá estás',
-        '${n.rangoTexto} · te devuelve el '
-            '${_formatoPct(n.porcentajeCashback!)}% de tu prima',
+        'Acá estás · Nivel ${n.numero}',
+        siguiente == null
+            ? '${n.rangoTexto} · el nivel más alto que da la actividad '
+                  'física este año'
+            : 'Te faltan ${_miles(siguiente.puntosMinimos! - puntosTotal)} '
+                  'pts para Nivel ${siguiente.numero}',
       );
     }
     if (n.numero < nivelActual) {
@@ -477,7 +504,7 @@ class _Detalle extends StatelessWidget {
     // dice "te faltan" de algo a lo que caminando no se llega.
     if (n.puntosMinimos! > techoActividad) {
       return (
-        'Fuera de alcance este año',
+        'Fuera de alcance este año de póliza',
         'La actividad física suma hasta ${_miles(techoActividad)} pts al '
             'año, y este nivel arranca en ${_miles(n.puntosMinimos!)}.',
       );
@@ -498,8 +525,8 @@ class _Detalle extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(14),
+          color: Colors.white.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(AppRadios.tarjeta),
         ),
         // Cruza el texto viejo con el nuevo para que se lea como que el
         // mismo renglón cambió, no como que apareció otro.
@@ -512,7 +539,7 @@ class _Detalle extends StatelessWidget {
               Text(
                 titulo,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textPrimary,
+                  color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -521,7 +548,7 @@ class _Detalle extends StatelessWidget {
                 Text(
                   apoyo,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: Colors.white.withValues(alpha: 0.78),
                     height: 1.3,
                   ),
                 ),

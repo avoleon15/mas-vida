@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
 import 'codigo_qr.dart';
+import 'hoja_vida.dart';
 import 'placeholder_imagen.dart';
 
 // ============================================================
@@ -18,14 +19,19 @@ import 'placeholder_imagen.dart';
 // Dos partes:
 //   · los ACTIVOS, como boletos: son lo único levantado de la vista, lo
 //     que se va a mostrar en caja. El que vence primero va arriba;
-//   · los USADOS Y VENCIDOS, como una lista plana y apagada. Están para
-//     consultar, no para usar.
+//   · los USADOS Y VENCIDOS, como una lista plana y apagada, guardada en
+//     un desplegable cerrado (reunión del 2 de octubre de 2026). Están
+//     para consultar, no para usar, y abiertos le robaban la pantalla a
+//     los que sí se pueden usar.
 //
 // Tocar un boleto abre su código en grande, en una hoja.
 // ============================================================
 
 /// Llave de un cupón en la lista, para los tests.
 Key llaveCupon(String id) => ValueKey('cupon-$id');
+
+/// Llave del desplegable de usados y vencidos.
+const Key llaveDesplegableHistorial = ValueKey('cupones-historial');
 
 /// Llave de la hoja con el código en grande.
 const Key llaveHojaCodigo = ValueKey('hoja-codigo-cupon');
@@ -113,13 +119,108 @@ class MisCupones extends StatelessWidget {
         ],
         if (historial.isNotEmpty) ...[
           const SizedBox(height: 24),
-          Text('USADOS Y VENCIDOS', style: AppTheme.subsectionTitle),
-          const SizedBox(height: 4),
-          for (var i = 0; i < historial.length; i++) ...[
-            if (i > 0) Container(height: 0.5, color: AppColors.separador),
-            _FilaHistorial(cupon: historial[i]),
-          ],
+          _Historial(cupones: historial),
         ],
+      ],
+    );
+  }
+}
+
+/// Los usados y vencidos, detrás de un renglón que se despliega.
+///
+/// Arranca CERRADO: lo que se viene a buscar a Mis cupones es un código
+/// para mostrar en caja, y eso son los activos. El renglón dice cuántos
+/// hay adentro para que no haga falta abrirlo para saberlo.
+class _Historial extends StatefulWidget {
+  const _Historial({required this.cupones});
+
+  final List<CuponCanjeado> cupones;
+
+  @override
+  State<_Historial> createState() => _HistorialState();
+}
+
+class _HistorialState extends State<_Historial> {
+  bool _abierto = false;
+
+  Widget _lista() => _abierto
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final c in widget.cupones) ...[
+              Container(height: 0.5, color: AppColors.separador),
+              _FilaHistorial(cupon: c),
+            ],
+          ],
+        )
+      : const SizedBox(width: double.infinity);
+
+  void _alternar() {
+    HapticFeedback.selectionClick();
+    setState(() => _abierto = !_abierto);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final quieto = MediaQuery.disableAnimationsOf(context);
+    final duracion = quieto ? Duration.zero : const Duration(milliseconds: 260);
+    final cuantos = widget.cupones.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(height: 0.5, color: AppColors.separador),
+        Semantics(
+          button: true,
+          expanded: _abierto,
+          label: 'Usados y vencidos, $cuantos',
+          excludeSemantics: true,
+          child: CupertinoButton(
+            key: llaveDesplegableHistorial,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            minimumSize: Size.zero,
+            onPressed: _alternar,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'USADOS Y VENCIDOS',
+                    style: AppTheme.subsectionTitle,
+                  ),
+                ),
+                Text(
+                  '$cuantos',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                AnimatedRotation(
+                  turns: _abierto ? 0.5 : 0,
+                  duration: duracion,
+                  curve: Curves.easeOutCubic,
+                  child: const Icon(
+                    CupertinoIcons.chevron_down,
+                    size: 16,
+                    color: AppColors.azulMedio,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Con "Reducir movimiento" aparece de una: un AnimatedSize de
+        // duración cero se vuelve a ensuciar en su propio layout.
+        if (quieto)
+          _lista()
+        else
+          AnimatedSize(
+            duration: duracion,
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _lista(),
+          ),
       ],
     );
   }
@@ -505,13 +606,8 @@ class _Vacio extends StatelessWidget {
 // ============================================================
 
 /// Abre el código de [cupon] en una hoja, listo para mostrar en caja.
-void mostrarCodigoCupon(BuildContext context, CuponCanjeado cupon) {
-  HapticFeedback.selectionClick();
-  showCupertinoModalPopup<void>(
-    context: context,
-    builder: (_) => _HojaCodigo(cupon: cupon),
-  );
-}
+void mostrarCodigoCupon(BuildContext context, CuponCanjeado cupon) =>
+    mostrarHojaVida<void>(context, hoja: (_) => _HojaCodigo(cupon: cupon));
 
 class _HojaCodigo extends StatelessWidget {
   const _HojaCodigo({required this.cupon});
@@ -522,87 +618,65 @@ class _HojaCodigo extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
 
-    return Container(
+    return HojaVida(
       key: llaveHojaCodigo,
-      decoration: const BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Material(
-          type: MaterialType.transparency,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 38,
-                  height: 4,
-                  margin: const EdgeInsets.only(top: 10, bottom: 22),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                _Logo(cupon: cupon, tamano: 60),
-                const SizedBox(height: 12),
-                Text(
-                  cupon.comercio.toUpperCase(),
-                  style: tema.labelMedium?.copyWith(
-                    color: AppColors.azulMedio,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  cupon.beneficio,
-                  textAlign: TextAlign.center,
-                  style: AppTheme.display(
-                    22,
-                  ).copyWith(color: AppColors.textPrimary, height: 1.15),
-                ),
-                const SizedBox(height: 24),
-                CodigoQr(codigo: cupon.codigo, tamano: 210),
-                const SizedBox(height: 18),
-                // El código escrito, por si la caja no puede escanear.
-                SelectableText(
-                  cupon.codigo,
-                  style: tema.titleMedium?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.5,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Muéstralo en caja. Vence el ${fechaDeCupon(cupon.vence)}.',
-                  textAlign: TextAlign.center,
-                  style: tema.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-                if (cupon.porVencer) ...[
-                  const SizedBox(height: 10),
-                  _Vencimiento(cupon: cupon),
-                ],
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoButton.filled(
-                    borderRadius: BorderRadius.circular(AppRadios.pildora),
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Listo'),
-                  ),
-                ),
-              ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Logo(cupon: cupon, tamano: 60),
+          const SizedBox(height: 12),
+          Text(
+            cupon.comercio.toUpperCase(),
+            style: tema.labelMedium?.copyWith(
+              color: AppColors.azulMedio,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
             ),
           ),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            cupon.beneficio,
+            textAlign: TextAlign.center,
+            style: AppTheme.display(
+              22,
+            ).copyWith(color: AppColors.textPrimary, height: 1.15),
+          ),
+          const SizedBox(height: 24),
+          CodigoQr(codigo: cupon.codigo, tamano: 210),
+          const SizedBox(height: 18),
+          // El código escrito, por si la caja no puede escanear.
+          SelectableText(
+            cupon.codigo,
+            style: tema.titleMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2.5,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Muéstralo en caja. Vence el ${fechaDeCupon(cupon.vence)}.',
+            textAlign: TextAlign.center,
+            style: tema.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          if (cupon.porVencer) ...[
+            const SizedBox(height: 10),
+            _Vencimiento(cupon: cupon),
+          ],
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: CupertinoButton.filled(
+              borderRadius: BorderRadius.circular(AppRadios.pildora),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Listo'),
+            ),
+          ),
+        ],
       ),
     );
   }

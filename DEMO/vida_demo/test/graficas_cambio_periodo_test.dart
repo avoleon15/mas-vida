@@ -6,6 +6,8 @@ import 'package:vida_demo/theme.dart';
 import 'package:vida_demo/widgets/numero_animado.dart';
 import 'package:vida_demo/widgets/tarjeta_puntos.dart';
 
+import 'ayudas.dart';
+
 // ============================================================
 // CAMBIAR DE FILTRO EN PROGRESO.
 //
@@ -70,6 +72,8 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     await Datos.cargar();
+    // Un mes con varias semanas: ver `usarMesConVariasSemanas`.
+    usarMesConVariasSemanas();
   });
 
   setUp(() {

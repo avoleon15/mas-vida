@@ -96,9 +96,11 @@ void main() {
       expect(todo(), isNot(contains('descuento en tu prima')));
     });
 
-    test('monedas: 90 días, tope de 100, cupones a 60 días', () {
-      expect(todo(), contains('90 días'));
-      expect(todo(), contains('hasta 100'));
+    test('monedas: vencen por temporada, sin tope, cupones a 60 días', () {
+      expect(todo(), contains('4 temporadas de 13 semanas'));
+      expect(todo(), contains('No hay límite'));
+      expect(todo(), isNot(contains('90 días')));
+      expect(todo(), isNot(contains('hasta 100')));
       expect(todo(), contains('60 días'));
     });
 
