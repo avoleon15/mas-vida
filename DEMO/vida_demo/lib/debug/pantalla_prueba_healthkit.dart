@@ -6,7 +6,8 @@
 // canal, sin volver a escribirla.
 //
 // Como usarla (hace falta un iPhone fisico, HealthKit no existe en el
-// simulador, y el mock_luis_server.py corriendo en la IP de baseURLTexto):
+// simulador, y el backend de Luis corriendo en la IP de baseURLTexto, en
+// HealthKitManager.swift):
 //
 //   1. En lib/main.dart:
 //        import 'debug/pantalla_prueba_healthkit.dart';
@@ -14,19 +15,21 @@
 //        routes: { '/debug-healthkit': (c) => const PantallaPruebaHealthKit(), ... }
 //   2. flutter run  (en debug, NO release: el assertionFailure del registro
 //      del canal en AppDelegate solo truena en debug)
-//   3. Boton 1 -> espera estado=concedido, y hasta 7 POST de backfill al mock
+//   3. Tarjeta 0 PRIMERO: pegar un token y "Entregar token" -> estado=ok.
+//      Sin token el sync nunca firma y el boton 2 siempre da encolado.
+//      Boton 1 -> espera estado=concedido, y hasta 7 POST de backfill
 //      Boton 2 -> espera estado=ok
-//      Boton 2 con el mock apagado -> espera estado=encolado
+//      Boton 2 con el backend apagado -> espera estado=encolado
 //      App a background y de vuelta -> el dia encolado llega solo (SceneDelegate)
 //   4. git checkout lib/main.dart para dejarlo como estaba
 //
-// Verificado asi el 6 de septiembre de 2026: los cuatro casos pasaron.
+// Verificado asi el 6 de septiembre de 2026 (todavia sin token, contra
+// mock_luis_server.py): los cuatro casos pasaron.
 //
-// Tarjeta 0 (sesion, desde A31): pegar un token del backend (el que devuelve
-// POST /api/v1/login) y "Entregar token" -> espera estado=ok; despues el
-// boton 2 ya firma el envio. "Cerrar sesion" -> estado=ok, y el boton 2
-// vuelve a dar encolado (sin sesion). El token nunca se escribe en el log:
-// solo cuantos caracteres tiene.
+// Tarjeta 0 (sesion, desde A31): el token es el que devuelve
+// POST /api/v1/login. "Cerrar sesion" -> estado=ok, y el boton 2 vuelve a dar
+// encolado (sin sesion). El token nunca se escribe en el log: solo cuantos
+// caracteres tiene.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -102,16 +105,20 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
     });
   }
 
-  Future<void> _actualizarSesion(String? token) => _correr('SESION', (tag) async {
-    // Solo el largo: el token es una contrasena.
-    _anotar(tag, token == null ? 'token=null' : 'token (${token.length} caracteres)');
-    final r = await _bridge.actualizarSesion(token);
-    final texto =
-        'estado=${r.estado.name}'
-        '${r.detalle != null ? '\ndetalle=${r.detalle}' : ''}';
-    _fijar(tag, texto, r.estado == EstadoSesion.ok);
-    _anotar(tag, texto.replaceAll('\n', '  '));
-  });
+  Future<void> _actualizarSesion(String? token) =>
+      _correr('SESION', (tag) async {
+        // Solo el largo: el token es una contrasena.
+        _anotar(
+          tag,
+          token == null ? 'token=null' : 'token (${token.length} caracteres)',
+        );
+        final r = await _bridge.actualizarSesion(token);
+        final texto =
+            'estado=${r.estado.name}'
+            '${r.detalle != null ? '\ndetalle=${r.detalle}' : ''}';
+        _fijar(tag, texto, r.estado == EstadoSesion.ok);
+        _anotar(tag, texto.replaceAll('\n', '  '));
+      });
 
   Future<void> _pedirPermisos() => _correr('PERMISOS', (tag) async {
     final r = await _bridge.solicitarPermisos();
@@ -192,6 +199,9 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // El teclado (para pegar el token) tapa el log de abajo en vez de
+      // achicar la columna: en un iPhone chico no cabian los botones.
+      resizeToAvoidBottomInset: false,
       backgroundColor: const Color(0xFF101418),
       appBar: AppBar(
         title: const Text('TEMP - Prueba A10'),
@@ -223,24 +233,36 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
               Row(
                 children: [
                   Expanded(
-                    child: FilledButton(
-                      onPressed: _ocupado
-                          ? null
-                          : () => _actualizarSesion(_token.text),
-                      child: const Text('Entregar token'),
+                    // Vacio no se puede mandar: Swift lo tomaria como cerrar
+                    // sesion y diria ok, y parece que se entrego un token.
+                    // Para cerrar sesion esta el otro boton.
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _token,
+                      builder: (_, valor, _) => FilledButton(
+                        onPressed: _ocupado || valor.text.trim().isEmpty
+                            ? null
+                            : () => _actualizarSesion(_token.text),
+                        child: const Text('Entregar token'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _ocupado ? null : () => _actualizarSesion(null),
+                      onPressed: _ocupado
+                          ? null
+                          : () => _actualizarSesion(null),
                       child: const Text('Cerrar sesion'),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 18),
-              _tarjeta('1 - PERMISOS', _res['PERMISOS'], _ok['PERMISOS'] ?? false),
+              _tarjeta(
+                '1 - PERMISOS',
+                _res['PERMISOS'],
+                _ok['PERMISOS'] ?? false,
+              ),
               FilledButton(
                 onPressed: _ocupado ? null : _pedirPermisos,
                 child: const Text('Solicitar permisos'),

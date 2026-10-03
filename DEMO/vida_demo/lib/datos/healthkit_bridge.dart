@@ -176,9 +176,17 @@ enum EstadoSesion {
   /// Swift guardó el token (o lo borró, si se mandó `null`).
   ok,
 
-  /// No se pudo escribir o borrar en el Keychain: el token NO quedó guardado
-  /// y el sync no va a poder firmar. No se pierden datos — los días quedan
-  /// pendientes —, pero conviene reintentar la próxima vez que abra la app.
+  /// No se pudo escribir o borrar en el Keychain. **Swift se queda con el
+  /// token que tenía antes**, y eso no siempre es inofensivo:
+  /// - primer login (no había token): el sync no firma; los días quedan
+  ///   pendientes y no se pierde nada.
+  /// - cambio de cuenta: el sync sigue firmando con la cuenta ANTERIOR.
+  /// - cierre de sesión: el sync sigue mandando datos a la cuenta que se
+  ///   cerró.
+  ///
+  /// Por eso, si pasa al cerrar sesión o al cambiar de cuenta, hay que
+  /// reintentar (y como Flutter lo vuelve a llamar cada vez que abre la app,
+  /// a más tardar se corrige ahí).
   errorAlmacenamiento,
 
   /// Llegó un estado que esta versión de la app no conoce.

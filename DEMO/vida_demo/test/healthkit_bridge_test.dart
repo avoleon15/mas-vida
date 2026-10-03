@@ -34,27 +34,31 @@ void main() {
   );
 
   group('lo que se manda', () {
-    test('el token viaja en el método actualizarSesion, bajo la clave token',
-        () async {
-      responder((_) => {'estado': 'ok'});
+    test(
+      'el token viaja en el método actualizarSesion, bajo la clave token',
+      () async {
+        responder((_) => {'estado': 'ok'});
 
-      await HealthKitBridge().actualizarSesion('abc123');
+        await HealthKitBridge().actualizarSesion('abc123');
 
-      expect(llamadas, hasLength(1));
-      expect(llamadas.single.method, 'actualizarSesion');
-      expect(llamadas.single.arguments, {'token': 'abc123'});
-    });
+        expect(llamadas, hasLength(1));
+        expect(llamadas.single.method, 'actualizarSesion');
+        expect(llamadas.single.arguments, {'token': 'abc123'});
+      },
+    );
 
-    test('cerrar sesión manda la clave token con null, no un mapa vacío',
-        () async {
-      responder((_) => {'estado': 'ok'});
+    test(
+      'cerrar sesión manda la clave token con null, no un mapa vacío',
+      () async {
+        responder((_) => {'estado': 'ok'});
 
-      await HealthKitBridge().actualizarSesion(null);
+        await HealthKitBridge().actualizarSesion(null);
 
-      final argumentos = llamadas.single.arguments as Map;
-      expect(argumentos.containsKey('token'), isTrue);
-      expect(argumentos['token'], isNull);
-    });
+        final argumentos = llamadas.single.arguments as Map;
+        expect(argumentos.containsKey('token'), isTrue);
+        expect(argumentos['token'], isNull);
+      },
+    );
 
     test('el token se manda tal cual: recortar es trabajo de Swift', () async {
       responder((_) => {'estado': 'ok'});
@@ -79,7 +83,8 @@ void main() {
       responder(
         (_) => {
           'estado': 'error_almacenamiento',
-          'detalle': 'No se pudo guardar la sesión en el Keychain (código -25308).',
+          'detalle':
+              'No se pudo guardar la sesión en el Keychain (código -25308).',
         },
       );
 
@@ -89,14 +94,16 @@ void main() {
       expect(r.detalle, contains('Keychain'));
     });
 
-    test('un estado que esta versión no conoce es desconocido, no un crash',
-        () async {
-      responder((_) => {'estado': 'algo_nuevo'});
+    test(
+      'un estado que esta versión no conoce es desconocido, no un crash',
+      () async {
+        responder((_) => {'estado': 'algo_nuevo'});
 
-      final r = await HealthKitBridge().actualizarSesion('abc123');
+        final r = await HealthKitBridge().actualizarSesion('abc123');
 
-      expect(r.estado, EstadoSesion.desconocido);
-    });
+        expect(r.estado, EstadoSesion.desconocido);
+      },
+    );
 
     test('una respuesta vacía es desconocido', () async {
       responder((_) => null);
@@ -123,6 +130,17 @@ void main() {
             'ARGUMENTOS_INVALIDOS',
           ),
         ),
+      );
+    });
+
+    // Lo que ve quien llama sin lado nativo (las pruebas de Flutter, sin
+    // reemplazar el puente). El wrapper no se lo traga: si lo hiciera, un
+    // canal mal registrado pasaría por "desconocido" sin que nadie se entere.
+    test('sin lado nativo, el error llega a quien llamó', () async {
+      // Sin responder(): nadie atiende el canal.
+      await expectLater(
+        HealthKitBridge().actualizarSesion('abc123'),
+        throwsA(isA<MissingPluginException>()),
       );
     });
   });
