@@ -16,7 +16,15 @@
 //
 
 import Foundation
+import os
 import Security
+
+/// Diagnóstico de los envíos al servidor. Misma regla que `logSalud`: acá
+/// nunca entra un valor de salud, el token ni el cuerpo de una respuesta.
+private let logSync = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.assures.masvida",
+    category: "Sync"
+)
 
 enum ApiError: LocalizedError {
     case urlInvalida
@@ -26,11 +34,19 @@ enum ApiError: LocalizedError {
     /// No hay token guardado: no hay a nombre de quién enviar. No se hace ni
     /// la petición. No es un error permanente: el día queda pendiente.
     case sinSesion
+    /// `422` con `{"error": "fuera_de_ventana"}`: el día tiene más de 14 días
+    /// y el servidor ya no lo acepta (ver "Ventana de aceptación de datos
+    /// rezagados" en el contrato). Es permanente, pero solo para ESE día: a
+    /// diferencia de los demás errores permanentes, no dice nada malo del
+    /// payload ni de la cuenta. `fecha` es la que devolvió el servidor.
+    case fueraDeVentana(fecha: String?)
 
     var errorDescription: String? {
         switch self {
         case .sinSesion:
             return "No hay una sesión iniciada: el día queda pendiente hasta que la haya."
+        case .fueraDeVentana(let fecha):
+            return "El servidor ya no acepta el día \(fecha ?? "enviado"): tiene más de 14 días."
         case .urlInvalida:
             return "La URL del backend no es válida."
         case .respuestaInvalida:
@@ -46,21 +62,54 @@ enum ApiError: LocalizedError {
     ///
     /// Sí: sin sesión, `401` (el token falta o ya no vale; se arregla al volver
     /// a iniciar sesión), `408`, `429` y `5xx`. No: URL mal configurada,
-    /// respuesta ilegible y cualquier otro `4xx` (el payload o la cuenta
-    /// están mal y reintentar no lo arregla).
+    /// respuesta ilegible, el `422` de la ventana (el día ya es demasiado
+    /// viejo, y mañana lo será más) y cualquier otro `4xx` (el payload o la
+    /// cuenta están mal y reintentar no lo arregla).
     ///
     /// Que `401` sea reintentable es lo que evita perder días de datos: un
-    /// error permanente saca el día de la cola y corta el procesamiento de los
-    /// demás.
+    /// error permanente saca el día de la cola (ver `AccionDiaFallido`).
     var esReintentable: Bool {
         switch self {
-        case .urlInvalida, .respuestaInvalida, .respuestaIlegible:
+        case .urlInvalida, .respuestaInvalida, .respuestaIlegible, .fueraDeVentana:
             return false
         case .sinSesion:
             return true
         case .servidor(let codigo, _):
             return codigo == 401 || codigo >= 500 || codigo == 408 || codigo == 429
         }
+    }
+}
+
+/// Qué hacer con un día cuyo envío falló. Es la ÚNICA regla: la usan el sync
+/// de hoy, la cola de reintentos y ponerse al día (ver `RecorridoDias` en
+/// SyncQueue.swift y HealthKitManager.swift).
+enum AccionDiaFallido: Equatable {
+    /// El día queda pendiente y se vuelve a intentar: sin red, sin sesión,
+    /// `401`, `408`, `429`, `5xx`, o HealthKit no se pudo leer.
+    case reintentarDespues
+    /// Se saca de la cola y la vuelta SIGUE con los demás días. Solo el `422`
+    /// de la ventana: el problema es de ese día (es demasiado viejo), no del
+    /// payload ni de la cuenta.
+    case descartarYSeguir
+    /// Se saca de la cola y la vuelta se CORTA: cualquier otro error
+    /// permanente. Si el servidor rechaza el payload o la cuenta, lo más
+    /// probable es que rechace igual los días siguientes; esos no se pierden,
+    /// siguen en la cola para la próxima vuelta.
+    case descartarYCortar
+    /// No es una falla del envío: el servidor respondió 2xx (ya guardó el
+    /// día) y lo único que no se entendió fue su respuesta. Se cuenta como
+    /// enviado y la vuelta sigue (decidido 3 oct 2026; es lo que hacen
+    /// Google, Stripe y los clientes HTTP bien hechos: un éxito no se
+    /// reintenta). `ApiClient` lo deja anotado en el log.
+    case tomarComoEnviado
+
+    static func para(_ error: Error) -> AccionDiaFallido {
+        // Un error que no es de `ApiError` (red caída, tiempo agotado, lectura
+        // de HealthKit) se reintenta.
+        guard let error = error as? ApiError else { return .reintentarDespues }
+        if case .fueraDeVentana = error { return .descartarYSeguir }
+        if case .respuestaIlegible = error { return .tomarComoEnviado }
+        return error.esReintentable ? .reintentarDespues : .descartarYCortar
     }
 }
 
@@ -179,6 +228,29 @@ enum Sesion {
             return .errorAlmacenamiento(detalle: detalle)
         }
     }
+
+    /// Lo mismo, y además: si la cuenta cambió (otro token, o se cerró la
+    /// sesión) se olvidan hasta qué día se había mandado y la cola de
+    /// reintentos, para que la cuenta que sigue empiece como la primera vez
+    /// (sus 7 días) y no reciba días que esperaban a nombre de la anterior.
+    /// El mismo token que Flutter manda en cada arranque no cambia nada.
+    /// Devuelve también si quedó una sesión, para saber si ponerse al día.
+    static func aplicar(
+        token: String?,
+        en almacen: AlmacenSesion,
+        marca: MarcaEnvios,
+        cola: SyncQueue
+    ) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
+        let anterior = almacen.leerToken()
+        let resultado = aplicar(token: token, en: almacen)
+        let actual = almacen.leerToken()
+        // Si falló el Keychain, el token anterior sigue ahí: no cambió nada.
+        if resultado == .ok && actual != anterior {
+            marca.olvidar()
+            cola.vaciar()
+        }
+        return (resultado, actual != nil)
+    }
 }
 
 final class ApiClient {
@@ -240,6 +312,9 @@ final class ApiClient {
         }
 
         guard (200...299).contains(http.statusCode) else {
+            if let rechazo = Self.rechazoPorVentana(codigo: http.statusCode, cuerpo: datos) {
+                throw rechazo
+            }
             throw ApiError.servidor(codigo: http.statusCode, cuerpo: String(data: datos, encoding: .utf8))
         }
 
@@ -250,7 +325,30 @@ final class ApiClient {
         do {
             return try JSONDecoder().decode(RespuestaSincronizacion.self, from: datos)
         } catch {
+            // El día se da por enviado (`AccionDiaFallido.tomarComoEnviado`),
+            // así que sin esta línea nadie se enteraría de que el servidor y
+            // la app ya no están de acuerdo en el formato. Solo la fecha y el
+            // código: el cuerpo trae datos de salud.
+            logSync.error(
+                "Respuesta ilegible del servidor (HTTP \(http.statusCode, privacy: .public)) para el día \(payload.fecha, privacy: .public): el día quedó guardado. Revisar que el contrato y el servidor coincidan."
+            )
             throw ApiError.respuestaIlegible
         }
+    }
+
+    /// Cuerpo del `422` de la ventana: `{"error": "fuera_de_ventana", "fecha": "…"}`.
+    private struct CuerpoRechazo: Decodable {
+        let error: String
+        let fecha: String?
+    }
+
+    /// `fueraDeVentana` solo si es un `422` Y trae ese motivo. Cualquier otro
+    /// `422` (o un cuerpo que no se entiende) sigue siendo `servidor(422)`:
+    /// un permanente genérico, que no se puede tratar como "solo este día".
+    static func rechazoPorVentana(codigo: Int, cuerpo: Data) -> ApiError? {
+        guard codigo == 422,
+              let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo),
+              rechazo.error == "fuera_de_ventana" else { return nil }
+        return .fueraDeVentana(fecha: rechazo.fecha)
     }
 }

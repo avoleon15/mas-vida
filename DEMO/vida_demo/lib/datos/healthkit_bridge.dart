@@ -67,7 +67,11 @@ class HealthKitBridge {
     } on MissingPluginException {
       return EstadoSesionNativa.noDisponible;
     } on PlatformException {
-      return EstadoSesionNativa.errorAlmacenamiento;
+      // Swift solo responde con error si los argumentos llegan mal
+      // (`ARGUMENTOS_INVALIDOS`): es un error de programación, no del
+      // Keychain. Las fallas del Keychain llegan como respuesta normal,
+      // con `estado: error_almacenamiento`.
+      return EstadoSesionNativa.desconocido;
     }
   }
 }
@@ -77,8 +81,16 @@ enum EstadoSesionNativa {
   /// Guardado, o borrado si vino null.
   ok,
 
-  /// Swift no pudo escribir en el Keychain: el `sync` no va a poder
-  /// firmar hasta el próximo intento (el próximo arranque lo reintenta).
+  /// Swift no pudo escribir o borrar en el Keychain, y **se queda con el
+  /// token que tenía antes**. Eso no siempre es inofensivo:
+  /// - primer ingreso (no había token): el `sync` no firma; los días
+  ///   quedan pendientes y no se pierde nada.
+  /// - cambio de cuenta: el `sync` sigue firmando con la cuenta ANTERIOR.
+  /// - cierre de sesión: el `sync` sigue mandando datos a la cuenta que
+  ///   se cerró.
+  ///
+  /// El próximo arranque lo vuelve a mandar y lo corrige; si importa
+  /// cerrar esa ventana, reintentar en el momento.
   errorAlmacenamiento,
 
   /// No hay lado nativo: Web o un test.

@@ -442,6 +442,654 @@ final class ApiErrorReintentableTests: XCTestCase {
   }
 }
 
+/// El `422` de la ventana de 14 días se distingue de cualquier otro rechazo:
+/// solo con ESE motivo se puede descartar el día y seguir con los demás.
+final class ApiClientVentanaTests: XCTestCase {
+
+  private var cliente: ApiClient!
+
+  override func setUp() {
+    super.setUp()
+    ProtocoloEspia.reiniciar()
+    let almacen = AlmacenEnMemoria()
+    almacen.token = "abc123-secreto"
+    let configuracion = URLSessionConfiguration.ephemeral
+    configuracion.protocolClasses = [ProtocoloEspia.self]
+    cliente = ApiClient(
+      baseURL: URL(string: "http://servidor.prueba")!,
+      session: URLSession(configuration: configuracion),
+      almacen: almacen
+    )
+  }
+
+  /// Responde `status` con `cuerpo` y devuelve el error que lanzó el envío.
+  private func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
+    ProtocoloEspia.status = status
+    ProtocoloEspia.respuesta = Data(cuerpo.utf8)
+    do {
+      _ = try await cliente.enviarSincronizacion(payloadDePrueba())
+      return nil
+    } catch {
+      return error
+    }
+  }
+
+  func testEl422DeLaVentanaSeReconoce_ConSuFecha() async {
+    // Tal cual lo arma Apps/activities/views.py.
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    guard case .fueraDeVentana(let fecha)? = error as? ApiError else {
+      return XCTFail("Debió ser fueraDeVentana, fue: \(String(describing: error))")
+    }
+    XCTAssertEqual(fecha, "2026-09-01")
+  }
+
+  func testEl422DeLaVentanaNoSeReintenta() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    XCTAssertEqual((error as? ApiError)?.esReintentable, false,
+                   "Un día fuera de la ventana mañana estará más fuera: reintentarlo es inútil")
+  }
+
+  func testSinFechaEnElCuerpo_IgualSeReconoce() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana"}"#)
+
+    guard case .fueraDeVentana(let fecha)? = error as? ApiError else {
+      return XCTFail("Debió ser fueraDeVentana, fue: \(String(describing: error))")
+    }
+    XCTAssertNil(fecha)
+    XCTAssertFalse((error?.localizedDescription ?? "").isEmpty)
+  }
+
+  func testOtro422_SigueSiendoUnErrorDelServidor() async {
+    for cuerpo in [
+      #"{"error":"otra_cosa","fecha":"2026-09-01"}"#,   // otro motivo
+      #"{"fecha":["Formato inválido."]}"#,               // error de validación
+      #"<html>Unprocessable</html>"#,                    // no es JSON
+      "",                                                // sin cuerpo
+    ] {
+      let error = await errorAl(responder: 422, cuerpo)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con cuerpo \(cuerpo) debió ser servidor(422), fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, 422)
+    }
+  }
+
+  func testElMismoCuerpoConOtroCodigo_NoEsDeVentana() async {
+    for status in [400, 403, 500] {
+      let error = await errorAl(responder: status, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(status) debió ser servidor, fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, status)
+    }
+  }
+
+  func testElMensajeDiceElDia_YNoTraeElToken() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    let mensaje = error?.localizedDescription ?? ""
+    XCTAssertTrue(mensaje.contains("2026-09-01"))
+    XCTAssertFalse(mensaje.contains("abc123-secreto"))
+  }
+}
+
+/// La única regla para un día que falló: reintentar, descartar y seguir, o
+/// descartar y cortar.
+final class AccionDiaFallidoTests: XCTestCase {
+
+  private func servidor(_ codigo: Int) -> ApiError { .servidor(codigo: codigo, cuerpo: nil) }
+
+  func testSinRedOHealthKit_SeReintenta() {
+    XCTAssertEqual(AccionDiaFallido.para(URLError(.notConnectedToInternet)), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(URLError(.timedOut)), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(NSError(domain: "com.apple.healthkit", code: 6)), .reintentarDespues)
+  }
+
+  func testSinSesion401_408_429Y5xx_SeReintentan() {
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.sinSesion), .reintentarDespues)
+    for codigo in [401, 408, 429, 500, 503] {
+      XCTAssertEqual(AccionDiaFallido.para(servidor(codigo)), .reintentarDespues, "\(codigo)")
+    }
+  }
+
+  func testEl422DeLaVentana_SeDescartaYSigue() {
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: "2026-09-01")), .descartarYSeguir)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: nil)), .descartarYSeguir)
+  }
+
+  func testOtrosPermanentes_SeDescartanYCortan() {
+    for codigo in [400, 403, 404, 422] {
+      XCTAssertEqual(AccionDiaFallido.para(servidor(codigo)), .descartarYCortar, "\(codigo)")
+    }
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.urlInvalida), .descartarYCortar)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaInvalida), .descartarYCortar)
+  }
+
+  func testUnaRespuestaIlegible_SeTomaComoEnviada() {
+    // El servidor respondió 2xx: el día ya está guardado (decidido 3 oct 2026).
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaIlegible), .tomarComoEnviado)
+  }
+}
+
+/// La vuelta día por día de la cola y el backfill: cuándo sigue y cuándo corta.
+@MainActor
+final class RecorridoDiasTests: XCTestCase {
+
+  /// Un desenlace sin el error adentro, para poder comparar.
+  private enum Visto: Equatable { case enviado, saltado, reintentar, descartado, cortado }
+
+  private struct Falla: Error {}
+
+  /// Corre la vuelta con `respuestas[dia]` (nil = se envía bien) y devuelve
+  /// qué días se intentaron y qué se registró de cada uno.
+  private func recorrer(
+    _ dias: [String],
+    _ respuestas: [String: Result<Bool, Error>]
+  ) async -> (intentados: [String], registrados: [String], vistos: [Visto], fin: FinDeVuelta) {
+    var intentados: [String] = []
+    var registrados: [String] = []
+    var vistos: [Visto] = []
+    let fin = await RecorridoDias.recorrer(
+      dias,
+      enviar: { dia in
+        intentados.append(dia)
+        return try (respuestas[dia] ?? .success(true)).get()
+      },
+      registrar: { dia, desenlace in
+        registrados.append(dia)
+        switch desenlace {
+        case .enviado: vistos.append(.enviado)
+        case .saltado: vistos.append(.saltado)
+        case .reintentarDespues: vistos.append(.reintentar)
+        case .descartado: vistos.append(.descartado)
+        case .cortado: vistos.append(.cortado)
+        }
+      }
+    )
+    return (intentados, registrados, vistos, fin)
+  }
+
+  private let ventana = ApiError.fueraDeVentana(fecha: "2026-09-01")
+  private let invalido = ApiError.servidor(codigo: 400, cuerpo: nil)
+
+  func testTodoBien_SeEnvianTodosEnOrden() async {
+    let r = await recorrer(["d1", "d2", "d3"], [:])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"])
+    XCTAssertEqual(r.vistos, [.enviado, .enviado, .enviado])
+  }
+
+  func testUn422EnMedio_SeDescartaYLosDemasSiguen() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(ventana)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"], "El 422 no debe cortar la vuelta")
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .enviado])
+  }
+
+  func testVarios422Seguidos_NingunoCorta() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d1": .failure(ventana), "d2": .failure(ventana)])
+
+    XCTAssertEqual(r.vistos, [.descartado, .descartado, .enviado])
+  }
+
+  func testUnPermanenteEnMedio_CortaYNoTocaLosDemas() async {
+    let r = await recorrer(["d1", "d2", "d3", "d4"], ["d2": .failure(invalido)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2"], "Después de cortar no se intenta ningún día más")
+    XCTAssertEqual(r.registrados, ["d1", "d2"], "Ni se registra nada de los que no se intentaron")
+    XCTAssertEqual(r.vistos, [.enviado, .cortado])
+  }
+
+  func testSinRed_SeReintentaDespuesYCorta() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d1": .failure(URLError(.notConnectedToInternet))])
+
+    XCTAssertEqual(r.vistos, [.reintentar])
+    XCTAssertEqual(r.intentados, ["d1"], "Los demás fallarían igual: no se gastan intentos")
+    XCTAssertEqual(r.fin, .cortadaPorFalloGeneral)
+  }
+
+  func testServidorCaidoOTokenRechazado_TambienCortan() async {
+    for error in [ApiError.servidor(codigo: 503, cuerpo: nil),
+                  ApiError.servidor(codigo: 401, cuerpo: nil),
+                  ApiError.sinSesion] {
+      let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(error)])
+
+      XCTAssertEqual(r.intentados, ["d1", "d2"], "\(error)")
+      XCTAssertEqual(r.fin, .cortadaPorFalloGeneral, "\(error)")
+    }
+  }
+
+  func testComoTermina_CadaVuelta() async {
+    let completa = await recorrer(["d1", "d2"], [:])
+    XCTAssertEqual(completa.fin, .completa)
+
+    let conVentanaEIlegible = await recorrer(
+      ["d1", "d2"], ["d1": .failure(ventana), "d2": .failure(ApiError.respuestaIlegible)])
+    XCTAssertEqual(conVentanaEIlegible.fin, .completa, "Ninguno de los dos corta")
+
+    let rechazo = await recorrer(["d1", "d2"], ["d1": .failure(invalido)])
+    XCTAssertEqual(rechazo.fin, .cortadaPorRechazo)
+
+    let vacia = await recorrer([], [:])
+    XCTAssertEqual(vacia.fin, .completa)
+  }
+
+  func testUnDiaVacio_SeSaltaYSigue() async {
+    let r = await recorrer(["d1", "d2"], ["d1": .success(false)])
+
+    XCTAssertEqual(r.vistos, [.saltado, .enviado])
+  }
+
+  func testMezcla_ElCorteGanaSoloDesdeDondeAparece() async {
+    let r = await recorrer(
+      ["d1", "d2", "d3", "d4", "d5"],
+      ["d2": .failure(ventana), "d3": .failure(invalido), "d4": .failure(Falla())]
+    )
+
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .cortado])
+    XCTAssertEqual(r.intentados.last, "d3", "d4 y d5 nunca se intentan")
+  }
+
+  func testUnaRespuestaIlegible_CuentaComoEnviadaYSigue() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(ApiError.respuestaIlegible)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"], "No corta la vuelta")
+    XCTAssertEqual(r.vistos, [.enviado, .enviado, .enviado])
+  }
+
+  func testSinDias_NoLlamaANada() async {
+    let r = await recorrer([], [:])
+
+    XCTAssertTrue(r.intentados.isEmpty)
+    XCTAssertTrue(r.registrados.isEmpty)
+  }
+}
+
+/// La cola de reintentos: orden, duplicados, tope, y que los días caduquen
+/// a los 14 días, igual que la ventana del servidor.
+final class SyncQueueTests: XCTestCase {
+
+  private var almacen: UserDefaults!
+  private var nombreAlmacen: String!
+  private var ahora: Date!
+  private var cola: SyncQueue!
+
+  private static func dia(_ texto: String, hora: Int = 15) -> Date {
+    FormatoFechas.diaCalendario.date(from: texto)!.addingTimeInterval(Double(hora) * 3600)
+  }
+
+  /// `yyyy-MM-dd` de hace `n` días respecto de `ahora`.
+  private func haceDias(_ n: Int) -> String {
+    FormatoFechas.diaCalendario.string(from: Calendar.current.date(byAdding: .day, value: -n, to: ahora)!)
+  }
+
+  override func setUp() {
+    super.setUp()
+    nombreAlmacen = "pruebas.cola.\(UUID().uuidString)"
+    almacen = UserDefaults(suiteName: nombreAlmacen)
+    ahora = Self.dia("2026-10-03")
+    cola = SyncQueue(almacen: almacen, hoy: { self.ahora })
+  }
+
+  override func tearDown() {
+    almacen.removePersistentDomain(forName: nombreAlmacen)
+    super.tearDown()
+  }
+
+  private var guardado: [String] { almacen.stringArray(forKey: "vida.diasPendientes") ?? [] }
+
+  func testEncolarGuardaEnOrden_SinDuplicar() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-09-30")
+    cola.encolar(fecha: "2026-10-01")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01", "2026-09-30"])
+  }
+
+  func testRemover() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-09-30")
+
+    cola.remover(fecha: "2026-10-01")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-09-30"])
+  }
+
+  func testElDiaDeHace14DiasSigue_ElDeHace15Caduca() {
+    XCTAssertEqual(haceDias(14), "2026-09-19")
+    cola.encolar(fecha: haceDias(14))
+    cola.encolar(fecha: haceDias(15))
+
+    XCTAssertEqual(cola.pendientes(), ["2026-09-19"])
+  }
+
+  func testLaCuentaEsLaMismaQueLaDelServidor() {
+    // views.py: rechaza si fecha < hoy - 14.
+    for n in 0...20 {
+      XCTAssertEqual(cola.vencido(haceDias(n)), n > 14, "hace \(n) días")
+    }
+  }
+
+  func testLaHoraDelDiaNoCambiaLaCuenta() {
+    for hora in [0, 1, 12, 23] {
+      ahora = Self.dia("2026-10-03", hora: hora)
+      XCTAssertFalse(cola.vencido("2026-09-19"), "a las \(hora)h")
+      XCTAssertTrue(cola.vencido("2026-09-18"), "a las \(hora)h")
+    }
+  }
+
+  func testUnDiaYaVencidoNoSeEncola() {
+    cola.encolar(fecha: "2026-09-01")
+
+    XCTAssertTrue(guardado.isEmpty)
+  }
+
+  func testLosDiasCaducanSolosConElTiempo() {
+    cola.encolar(fecha: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    ahora = Self.dia("2026-10-15")   // hace 14 días: sigue
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    ahora = Self.dia("2026-10-16")   // hace 15 días: fuera
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testLeerLaColaBorraDelDiscoLosVencidos() {
+    // Como quedaría una cola guardada por la versión anterior (sin caducidad).
+    almacen.set(["2026-08-01", "2026-10-01", "2026-09-01"], forKey: "vida.diasPendientes")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+    XCTAssertEqual(guardado, ["2026-10-01"], "Los vencidos se borran, no solo se esconden")
+  }
+
+  func testUnaFechaIlegibleNoSeDaPorVencida() {
+    // La saca reintentarPendientes(), que sabe que no se puede mandar.
+    almacen.set(["no-es-fecha", "2026-10-01"], forKey: "vida.diasPendientes")
+
+    XCTAssertEqual(cola.pendientes(), ["no-es-fecha", "2026-10-01"])
+  }
+
+  func testElTopeEs15_YSaleElPrimeroQueEntro() {
+    XCTAssertEqual(SyncQueue.maximoDias, 15)
+    for n in (0...14).reversed() { cola.encolar(fecha: haceDias(n)) }   // 15 días válidos
+    XCTAssertEqual(cola.pendientes().count, 15)
+
+    cola.encolar(fecha: "2026-10-10")   // uno más (futuro, solo para pasar el tope)
+
+    XCTAssertEqual(cola.pendientes().count, 15)
+    XCTAssertFalse(cola.pendientes().contains(haceDias(14)), "Sale el que entró primero")
+    XCTAssertTrue(cola.pendientes().contains("2026-10-10"))
+  }
+
+  func testLaColaDePruebaNoTocaLaReal() {
+    let real = UserDefaults.standard.stringArray(forKey: "vida.diasPendientes")
+
+    cola.encolar(fecha: "2026-10-01")
+
+    XCTAssertEqual(UserDefaults.standard.stringArray(forKey: "vida.diasPendientes"), real)
+  }
+
+  func testVaciar() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-10-02")
+
+    cola.vaciar()
+
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testAplicarCadaEfecto() {
+    cola.encolar(fecha: "2026-10-01")
+
+    cola.aplicar(.dejar, a: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    cola.aplicar(.encolar, a: "2026-10-02")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01", "2026-10-02"])
+
+    cola.aplicar(.sacar, a: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-02"])
+  }
+}
+
+/// Qué le pasa a un día en la cola según cómo terminó, en cada camino.
+final class EfectoDeCadaDesenlaceTests: XCTestCase {
+
+  private struct Falla: Error {}
+  private let error = Falla()
+
+  func testEnLaColaDeReintentos() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoEnReintento, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoEnReintento, .sacar, "Un 422 sale de la cola")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoEnReintento, .sacar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoEnReintento, .dejar, "Ante la duda, un día vacío se queda")
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoEnReintento, .dejar)
+  }
+
+  func testAlPonerseAlDia() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoAlPonerseAlDia, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoAlPonerseAlDia, .sacar)
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoAlPonerseAlDia, .encolar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoAlPonerseAlDia, .dejar, "Un día vacío no se anota")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoAlPonerseAlDia, .dejar,
+                   "Tras un corte la marca no avanza: se reintenta desde ahí, sin la cola")
+  }
+
+  func testSoloLoQueYaNoHayQueMandarMueveLaMarca() {
+    XCTAssertTrue(DesenlaceDia.enviado.avanzaMarca)
+    XCTAssertTrue(DesenlaceDia.descartado(error).avanzaMarca,
+                  "Un día fuera de la ventana no va a entrar nunca")
+    XCTAssertFalse(DesenlaceDia.saltado.avanzaMarca,
+                   "Un día vacío puede ser un permiso que todavía no se dio")
+    XCTAssertFalse(DesenlaceDia.reintentarDespues(error).avanzaMarca)
+    XCTAssertFalse(DesenlaceDia.cortado(error).avanzaMarca)
+  }
+}
+
+/// Desde qué día ponerse al día (decidido 3 oct 2026): la primera vez, los
+/// últimos 7 días; después, desde el último enviado (otra vez) hasta hoy,
+/// sin pasar de la ventana de 14 días del servidor.
+final class MarcaEnviosTests: XCTestCase {
+
+  private var almacen: UserDefaults!
+  private var nombreAlmacen: String!
+  private var ahora: Date!
+  private var marca: MarcaEnvios!
+
+  private static func dia(_ texto: String, hora: Int = 15) -> Date {
+    FormatoFechas.diaCalendario.date(from: texto)!.addingTimeInterval(Double(hora) * 3600)
+  }
+
+  override func setUp() {
+    super.setUp()
+    nombreAlmacen = "pruebas.marca.\(UUID().uuidString)"
+    almacen = UserDefaults(suiteName: nombreAlmacen)
+    ahora = Self.dia("2026-10-03")
+    marca = MarcaEnvios(almacen: almacen, hoy: { self.ahora })
+  }
+
+  override func tearDown() {
+    almacen.removePersistentDomain(forName: nombreAlmacen)
+    super.tearDown()
+  }
+
+  func testLaPrimeraVez_LosUltimos7Dias_DelMasViejoAHoy() {
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar(), [
+      "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30",
+      "2026-10-01", "2026-10-02", "2026-10-03",
+    ])
+  }
+
+  func testConMarca_DesdeEseDiaOtraVezHastaHoy() {
+    marca.registrarEnviado("2026-10-01")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-01", "2026-10-02", "2026-10-03"],
+                   "El último enviado se repite: pudo sumar pasos después del envío")
+  }
+
+  func testEnviadoHoy_SoloHoy() {
+    marca.registrarEnviado("2026-10-03")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-03"])
+  }
+
+  func testUnaMarcaMuyVieja_SeRecortaALaVentanaDelServidor() {
+    marca.registrarEnviado("2026-08-01")
+
+    let dias = marca.diasPorMandar()
+    XCTAssertEqual(dias.first, "2026-09-19", "hoy - 14: el más viejo que el servidor acepta")
+    XCTAssertEqual(dias.last, "2026-10-03")
+    XCTAssertEqual(dias.count, 15)
+  }
+
+  func testUnaMarcaEnElFuturo_NoDejaAHoyAfuera() {
+    marca.registrarEnviado("2026-10-09")   // el reloj del teléfono se movió
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-03"])
+  }
+
+  func testLaMarcaSoloAvanza() {
+    marca.registrarEnviado("2026-10-02")
+    marca.registrarEnviado("2026-09-30")   // un día viejo que llegó tarde
+
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
+  }
+
+  func testOlvidar_VuelveAEmpezarComoLaPrimeraVez() {
+    marca.registrarEnviado("2026-10-02")
+
+    marca.olvidar()
+
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar().count, MarcaEnvios.diasPrimeraVez)
+  }
+
+  func testUnaFechaIlegibleNoSeGuarda_YLaGuardadaSeIgnora() {
+    marca.registrarEnviado("no-es-fecha")
+    XCTAssertNil(marca.ultimoDiaEnviado)
+
+    almacen.set("basura", forKey: "vida.ultimoDiaEnviado")
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar().count, MarcaEnvios.diasPrimeraVez)
+  }
+
+  func testCruzandoElCambioDeMes() {
+    ahora = Self.dia("2026-11-01")
+    marca.registrarEnviado("2026-10-30")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-30", "2026-10-31", "2026-11-01"])
+  }
+
+  func testLaHoraDelDiaNoCambiaLaCuenta() {
+    marca.registrarEnviado("2026-10-02")
+    for hora in [0, 1, 23] {
+      ahora = Self.dia("2026-10-03", hora: hora)
+      XCTAssertEqual(marca.diasPorMandar(), ["2026-10-02", "2026-10-03"], "a las \(hora)h")
+    }
+  }
+
+  func testLaMarcaDePruebaNoTocaLaReal() {
+    let real = UserDefaults.standard.string(forKey: "vida.ultimoDiaEnviado")
+
+    marca.registrarEnviado("2026-10-02")
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: "vida.ultimoDiaEnviado"), real)
+  }
+}
+
+/// Al cambiar de cuenta se olvida hasta qué día se había mandado: la cuenta
+/// nueva tiene que recibir sus 7 días.
+final class SesionYMarcaTests: XCTestCase {
+
+  private var almacen: AlmacenEnMemoria!
+  private var defaults: UserDefaults!
+  private var nombre: String!
+  private var marca: MarcaEnvios!
+  private var cola: SyncQueue!
+
+  override func setUp() {
+    super.setUp()
+    almacen = AlmacenEnMemoria()
+    nombre = "pruebas.sesionmarca.\(UUID().uuidString)"
+    defaults = UserDefaults(suiteName: nombre)
+    let hoy = { FormatoFechas.diaCalendario.date(from: "2026-10-03")!.addingTimeInterval(15 * 3600) }
+    marca = MarcaEnvios(almacen: defaults, hoy: hoy)
+    cola = SyncQueue(almacen: defaults, hoy: hoy)
+  }
+
+  override func tearDown() {
+    defaults.removePersistentDomain(forName: nombre)
+    super.tearDown()
+  }
+
+  func testElMismoTokenEnCadaArranque_NoOlvidaLaMarca() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
+
+    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertTrue(r.haySesion)
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
+    XCTAssertEqual(cola.pendientes(), ["2026-09-25"], "La cola tampoco se toca")
+  }
+
+  func testOtraCuenta_OlvidaLaMarcaYVaciaLaCola() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")   // esperaba a nombre de la cuenta anterior
+
+    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca, cola: cola)
+
+    XCTAssertTrue(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(cola.pendientes(), [], "La cuenta nueva no recibe días de la anterior")
+  }
+
+  func testCerrarSesion_OlvidaLaMarca_YNoHaySesion() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
+
+    let r = Sesion.aplicar(token: nil, en: almacen, marca: marca, cola: cola)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertFalse(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testSiFallaElKeychain_NoSeOlvidaNada() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
+    almacen.falla = ErrorAlmacenSesion(operacion: "guardar", estado: -25308)
+
+    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca, cola: cola)
+
+    guard case .errorAlmacenamiento = r.resultado else { return XCTFail("Debió fallar") }
+    XCTAssertTrue(r.haySesion, "Sigue el token anterior")
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02",
+                   "El token no cambió, así que la cuenta tampoco")
+    XCTAssertEqual(cola.pendientes(), ["2026-09-25"])
+  }
+
+  func testElPrimerLogin_NoTeniaMarca_YQuedaSesion() {
+    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertTrue(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
+  }
+}
+
 /// `actualizarSesion`: qué hace Swift con lo que entrega Flutter.
 final class SesionAplicarTests: XCTestCase {
 

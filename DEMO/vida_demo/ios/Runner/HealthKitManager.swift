@@ -363,10 +363,14 @@ final class HealthKitManager {
     /// fallaron al enviarse a Luis.
     private let syncQueue = SyncQueue()
 
+    /// Hasta qué día llegó todo al servidor: de ahí sale qué mandar al
+    /// ponerse al día (ver `ponerseAlDia()`).
+    private let marcaEnvios = MarcaEnvios()
+
     // MARK: - Estado
 
     private(set) var autorizado: Bool = false
-    private(set) var errorBackfill: String?
+    private(set) var errorPonerseAlDia: String?
     private(set) var errorReintento: String?
 
     /// Dónde vive el token de la sesión. Lo entrega Flutter con
@@ -383,16 +387,13 @@ final class HealthKitManager {
     /// (ver mock_luis_server.py). No debe llegar así a TestFlight.
     private var baseURLTexto: String = "http://192.168.1.21:8000"
 
-    private static let claveBackfillInicialHecho = "vida.backfillInicialHecho"
-
-    /// El último backfill recorrió los días pedidos sin abortar por un error
-    /// permanente. Días encolados por falta de red no cuentan como abortar:
-    /// quedaron a salvo en la cola de reintentos.
-    private var huboRecorridoCompleto = false
+    /// La bandera del backfill de antes (una sola vez por instalación). La
+    /// reemplaza `MarcaEnvios`; se borra al arrancar para no dejar basura.
+    private static let claveBackfillViejo = "vida.backfillInicialHecho"
 
     private var enviando = false
     private var reintentando = false
-    private var backfillEnProgreso = false
+    private var poniendoseAlDia = false
 
     /// Respuesta del envío de HOY — lo que arma el resultado que vuelve por
     /// el MethodChannel a Flutter.
@@ -403,15 +404,15 @@ final class HealthKitManager {
     private(set) var pendientesEnCola: Int = 0
 
     /// Hay una operación de red en curso. Las tres acciones (enviar hoy,
-    /// reintentar, backfill) pegan al mismo endpoint y tocan la misma cola,
-    /// así que nunca deben correr en paralelo — ver detalle en el spike
-    /// original (misma razón, portada tal cual).
-    var ocupado: Bool { enviando || reintentando || backfillEnProgreso }
+    /// reintentar, ponerse al día) pegan al mismo endpoint y tocan la misma
+    /// cola — ver detalle en el spike original (misma razón, portada tal cual).
+    var ocupado: Bool { enviando || reintentando || poniendoseAlDia }
 
     private init() {
         // Sin esto el contador arranca en 0 aunque haya días esperando en
         // disco desde una sesión anterior de la app.
         pendientesEnCola = syncQueue.pendientes().count
+        UserDefaults.standard.removeObject(forKey: Self.claveBackfillViejo)
     }
 
     // MARK: - Tipos de HealthKit que leemos (v1: pasos, ritmo cardíaco, workouts)
@@ -462,20 +463,10 @@ final class HealthKitManager {
 
         autorizado = true
 
-        // Primera sincronización del historial (A9). Antes esto no lo llamaba
-        // nadie y el backfill era código inalcanzable: un usuario nuevo
-        // entraba con cero historial.
-        //
-        // Sin `await` a propósito: son hasta 7 días × red, y Flutter está
-        // esperando la respuesta del permiso — no puede colgarse por esto.
-        // Los días que fallen quedan en la cola de reintentos (A8) y drenan
-        // solos al volver del background.
-        //
-        // Y solo se dispara con acceso confirmado: con el permiso negado,
-        // los 7 días saldrían vacíos, Luis respondería 200 a todos, y la
-        // bandera de "backfill ya hecho" se quemaría para siempre con cero
-        // datos guardados.
-        Task { await self.sincronizarHistorialSiEsPrimeraVez() }
+        // Con acceso recién confirmado, se manda lo que falte (la primera vez,
+        // los últimos 7 días). Sin `await` a propósito: son varios días × red,
+        // y Flutter está esperando la respuesta del permiso.
+        Task { await self.ponerseAlDia() }
 
         return .concedido(visibles: visibles)
     }
@@ -545,8 +536,8 @@ final class HealthKitManager {
 
     // MARK: - construirPayload() (A9)
     // Arma el JSON #1 del contrato v3 para un día calendario cualquiera.
-    // Comparten esta misma lógica tanto el envío real (enviarSincronizacion)
-    // como el backfill (sincronizarHistorial).
+    // Comparten esta misma lógica el envío de hoy (enviarSincronizacion), la
+    // cola (reintentarPendientes) y ponerse al día (ponerseAlDia).
 
     private func construirPayload(fecha: Date) async throws -> SyncPayload {
         let inicioDia = Calendar.current.startOfDay(for: fecha)
@@ -632,69 +623,85 @@ final class HealthKitManager {
             respuestaEnvioHoy = respuesta
             respuestaEnvioHoyEn = ahora
             syncQueue.remover(fecha: payload.fecha)
+            marcaEnvios.registrarEnviado(payload.fecha)
             pendientesEnCola = syncQueue.pendientes().count
             // Si esto sí llegó, probablemente ya hay red — aprovechamos para
             // intentar vaciar lo que haya quedado pendiente de antes.
             await reintentarPendientes()
             return .ok(sincronizadoEn: ahora)
         } catch {
-            if esReintentable(error) {
+            // Misma regla que la cola y el backfill (`AccionDiaFallido`). Acá
+            // hay un solo día, así que "seguir" y "cortar" dan lo mismo.
+            switch AccionDiaFallido.para(error) {
+            case .reintentarDespues:
                 syncQueue.encolar(fecha: payload.fecha)
                 pendientesEnCola = syncQueue.pendientes().count
                 return .encolado(detalle: error.localizedDescription)
-            } else {
+            case .tomarComoEnviado:
+                // Llegó (2xx); solo no se entendió la respuesta. Se queda sin
+                // `respuestaEnvioHoy` nueva, pero el dato está en el servidor.
+                syncQueue.remover(fecha: payload.fecha)
+                marcaEnvios.registrarEnviado(payload.fecha)
+                pendientesEnCola = syncQueue.pendientes().count
+                return .ok(sincronizadoEn: Date())
+            case .descartarYSeguir, .descartarYCortar:
                 // Permanente: encolarlo solo dejaría la cola atascada.
                 return .errorPermanente(detalle: error.localizedDescription)
             }
         }
     }
 
-    // MARK: - esReintentable() (A8)
-    // La política vive en `ApiError.esReintentable` (ver ApiClient.swift). Un
-    // error que no es de `ApiError` (red caída, tiempo agotado) se reintenta.
-    private func esReintentable(_ error: Error) -> Bool {
-        (error as? ApiError)?.esReintentable ?? true
-    }
-
     // MARK: - reintentarPendientes() (A8)
     // Recorre la cola persistida y reintenta cada día. Idempotente del lado
     // de Luis (external_id, L4): reintentar un payload ya guardado nunca
     // duplica una fila en el ledger.
-    func reintentarPendientes() async {
-        guard !reintentando else { return }
+    /// Devuelve cómo terminó: `ponerseAlDia()` no sigue si la cola se cortó
+    /// por un fallo general (fallaría igual).
+    @discardableResult
+    func reintentarPendientes() async -> FinDeVuelta {
+        guard !reintentando else { return .completa }
 
         let dias = syncQueue.pendientes()
         pendientesEnCola = dias.count
-        guard !dias.isEmpty else { return }
+        guard !dias.isEmpty else { return .completa }
 
         // Sin sesión los días se quedan donde están: no se lee HealthKit ni se
         // toca la cola. Se intenta de nuevo cuando vuelva a primer plano.
         guard haySesion else {
             errorReintento = ApiError.sinSesion.localizedDescription
-            return
+            return .cortadaPorFalloGeneral
         }
 
         guard let cliente = try? clienteAPI() else {
             errorReintento = "La URL del backend no es válida."
-            return
+            return .cortadaPorRechazo
         }
 
         reintentando = true
         errorReintento = nil
         defer { reintentando = false }
 
-        var fallaron = 0
-
+        // Una fecha que no se puede leer no se va a poder mandar nunca.
+        var fechas: [String: Date] = [:]
         for dia in dias {
-            guard let fecha = FormatoFechas.diaCalendario.date(from: dia) else {
+            if let fecha = FormatoFechas.diaCalendario.date(from: dia) {
+                fechas[dia] = fecha
+            } else {
                 syncQueue.remover(fecha: dia)
-                continue
             }
+        }
 
-            do {
+        var fallaron = 0
+        var descartados = 0
+
+        let fin = await RecorridoDias.recorrer(
+            dias.filter { fechas[$0] != nil },
+            enviar: { dia in
+                guard let fecha = fechas[dia] else { return false }
+
                 // Se reconstruye el día desde HealthKit en vez de mandar una
                 // foto vieja — ver razón completa en SyncQueue.swift.
-                let payload = try await construirPayload(fecha: fecha)
+                let payload = try await self.construirPayload(fecha: fecha)
 
                 // Ante la duda, el día se queda pendiente: un payload vacío
                 // puede ser un día sin actividad, pero también un permiso de
@@ -702,24 +709,35 @@ final class HealthKitManager {
                 // distinguirlos.
                 guard !payload.pasos.isEmpty
                         || !payload.sesiones.isEmpty
-                        || !payload.frecuencia_cardiaca.isEmpty else {
-                    fallaron += 1
-                    continue
-                }
+                        || !payload.frecuencia_cardiaca.isEmpty else { return false }
 
                 _ = try await cliente.enviarSincronizacion(payload)
-                syncQueue.remover(fecha: dia)
-                pendientesEnCola = syncQueue.pendientes().count
-            } catch {
-                fallaron += 1
-
-                if !esReintentable(error) {
-                    syncQueue.remover(fecha: dia)
-                    errorReintento = "Día \(dia): \(error.localizedDescription)"
-                    break
+                return true
+            },
+            registrar: { dia, desenlace in
+                // Qué pasa con el día en la cola: `DesenlaceDia.efectoEnReintento`.
+                self.syncQueue.aplicar(desenlace.efectoEnReintento, a: dia)
+                if desenlace.avanzaMarca {
+                    self.marcaEnvios.registrarEnviado(dia)
                 }
+                switch desenlace {
+                case .enviado:
+                    break
+                case .saltado, .reintentarDespues:
+                    fallaron += 1
+                case .descartado:
+                    // Demasiado viejo: no va a entrar nunca. Los demás días
+                    // de la vuelta siguen.
+                    descartados += 1
+                case .cortado(let error):
+                    // Los días que quedaban siguen en la cola y salen en la
+                    // próxima vuelta.
+                    fallaron += 1
+                    self.errorReintento = "Día \(dia): \(error.localizedDescription)"
+                }
+                self.pendientesEnCola = self.syncQueue.pendientes().count
             }
-        }
+        )
 
         pendientesEnCola = syncQueue.pendientes().count
 
@@ -728,87 +746,96 @@ final class HealthKitManager {
                 ? "1 día sigue sin poder enviarse."
                 : "\(fallaron) días siguen sin poder enviarse."
         }
+        if descartados > 0 && errorReintento == nil {
+            errorReintento = descartados == 1
+                ? "1 día tenía más de 14 días y el servidor ya no lo acepta: se descartó."
+                : "\(descartados) días tenían más de 14 días y el servidor ya no los acepta: se descartaron."
+        }
+        return fin
     }
 
-    // MARK: - sincronizarHistorial() (A9)
-    // Trae los últimos `dias` días (hoy incluido) y los manda uno por uno.
-    // Secuencial a propósito: varias HKSampleQuery en paralelo para el mismo
-    // tipo no ganan velocidad, solo compiten entre sí.
+    // MARK: - ponerseAlDia()
+    // Manda "desde el último día enviado hasta hoy" (la primera vez, los
+    // últimos 7 días). Reemplaza al backfill de una sola vez por instalación:
+    // antes, después del primer día nadie mandaba los días nuevos.
+    //
+    // Se dispara al confirmar el permiso de Salud, al llegar un token
+    // (`actualizarSesion`) y cada vez que la app vuelve a primer plano
+    // (SceneDelegate). Secuencial a propósito: varias HKSampleQuery en
+    // paralelo para el mismo tipo no ganan velocidad, solo compiten.
 
-    func sincronizarHistorial(dias: Int = 7) async {
-        backfillEnProgreso = true
-        errorBackfill = nil
-        defer { backfillEnProgreso = false }
+    func ponerseAlDia() async {
+        // Flutter manda el token al abrir la app y SceneDelegate avisa que
+        // volvió a primer plano casi al mismo tiempo: una sola vuelta basta.
+        guard !poniendoseAlDia else { return }
+        poniendoseAlDia = true
+        errorPonerseAlDia = nil
+        defer { poniendoseAlDia = false }
 
-        // Sin sesión el backfill no se da por hecho: la bandera de "ya hecho"
-        // no se enciende y se intenta de nuevo cuando la haya (ver contrato,
-        // "Backfill de los últimos 7 días").
-        guard haySesion else {
-            errorBackfill = ApiError.sinSesion.localizedDescription
-            huboRecorridoCompleto = false
+        // Primero la cola: días que fallaron antes, que pueden ser más viejos
+        // que la marca. Si se cortó por un fallo general (sin red, servidor
+        // caído, token rechazado), los días nuevos fallarían igual: se
+        // intentan la próxima vez, desde la marca, que no se movió.
+        guard await reintentarPendientes() != .cortadaPorFalloGeneral else {
+            errorPonerseAlDia = errorReintento
             return
         }
 
-        let hoy = Calendar.current.startOfDay(for: Date())
-        let fechas = (0..<dias).compactMap {
-            Calendar.current.date(byAdding: .day, value: -$0, to: hoy)
+        // Sin sesión no hay a nombre de quién enviar: la marca no se mueve y
+        // se intenta de nuevo cuando llegue el token.
+        guard haySesion else {
+            errorPonerseAlDia = ApiError.sinSesion.localizedDescription
+            return
         }
 
         guard let cliente = try? clienteAPI() else {
-            errorBackfill = "La URL del backend no es válida."
+            errorPonerseAlDia = "La URL del backend no es válida."
             return
         }
 
+        let dias = marcaEnvios.diasPorMandar()
         var encolados = 0
-        huboRecorridoCompleto = true
 
-        for fecha in fechas {
-            let dia = FormatoFechas.diaCalendario.string(from: fecha)
+        await RecorridoDias.recorrer(
+            dias,
+            enviar: { dia in
+                guard let fecha = FormatoFechas.diaCalendario.date(from: dia) else { return false }
 
-            do {
-                let payload = try await construirPayload(fecha: fecha)
+                let payload = try await self.construirPayload(fecha: fecha)
 
                 // Mismo criterio que en reintentarPendientes(): un día vacío
                 // puede ser un día sin actividad, pero también un permiso
                 // denegado — HealthKit no permite distinguirlos. Mandarlo haría
-                // que Luis lo dé por entregado con cero datos y ese día no se
-                // vuelva a mandar nunca.
+                // que Luis lo dé por entregado con cero datos.
                 guard !payload.pasos.isEmpty
                         || !payload.sesiones.isEmpty
-                        || !payload.frecuencia_cardiaca.isEmpty else { continue }
+                        || !payload.frecuencia_cardiaca.isEmpty else { return false }
 
                 _ = try await cliente.enviarSincronizacion(payload)
-                syncQueue.remover(fecha: dia)
-            } catch {
-                if esReintentable(error) {
-                    syncQueue.encolar(fecha: dia)
+                return true
+            },
+            registrar: { dia, desenlace in
+                // Qué pasa con el día en la cola: `DesenlaceDia.efectoAlPonerseAlDia`.
+                self.syncQueue.aplicar(desenlace.efectoAlPonerseAlDia, a: dia)
+                if desenlace.avanzaMarca {
+                    self.marcaEnvios.registrarEnviado(dia)
+                }
+                if case .reintentarDespues = desenlace {
                     encolados += 1
-                } else {
-                    errorBackfill = "Día \(dia): \(error.localizedDescription)"
-                    huboRecorridoCompleto = false
-                    break
+                }
+                if case .cortado(let error) = desenlace {
+                    self.errorPonerseAlDia = "Día \(dia): \(error.localizedDescription)"
                 }
             }
-        }
+        )
 
         pendientesEnCola = syncQueue.pendientes().count
 
-        if encolados > 0 && errorBackfill == nil {
-            errorBackfill = encolados == 1
+        if encolados > 0 && errorPonerseAlDia == nil {
+            errorPonerseAlDia = encolados == 1
                 ? "1 día no se pudo enviar — quedó en la cola de reintentos."
                 : "\(encolados) días no se pudieron enviar — quedaron en la cola de reintentos."
         }
-    }
-
-    /// Dispara el backfill solo la primera vez — mientras no exista login
-    /// real (L10/D6), "primera vez" se simula con una bandera local.
-    func sincronizarHistorialSiEsPrimeraVez(dias: Int = 7) async {
-        guard !UserDefaults.standard.bool(forKey: Self.claveBackfillInicialHecho) else { return }
-
-        await sincronizarHistorial(dias: dias)
-
-        guard huboRecorridoCompleto else { return }
-        UserDefaults.standard.set(true, forKey: Self.claveBackfillInicialHecho)
     }
 
     // MARK: - actualizarSesion()
@@ -817,7 +844,17 @@ final class HealthKitManager {
     // Nunca se escribe el token en logs.
 
     func actualizarSesion(token: String?) -> ResultadoActualizarSesion {
-        Sesion.aplicar(token: token, en: almacenSesion)
+        // Si cambió la cuenta, también olvida hasta qué día se había mandado
+        // y la cola (ver `Sesion.aplicar(token:en:marca:cola:)`).
+        let (resultado, haySesion) = Sesion.aplicar(
+            token: token, en: almacenSesion, marca: marcaEnvios, cola: syncQueue)
+        pendientesEnCola = syncQueue.pendientes().count
+        // Con sesión, se manda lo que falte. Sin `await`: Flutter espera esta
+        // respuesta y no puede colgarse por la red.
+        if resultado == .ok && haySesion {
+            Task { await self.ponerseAlDia() }
+        }
+        return resultado
     }
 
     // MARK: - Pasos crudos (una entrada por HKQuantitySample)
