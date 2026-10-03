@@ -4,6 +4,12 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 3 oct 2026** (cierre semanal): la semana se cierra el **martes
+00:00**, no el lunes: los datos atrasados del domingo tienen **todo el lunes**
+para llegar (como StepBet, 24 h). Ya está en el código (A34). El objetivo de la
+semana nueva se sigue fijando el lunes 00:00. Ver "Ciclos y cortes" y "Cierre
+semanal programado".
+
 **Actualizado el 3 oct 2026** (La Liga): las monedas de La Liga van a **los 3
 primeros** del mes, no por percentil. Ver "La Liga y Tus Ligas".
 
@@ -637,9 +643,10 @@ el jueves 1 oct, y según esta regla empezó el lunes 28 sep.
 - **Sin tope de acumulación.** Reemplaza el tope de 100.
 - **Todas las monedas caducan al cerrar la season:** el saldo vuelve a 0.
   Reemplaza la caducidad de 90 días por cada ganancia.
-- **Orden al cambiar de season:** el lunes 00:00 en que empieza una season,
-  primero se reinicia el saldo y **después** se paga la semana que acaba de
-  cerrar. Así las monedas de la última semana cuentan en la season nueva.
+- **Orden al cambiar de season:** el saldo se reinicia el lunes 00:00 en que
+  empieza la season, y la semana que acaba de terminar se paga **después**, en
+  su cierre del martes 00:00. Así las monedas de la última semana cuentan en la
+  season nueva.
 - **Aviso:** se quita el aviso al llegar a 80 (existía por el tope). En su
   lugar se avisa **7 días antes** de que termine la season.
 - Sin póliza verificada se ganan igual pero no se pueden gastar, y al cerrar la
@@ -657,16 +664,22 @@ caducidad de 90 días, y nada reinicia el saldo al cambiar de season.
   no ve ningún estado intermedio — la semana nueva ya aparece corriendo con
   normalidad desde las 00:00, sin pantalla de "evaluando" ni aviso de cambio
   de objetivo.
-- El servidor sigue aceptando datos atrasados de la semana recién cerrada
-  hasta el **mediodía del lunes** (período de gracia), pero esa corrida ya
-  **no cambia el objetivo** que se fijó a las 00:00 — solo corrige el
-  acumulado anual de puntos y el historial.
+- **Margen de gracia (decidido 3 oct 2026): el resultado de la semana se fija
+  el martes 00:00.** Los datos atrasados del domingo tienen **todo el lunes**
+  para llegar (por ejemplo, de alguien que no abrió la app el domingo) y
+  cuentan para `cumplido` y para las monedas. El martes 12:00 una corrida de
+  corrección actualiza los acumulados, pero ya no cambia `cumplido` ni paga. Un
+  ciclo cerrado no se reabre. Antes se cerraba el lunes 00:00 y un domingo que
+  llegaba tarde nunca completaba el objetivo (StepBet da 24 h; Discovery
+  Vitality, 48 h).
+- **El lunes**, la semana que terminó el domingo todavía no tiene resultado: si
+  la app la muestra, va "en revisión" hasta el martes.
 - Huso horario: **zona horaria de Guatemala**, por ahora — para el piloto
   (todo Guatemala) una sola corrida alcanza.
 
-**Nota:** con esto, un día atrasado que llega entre las 00:00 y el mediodía
-del lunes ya no puede subirle ni bajarle el objetivo a nadie — solo cuenta
-para el historial y el acumulado anual. Es una simplificación deliberada: como
+**Nota:** con esto, un día atrasado que llega después del cierre del martes ya
+no puede subirle ni bajarle el objetivo a nadie — solo cuenta para el historial y
+el acumulado anual. Es una simplificación deliberada: como
 el objetivo ya no baja (se congela), el peor caso de decidir temprano es que
 alguien no suba de objetivo esa semana aunque en realidad sí había cumplido —
 no se pierde progreso acumulado, solo una semana de avance.
@@ -718,10 +731,13 @@ hay objetivo máximo que registrar mientras no haya progresión).
   primera arranca con 30.000 pasos y 1 workout.
 - `progreso` se calcula en vivo: la suma de `pasos_totales_dia` y de workouts
   de `resumen_diario` de lunes a domingo.
-- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del lunes** fija
-  `cumplido` de la semana que terminó y paga `monedas_al_cumplir` a quien
-  cumplió; con `--correccion`, a las **12:00**, solo actualiza los acumulados
-  (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces. Lo
+- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del martes** fija
+  `cumplido` de la semana que terminó el domingo y paga `monedas_al_cumplir` a
+  quien cumplió; con `--correccion`, a las **12:00 del martes**, solo actualiza
+  los acumulados (no cambia `cumplido` ni paga). Antes del martes no cierra
+  nada: el margen vive en `goals.DIAS_DE_GRACIA` (1 día) y vale también para la
+  puesta al día, así que un servidor que arranca un lunes no cierra la semana
+  antes de tiempo. Correrlo dos veces no paga dos veces. Lo
   dispara el servicio `programador` (ver "Cierre semanal programado").
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
   **gastarlas**. Hoy el código aplica el tope de 100 y la caducidad de 90 días;
@@ -731,18 +747,18 @@ hay objetivo máximo que registrar mientras no haya progresión).
   vinculada") **sí** cuentan para el progreso de la semana en curso. Las
   monedas solo se anulan si la semana entera cerró antes de la verificación.
 
-### Cierre semanal programado (1 oct)
+### Cierre semanal programado (1 oct; martes desde el 3 oct)
 
 **Quién lo corre.** El servicio `programador` de `mas-vida_backend/compose.yaml`,
 que ejecuta `python manage.py programador`:
 
-- **Al arrancar se pone al día:** cierra las semanas ya terminadas que sigan sin
-  cerrar, hasta **4 semanas atrasadas** (más viejas se omiten y queda un aviso en
+- **Al arrancar se pone al día:** cierra las semanas que ya pasaron su margen de
+  gracia y sigan sin cerrar, hasta **4 semanas atrasadas** (más viejas se omiten y queda un aviso en
   el log, para no pagar monedas de hace meses al arrancar por primera vez).
-- **Lunes 00:00** → cierre: fija `cumplido` y paga. También pone al día lo que
-  haya quedado pendiente, así que **un lunes que falló se recupera solo** en la
+- **Martes 00:00** → cierre: fija `cumplido` y paga. También pone al día lo que
+  haya quedado pendiente, así que **un martes que falló se recupera solo** en la
   corrida siguiente.
-- **Lunes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
+- **Martes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
 - Siempre **hora de Guatemala**, sin importar en qué zona esté el servidor.
 - Si una corrida falla (por ejemplo la base de datos caída un momento) reintenta
   cada 5 minutos, hasta 12 veces, y nunca se cae por un error. Si el servidor
@@ -758,9 +774,9 @@ que ejecuta `python manage.py programador`:
 
 | Opción | Qué hace |
 |---|---|
-| (ninguna) | Cierra solo la semana anterior a hoy |
+| (ninguna) | Cierra solo la semana anterior a hoy (un lunes avisa que todavía está en su margen y no cierra) |
 | `--ponerse-al-dia` | Cierra todas las semanas terminadas sin cerrar (tope de 4) |
-| `--correccion` | Corrida de las 12:00: solo actualiza acumulados |
+| `--correccion` | Corrida del martes 12:00: solo actualiza acumulados |
 | `--fecha AAAA-MM-DD` | Trata esa fecha como "hoy" (para simular o recuperar) |
 
 `--ponerse-al-dia` no se combina con `--correccion`. `programador --una-vez` hace
@@ -772,16 +788,16 @@ programan dos tareas semanales en el servidor. Guatemala es UTC−6 todo el año
 
 | Cuándo | Hora UTC | Comando |
 |---|---|---|
-| Lunes, cierre | 06:05 | `python manage.py cerrar_semana --ponerse-al-dia` |
-| Lunes, corrección | 18:05 | `python manage.py cerrar_semana --correccion` |
+| Martes, cierre | 06:05 | `python manage.py cerrar_semana --ponerse-al-dia` |
+| Martes, corrección | 18:05 | `python manage.py cerrar_semana --correccion` |
 
 Los cinco minutos de margen son a propósito. Si lo dispara un programador
 externo (por ejemplo uno de AWS) y el reloj del servidor va unos segundos
-atrasado, a las 06:00 en punto el comando todavía vería domingo en Guatemala y no
-cerraría nada hasta el lunes siguiente.
+atrasado, a las 06:00 en punto el comando todavía vería lunes en Guatemala y no
+cerraría nada hasta el martes siguiente.
 
-**Las monedas se pagan con la fecha del día en que corre el cierre**, no con la
-fecha de la semana que se cerró. Desde el 2 oct ya no caducan a los 90 días sino
+**Las monedas se pagan con la fecha del día en que corre el cierre** (el martes),
+no con la fecha de la semana que se cerró. Desde el 2 oct ya no caducan a los 90 días sino
 al cerrar la season (ver "Monedas y seasons"): una semana que se cierra con
 retraso, si mientras tanto empezó otra season, paga en la season nueva.
 
@@ -1372,14 +1388,12 @@ verificación" son el mismo momento.
   intento por apertura.
 - **Un día ausente es ambiguo** — ver "Días sin actividad" arriba. Afecta la
   evaluación del objetivo semanal.
-- **Cuándo se fija el objetivo semanal:** se calcula y fija a las **00:00 del
-  lunes**, con los datos hasta el corte del domingo 23:59 — no espera al
-  mediodía, y el usuario no ve ningún estado intermedio. Sigue existiendo una
-  corrida a las **12:00 del lunes**, pero esa ya no cambia el objetivo — solo
-  acepta datos atrasados para el acumulado anual y el historial. El motor de
-  objetivos necesita **dos corridas programadas** (00:00 y 12:00), no un cálculo
-  en vivo al cierre del domingo. Ya las programa el servicio `programador` (ver
-  "Cierre semanal programado").
+- **Cuándo se fija el objetivo semanal:** el objetivo de la semana nueva rige
+  desde las **00:00 del lunes**. El **resultado** de la semana que terminó
+  (`cumplido` y monedas) se fija el **martes 00:00**, después del margen de
+  gracia del lunes (decidido 3 oct, hecho en A34 por Alvaro); el martes 12:00
+  una corrección actualiza acumulados sin cambiar el resultado. Las dos corridas
+  las programa el servicio `programador` (ver "Cierre semanal programado").
 - **Objetivos semanales (L11) — implementado para el demo 1 (1 oct; ver "Cómo
   está construido hoy"). Lo que sigue vigente del ticket:** un
   objetivo sin progresión (meta de pasos totales de la semana + meta de
@@ -1439,9 +1453,9 @@ verificación" son el mismo momento.
     vencidos) y patrocinios.
   - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
     (hoy por año calendario), y prima anual en el registro de la aseguradora.
-- **Sincronización (3 oct) [PENDIENTE]:** el margen de gracia del cierre
-  semanal y, para las notificaciones push, guardar los dispositivos y mandar el
-  recordatorio (ver "Puntos abiertos"). Lo puede hacer Luis o Alvaro.
+- **Sincronización (3 oct) [PENDIENTE]:** para las notificaciones push, guardar
+  los dispositivos y mandar el recordatorio (ver "Puntos abiertos"). Lo puede
+  hacer Luis o Alvaro. El margen de gracia del cierre ya está hecho (A34).
 
 ## Notas para Daniel (Flutter)
 
@@ -1519,8 +1533,10 @@ verificación" son el mismo momento.
   de edad ni sub-ligas. **Tus Ligas:** cualquiera se une (con o sin póliza),
   sin premios. **Duelos 1 contra 1: eliminar.**
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia
-  después** — no hace falta construir ningún estado de "evaluando" ni
-  pantalla de carga especial entre domingo y lunes al mediodía.
+  después** — la semana nueva arranca normal, sin pantalla de "evaluando".
+  **Desde el 3 oct:** el **resultado** de la semana anterior (si se completó y
+  sus monedas) llega el **martes 00:00**. Si el lunes la app muestra la semana
+  que terminó, va "en revisión", no "no cumplida".
 - `dispositivo_*` (nuevo) no cambia nada del lado de Flutter — son campos que
   Swift agrega al payload de sync; Daniel no los toca ni los muestra.
 - Nada de SDKs de terceros (ej. Firebase) puede tocar datos de HealthKit, ni
@@ -1568,8 +1584,9 @@ verificación" son el mismo momento.
   mitad de una vuelta. Solo se prueba en un iPhone real.
 - **[PENDIENTE] Identidad de la app:** el identificador es
   `com.example.vidaDemo`. Push y *background delivery* se configuran en Apple
-  Developer para un identificador concreto: hay que fijar el definitivo antes.
-  Lo mismo la URL del backend (IP fija, A10) antes de TestFlight.
+  Developer para un identificador concreto: hay que fijar el definitivo antes
+  (ver "Puntos abiertos"). Lo mismo la URL del backend (IP fija, A10) antes de
+  TestFlight.
 - **Carrera angosta (anotada):** si un envío de la cuenta anterior sigue en vuelo
   cuando entra otra cuenta, puede mover la marca de la nueva, que recibiría
   menos días.
@@ -1592,12 +1609,14 @@ verificación" son el mismo momento.
 
 *Del 3 oct (sincronización):*
 
-- **Margen de gracia del cierre semanal (Luis o Alvaro):** hoy el lunes 00:00
-  fija `cumplido` y paga, y la corrida de las 12:00 actualiza totales pero no
-  cambia `cumplido`: un domingo que llega tarde nunca completa el objetivo.
-  Discovery Vitality espera hasta el martes a medianoche; StepBet da 24 h.
-  Decidir: cerrar el martes 00:00, o el lunes 12:00. La regla "un ciclo cerrado
-  no se reabre" se mantiene.
+- **Identificador definitivo de la app (*bundle ID*):** hoy es
+  `com.example.vidaDemo`, el de ejemplo de Flutter. Es el nombre de la app para
+  Apple (App Store, Apple Developer, notificaciones push, permisos de Salud), no
+  la dirección del backend. **Una vez publicada no se puede cambiar** (sería otra
+  app). Candidato: `com.assures.masvida`, que ya usan el canal de Swift y el
+  Keychain. Frena A32 (segundo plano) y las notificaciones push.
+- **Margen de gracia del cierre semanal — resuelto (3 oct):** martes 00:00
+  (ver "Ciclos y cortes"). Hecho en A34.
 - **Notificaciones push:** cómo se registra el teléfono (directo en Swift con
   APNs, recomendado: sin un tercero con datos del usuario, o con Firebase desde
   Flutter) y cuándo suena el recordatorio (24 h sin datos, domingo en la tarde,
