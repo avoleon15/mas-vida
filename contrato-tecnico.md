@@ -624,9 +624,13 @@ lunes 4 ene 2027.
   reemplaza la regla anterior (corte el 1 de enero, abril, julio y octubre,
   aunque cayera a media semana).
 
-**[PENDIENTE] (Luis):** el código (`services/tiempo.py`) todavía calcula las
-seasons por trimestre de calendario: para el código la season 4 de 2026 empezó
-el jueves 1 oct, y según esta regla empezó el lunes 28 sep.
+**Hecho en el código (2 oct):** `services/tiempo.py` calcula las seasons por
+semanas ISO (`numero_season`, `anio_season` y `rango_season`). El año de la
+season es el **año ISO**: el 3 ene 2027 todavía es de la season 4 de 2026, y el
+29 dic 2025 ya es de la season 1 de 2026. `GET /api/v1/retos/estado` devuelve
+esa season y su `fecha_cierre` (domingo de cierre). La tabla `Season` se llena
+sola al pedir la season, y corrige las filas que se hayan guardado con la regla
+vieja de trimestres.
 
 ### Monedas y seasons (decidido 2 oct 2026)
 
@@ -690,7 +694,7 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
     "workouts_acumulados": 0,
     "cumplido": false
   },
-  "season": { "numero": 3, "fecha_cierre": "2026-09-30" },
+  "season": { "numero": 3, "fecha_cierre": "2026-09-27" },
   "historial_seasons": []
 }
 ```
@@ -1414,7 +1418,7 @@ verificación" son el mismo momento.
   - Objetivo semanal: pago por componente (5 + 5 provisional), meta de pasos
     por rango de edad y lista de semanas de la season para la vista "battle
     pass".
-  - Seasons por semanas ISO (hoy por trimestre de calendario).
+  - ~~Seasons por semanas ISO~~ — **hecho** (2 oct): ver "Seasons".
   - Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
     cambia (primero reiniciar, después pagar).
   - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
@@ -1612,8 +1616,10 @@ verificación" son el mismo momento.
 - **Cuándo se paga el cashback:** ¿al cerrar cada año de póliza (en la
   renovación, después de pagar la prima)?
 - **Transición de la season en curso:** según la regla nueva, la season 4 de
-  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas); el
-  código la empezó el jueves 1 oct. Hay que decidir si se corrige hacia atrás.
+  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas), y
+  el código ya la calcula así (2 oct). Falta decidir qué pasa con las monedas
+  que se pagaron en las semanas de la season 3 (hasta el 27 sep) cuando se
+  construya el reinicio de saldo: ¿se reinician el 28 sep o no se tocan?
 
 *Encontrados en la revisión contra el código (1 oct):*
 

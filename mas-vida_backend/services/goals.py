@@ -30,7 +30,13 @@ from Apps.objetivos.models import CumplimientoSemanal, ObjetivoSemanal, Season
 from Apps.users.models import Usuario
 from services import monedas
 from services.polizas import fecha_corte_sin_retroactivo
-from services.tiempo import fin_semana, inicio_semana, numero_season, rango_season
+from services.tiempo import (
+    anio_season,
+    fin_semana,
+    inicio_semana,
+    numero_season,
+    rango_season,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +91,21 @@ def objetivo_de_la_semana(fecha: date) -> ObjetivoSemanal:
 
 
 def season_de(fecha: date) -> Season:
-    """Season (trimestre) que contiene `fecha`; la crea si no existe."""
+    """Season (13 semanas ISO) que contiene `fecha`; la crea si no existe.
+
+    Si la fila ya existía con otras fechas (se guardó con la regla vieja de
+    trimestres de calendario), se corrige: las fechas las manda siempre el
+    cálculo, no lo que haya quedado guardado.
+    """
     inicio, fin = rango_season(fecha)
-    season, _ = Season.objects.get_or_create(
-        anio=fecha.year,
+    season, creada = Season.objects.get_or_create(
+        anio=anio_season(fecha),
         numero=numero_season(fecha),
         defaults={"fecha_inicio": inicio, "fecha_fin": fin},
     )
+    if not creada and (season.fecha_inicio, season.fecha_fin) != (inicio, fin):
+        season.fecha_inicio, season.fecha_fin = inicio, fin
+        season.save(update_fields=["fecha_inicio", "fecha_fin"])
     return season
 
 

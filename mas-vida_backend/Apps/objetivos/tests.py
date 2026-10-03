@@ -44,14 +44,6 @@ class TiempoTests(TestCase):
     def test_el_lunes_ya_es_otra_semana(self):
         self.assertEqual(inicio_semana(date(2026, 9, 28)), date(2026, 9, 28))
 
-    def test_seasons_trimestrales_en_fechas_fijas(self):
-        self.assertEqual(rango_season(date(2026, 9, 30)), (date(2026, 7, 1), date(2026, 9, 30)))
-        self.assertEqual(numero_season(date(2026, 9, 30)), 3)
-        self.assertEqual(rango_season(date(2026, 10, 1)), (date(2026, 10, 1), date(2026, 12, 31)))
-        self.assertEqual(numero_season(date(2026, 10, 1)), 4)
-        self.assertEqual(rango_season(date(2027, 1, 1)), (date(2027, 1, 1), date(2027, 3, 31)))
-        self.assertEqual(rango_season(date(2026, 2, 28)), (date(2026, 1, 1), date(2026, 3, 31)))
-
 
 class ObjetivoTests(TestCase):
     def test_la_primera_semana_usa_las_metas_iniciales(self):
@@ -76,9 +68,12 @@ class ObjetivoTests(TestCase):
 
     def test_la_season_se_crea_una_sola_vez(self):
         a = goals.season_de(date(2026, 9, 1))
-        b = goals.season_de(date(2026, 9, 30))
+        b = goals.season_de(date(2026, 9, 27))  # último día de la season 3
         self.assertEqual(a.pk, b.pk)
-        self.assertEqual((a.numero, a.anio, a.fecha_fin), (3, 2026, date(2026, 9, 30)))
+        self.assertEqual(
+            (a.numero, a.anio, a.fecha_inicio, a.fecha_fin),
+            (3, 2026, date(2026, 6, 29), date(2026, 9, 27)),
+        )
 
     def test_cumplido_exige_las_dos_metas(self):
         objetivo = goals.objetivo_de_la_semana(LUNES)
