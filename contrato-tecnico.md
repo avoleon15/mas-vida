@@ -4,6 +4,15 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 3 oct 2026** (sincronización): Swift ya no hace un backfill de
+una sola vez: **cada vez que la app se abre** (y al iniciar sesión y al dar el
+permiso de Salud) manda **desde el último día enviado hasta hoy**; la primera vez,
+los últimos 7 días, con puntos. El envío en **segundo plano** y las
+**notificaciones push** quedan decididos pero sin construir. La cola caduca a los
+14 días, el `422` de la ventana descarta solo ese día, y una respuesta ilegible
+del servidor cuenta como enviada. El wrapper de Dart ya tiene `actualizarSesion`.
+Ver "Cuándo se manda cada día" y "Puntos abiertos".
+
 **Actualizado el 2 oct 2026** (reunión del equipo): inicio de sesión con Google y
 Apple; el objetivo semanal paga monedas **por componente** y su meta de pasos
 depende de la **edad**; vista de semanas tipo "battle pass"; **seasons de 13
@@ -285,8 +294,8 @@ app que todavía lo mande no se rechaza: el servidor lo ignora.
 por `external_id` hace seguro reenviar todo. **Fuera de alcance:** sueño.
 
 **Cuándo NO se manda un día:** el sync manual de "hoy" manda el día aunque esté
-completamente vacío. La cola de reintentos (A8) y el backfill de 7 días (A9)
-**saltan** los días vacíos — un payload vacío es indistinguible entre "sin
+completamente vacío. La cola de reintentos y ponerse al día ("Cuándo se manda
+cada día") **saltan** los días vacíos — un payload vacío es indistinguible entre "sin
 actividad" y "permiso negado", y mandarlo haría que Luis lo diera por
 entregado para siempre. Ver "Días sin actividad" más abajo.
 
@@ -880,12 +889,23 @@ Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 | `estado` | Qué significa | Qué hace Flutter |
 |---|---|---|
 | `ok` | Guardado en Luis. `sincronizado_en` viene con el timestamp | Confirmación normal |
-| `encolado` | Sin red o backend caído — el día quedó en cola local, se reintenta solo al volver del background | Aviso suave, **no** como falla — el dato no se perdió |
+| `encolado` | Sin red o backend caído — el día quedó en cola local, se reintenta solo al volver a primer plano | Aviso suave, **no** como falla — el dato no se perdió |
 | `sin_acceso_a_salud` | No se pudo leer HealthKit — casi siempre permisos | Guiar a Ajustes › Salud › +Vida |
 | `error_permanente` | URL mal configurada o backend rechazó el payload (4xx) — no se reintenta | Usuario no puede resolverlo; registrar y reportar |
 
 `sincronizado_en` solo viene con `estado: ok` — leer como `String?`. `detalle`
 es texto técnico para logs, nunca mostrárselo crudo al usuario.
+
+**Respuesta ilegible (decidido 3 oct 2026):** si el servidor responde `2xx` pero
+Swift no entiende el cuerpo, el día **ya quedó guardado**: Flutter ve `ok` y
+Swift lo deja anotado en el log del dispositivo (solo la fecha y el código; ni
+el cuerpo ni el token). Es lo que hacen Google y Stripe: un éxito no se
+reintenta. Si aparece en el log, el servidor y la app ya no coinciden en el
+formato.
+
+**Flutter no necesita llamar a `sincronizar` para que los datos lleguen:** Swift
+se pone al día solo (ver "Cuándo se manda cada día"). Sirve para un "jalar para
+refrescar".
 
 **Sin token, o token rechazado (`401`):** no es `error_permanente`. Swift no pierde
 datos: el día queda pendiente y se envía cuando haya sesión. **Hoy Flutter ve
@@ -911,9 +931,20 @@ Salida: `{ "estado": string, "detalle": string? }`
 | `estado` | Qué significa |
 |---|---|
 | `ok` | Guardado (o borrado, si vino `null`) |
-| `error_almacenamiento` | No se pudo escribir en el Keychain: el token no quedó guardado |
+| `error_almacenamiento` | No se pudo escribir o borrar en el Keychain, y **Swift se queda con el token que tenía antes**: en un primer ingreso no firma (los días quedan pendientes); al cambiar de cuenta o cerrar sesión **sigue mandando datos a la cuenta anterior** hasta el próximo arranque. Reintentar si importa cerrar esa ventana |
+
+En Dart, el wrapper devuelve `EstadoSesionNativa` (`ok`, `errorAlmacenamiento`,
+`noDisponible` sin lado nativo, `desconocido`) y **nunca lanza**, porque la
+sesión lo llama sin esperar la respuesta. Un `FlutterError` de Swift
+(`ARGUMENTOS_INVALIDOS`, error de programación) llega como `desconocido`.
 
 - Es **idempotente**: mandar el mismo token dos veces no cambia nada.
+- **Si la cuenta cambia** (otro token, o `null`), Swift olvida hasta qué día se
+  había mandado y **vacía la cola**: la cuenta que sigue empieza como la primera
+  vez (sus 7 días) y no recibe días que esperaban a nombre de la anterior. El
+  mismo token de cada arranque no cambia nada.
+- **Con un token, Swift se pone al día** sin esperar (ver "Cuándo se manda cada
+  día").
 - **No hay forma de leer el token desde Flutter** (no existe un método para
   eso). Flutter conserva su propia copia y, al cerrar sesión, borra **las dos**.
 - Swift lo guarda en el Keychain con acceso "después del primer desbloqueo"
@@ -922,28 +953,61 @@ Salida: `{ "estado": string, "detalle": string? }`
   seguridad ni a otro teléfono**. Servicio `com.assures.masvida.sesion`, cuenta
   `token_api`. **Nunca se escribe en logs.**
 
-### Backfill de los últimos 7 días
+### Cuándo se manda cada día (decidido 3 oct 2026)
 
-Cuando `solicitarPermisos` confirma acceso, el lado nativo dispara
-automáticamente el sync de los últimos 7 días, **una sola vez por
-instalación** — no bloquea la respuesta de `solicitarPermisos` y no tiene un
-método propio. Solo se dispara con acceso confirmado (si no, la bandera de
-"ya hecho" se quemaría con cero datos guardados). Los días que fallen por red
-quedan en la cola de reintentos y drenan solos al volver a primer plano.
-**Si en ese momento no hay sesión, el backfill no se da por hecho** (la bandera de
-"ya hecho" no se enciende). Ojo: hoy **no** se reintenta solo al iniciar sesión;
-se reintenta la próxima vez que Flutter llame a `solicitarPermisos` y el acceso
-siga concedido. Por eso el orden de pantallas importa: sesión primero, permisos
-después (ver "Notas para Daniel").
+Antes había un backfill de 7 días **una sola vez por instalación**, y nadie
+mandaba los días nuevos: en la app real nadie llamaba a `sincronizar`, así que
+después del primer día el servidor no recibía nada. Se decidió tras comparar con
+Vitality, Betterfly, Sweatcoin, StepBet, Oura, Strava, Junction, Terra, Rook y
+Thryve (las plataformas especializadas combinan "al abrir" con "segundo plano").
+
+**Ponerse al día** — Swift lo hace solo, sin método propio, cuando:
+1. la app vuelve a primer plano (`SceneDelegate`);
+2. llega un token (`actualizarSesion`);
+3. `solicitarPermisos` confirma el acceso.
+
+Una vuelta a la vez. Qué manda:
+
+| Paso | Qué |
+|---|---|
+| 1. La cola | Los días que fallaron antes (caducan a los 14 días) |
+| 2. Desde la marca | Desde **el último día enviado** (otra vez: pudo sumar pasos después) **hasta hoy**, del más viejo al más nuevo, sin pasar de la ventana del servidor (15 días con hoy) |
+| La primera vez | Sin marca (teléfono nuevo, reinstalación o cambio de cuenta): **los últimos 7 días, con puntos** (decidido 3 oct; Vitality y Sweatcoin solo premian desde la inscripción, se eligió mantener el comportamiento de siempre) |
+
+- **La marca solo avanza** con lo que ya no hay que volver a mandar: lo que
+  llegó y lo que el servidor rechazó por viejo (`422`). Un día vacío no la mueve:
+  puede ser un permiso de Salud que todavía no se dio.
+- **Fallo general → se corta la vuelta.** Sin red, servidor caído, token
+  rechazado o Salud bloqueada fallan igual para todos los días: tras el primero
+  no se intenta ninguno más, y si la cola se cortó así no se sigue con la marca.
+  No se pierde nada (lo que no se intentó sigue en la cola o detrás de la
+  marca). Así, con el servidor caído hay **un** intento por apertura, no uno por
+  día.
+- **Rechazo permanente** (otro `4xx`) → se saca ese día y se corta la vuelta.
+- **Sin sesión** → no se manda nada y la marca no se mueve.
+- **Antes de dar el permiso de Salud**, HealthKit no deja leer: los días quedan
+  en la cola y salen solos cuando se concede.
+
+**Segundo plano (decidido, sin construir — A32):** iOS despierta la app cuando
+Salud tiene datos nuevos (`HKObserverQuery` con *background delivery*; para pasos,
+como mucho una vez por hora). Límites de Apple: con el teléfono **bloqueado** no
+se puede leer Salud; si el usuario **cierra la app a la fuerza**, iOS deja de
+despertarla hasta que la vuelva a abrir; el modo de bajo consumo lo apaga. Por
+eso "al abrir" sigue siendo el piso garantizado.
+
+**Notificaciones push (decidido, sin construir):** para que abra la app quien no
+sincroniza (por ejemplo, "abre +Vida para que tu registro cuente"). El servidor
+sabe cuándo recibió datos de cada usuario por última vez; ese es el dato
+confiable para avisar. Ver "Puntos abiertos".
 
 ### Wrapper
 
-`lib/datos/healthkit_bridge.dart` expone los métodos tipados
-(`EstadoPermisos`, `EstadoSync`, `TiposVisibles` y el resultado de
-`actualizarSesion`). **[PENDIENTE]** hoy solo tiene `solicitarPermisos` y
-`sincronizar`; falta agregar `actualizarSesion` (Alvaro). Es la **frontera del
-contrato**, no UI — lo mantiene Alvaro junto con el lado Swift. Daniel lo
-consume, no lo edita: si le falta algo ahí, es un cambio de contrato.
+`lib/datos/healthkit_bridge.dart` expone los tres métodos tipados
+(`EstadoPermisos`, `EstadoSync`, `TiposVisibles` y `EstadoSesionNativa`). El
+`actualizarSesion` lo escribió Daniel en D11 junto con su conexión a la sesión, y
+Alvaro le ajustó en A31 el caso del `FlutterError` y el texto de
+`errorAlmacenamiento`. Es la **frontera del contrato**, no UI: un cambio ahí es
+un cambio de contrato y se avisa a Alvaro, que mantiene el lado Swift.
 
 Banco de pruebas sin UI: `lib/debug/pantalla_prueba_healthkit.dart` (no
 ruteado, necesita iPhone físico — HealthKit no existe en el simulador).
@@ -957,9 +1021,9 @@ a un día vacío:
 
 | Camino | Día vacío |
 |---|---|
-| Sync de hoy | Lo manda igual |
-| Cola de reintentos (A8) | Lo salta |
-| Backfill de 7 días (A9) | Lo salta |
+| Sync de hoy (`sincronizar`) | Lo manda igual |
+| Cola de reintentos | Lo salta (y lo deja en la cola) |
+| Ponerse al día | Lo salta (y la marca no avanza) |
 
 Un payload vacío es indistinguible entre "sin actividad" y "permiso negado" —
 mandarlo haría que Luis lo diera por entregado con cero datos para siempre.
@@ -981,7 +1045,7 @@ antes, pero sigue sin resolverse.
 llegar al servidor se rechaza.
 
 ```
-ventana ≥ día más viejo del backfill + holgura para reintentos
+ventana ≥ día más viejo de la primera vez + holgura para reintentos
         = 6 días + 7 días de gracia
         = 13 → 14
 ```
@@ -989,12 +1053,12 @@ ventana ≥ día más viejo del backfill + holgura para reintentos
 | Cifra | Valor | Qué contesta |
 |---|---|---|
 | Ventana del servidor | 14 días | ¿Hasta qué tan viejo acepto un dato? |
-| Cola de reintentos (cliente) | 14 días (**[PENDIENTE]** hoy guarda hasta 30 días pendientes, sin caducidad por antigüedad) | ¿Cuánto sigo intentando mandar un día que falló? |
-| Backfill (cliente) | 7 días | ¿Cuánto historial le traigo a un usuario nuevo? |
+| Cola de reintentos (cliente) | 14 días: un día con `fecha < hoy − 14` sale solo de la cola; tope de 15 días | ¿Cuánto sigo intentando mandar un día que falló? |
+| Primera vez (cliente) | 7 días | ¿Cuánto historial le traigo a un teléfono nuevo? |
 
 Ventana y cola comparten cifra a propósito (si la cola fuera más corta,
-tiraría días que el servidor aceptaría; más larga, reintentaría en vano). El
-backfill es deliberadamente menor — necesita holgura de reintentos.
+tiraría días que el servidor aceptaría; más larga, reintentaría en vano). La
+primera vez es deliberadamente menor — necesita holgura de reintentos.
 
 **Respuesta de rechazo**, distinguible de un payload inválido:
 
@@ -1007,12 +1071,16 @@ Un `4xx` genérico haría que el cliente descarte el día **y aborte el
 procesamiento de los días siguientes** — con motivo identificable, descarta
 ese día y sigue con el resto.
 
-**[PENDIENTE] Lo que hace Swift hoy:** todavía no distingue el `422`. Cualquier
-`4xx` que no sea `401`, `408` ni `429` (incluido el `422`) saca el día de la
-cola **y corta** los días que quedaban en esa vuelta, tanto en la cola de
-reintentos como en el backfill. No se pierden: en la cola, los días que
-quedaban siguen ahí y salen en la siguiente vuelta; en el backfill, el backfill
-no se da por hecho y se repite entero la próxima vez que se dispare.
+**Lo que hace Swift (hecho en A31):** distingue el `422` con
+`"error": "fuera_de_ventana"` (cualquier otro `422`, o el mismo cuerpo con otro
+código, sigue siendo un rechazo normal). Una sola regla para los tres caminos:
+
+| Qué pasó | Ese día | La vuelta |
+|---|---|---|
+| Sin red, `401`, `408`, `429`, `5xx`, Salud bloqueada | Queda pendiente | **Se corta** (fallaría igual) |
+| `422` de la ventana | Se descarta | Sigue |
+| Respuesta `2xx` ilegible | Cuenta como enviado (y va al log) | Sigue |
+| Otro `4xx` | Se descarta | Se corta |
 
 **Frontera de ciclo — decidido:** un ciclo ya cerrado (La Liga u
 objetivo semanal) es **inmutable**. Un dato del 29 de septiembre que llega el
@@ -1277,16 +1345,18 @@ verificación" son el mismo momento.
 - **Techos:** diario 200 pts (pasos + intensidad), anual 12.000 pts.
 - **Nivel anual (0–4):** implementado con los pisos de `CLAUDE.md`: 2.500 /
   5.000 / 10.000 / 15.000 puntos → 5% / 7,5% / 10% / 20%.
-- **Ventana de sync:** mismo endpoint para sync diario y backfill de 7 días —
+- **Ventana de sync:** mismo endpoint para el día de hoy y para ponerse al día —
   cada día es una llamada independiente con su propio `fecha`.
 - **Ventana de aceptación (L14):** 14 días, no 3. Rechazo por antigüedad
   devuelve `422` con `{"error": "fuera_de_ventana"}`, no un `400` genérico.
 - **Frontera de ciclo:** un ciclo ya cerrado (La Liga, objetivo semanal)
   es inmutable — un dato tardío dentro de la ventana de 14 días se guarda
   para historial/acumulado anual, pero nunca recalcula un ciclo ya cerrado.
-- **Ráfagas de usuario nuevo:** cada usuario que concede permisos dispara 7
-  POSTs seguidos en segundos (backfill). Con 50 personas del piloto entrando
-  el mismo día, ~350 requests en ráfaga.
+- **Ráfagas de usuario nuevo:** la primera vez de cada teléfono son 7 POSTs
+  seguidos en segundos. Con 50 personas del piloto entrando el mismo día, ~350
+  requests en ráfaga. Después, cada apertura de la app manda desde el último día
+  enviado hasta hoy (normalmente 1 o 2 POSTs); con el servidor caído, un solo
+  intento por apertura.
 - **Un día ausente es ambiguo** — ver "Días sin actividad" arriba. Afecta la
   evaluación del objetivo semanal.
 - **Cuándo se fija el objetivo semanal:** se calcula y fija a las **00:00 del
@@ -1356,6 +1426,9 @@ verificación" son el mismo momento.
     vencidos) y patrocinios.
   - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
     (hoy por año calendario), y prima anual en el registro de la aseguradora.
+- **Sincronización (3 oct) [PENDIENTE]:** el margen de gracia del cierre
+  semanal y, para las notificaciones push, guardar los dispositivos y mandar el
+  recordatorio (ver "Puntos abiertos"). Lo puede hacer Luis o Alvaro.
 
 ## Notas para Daniel (Flutter)
 
@@ -1369,8 +1442,13 @@ verificación" son el mismo momento.
 - **`actualizarSesion`:** llamalo al iniciar sesión (con el token), al cerrar sesión
   (con `null`) y **cada vez que se abre la app** (con el token actual, o `null`).
   Al cerrar sesión borrá tu copia **y** avisale a Swift.
-- **Orden de pantallas:** primero la sesión y después `solicitarPermisos`. El
-  backfill de 7 días arranca al conceder el permiso y necesita sesión.
+- **Orden de pantallas:** primero la sesión y después `solicitarPermisos` (ya
+  está así en D11). Si se invirtiera tampoco se pierde nada: los días esperan en
+  la cola hasta que haya sesión y permiso.
+- **Sesión real [PENDIENTE]:** la app usa `ServicioSesionLocal`, que inventa
+  tokens (`local-…`). Swift los guarda y el servidor rechaza cada envío con
+  `401`: los días esperan, pero **no llega nada al servidor** hasta pasar a
+  `ServicioSesionApi`.
 - **Si una llamada HTTP responde `401`:** limpiá la sesión, llamá
   `actualizarSesion(null)` y llevá a la persona a iniciar sesión.
 - `usuario_id` viene en la respuesta del registro y es solo un nombre público;
@@ -1401,8 +1479,12 @@ verificación" son el mismo momento.
   tiene nombre de actividad. (Hoy ningún endpoint devuelve `tipo_actividad`;
   aplica cuando haya una lista de workouts.)
 - `encolado` **no** es una falla — el dato quedó a salvo y se reintenta solo.
-- **No implementar reintentos propios** — ya corren del lado nativo cuando la
-  app vuelve a primer plano.
+- **No implementar reintentos propios ni llamar a `sincronizar` al abrir** —
+  Swift se pone al día solo cada vez que la app vuelve a primer plano (ver
+  "Cuándo se manda cada día").
+- **Segundo plano (A32, cuando se construya):** iOS va a despertar la app sin
+  pantalla, y eso también corre el `main()` de Flutter (carga de datos, sesión,
+  relevo de semana). Habrá que revisar que sea seguro y liviano.
 - El **objetivo semanal** no viene en la respuesta del sync — pedirlo aparte
   con `GET /api/v1/retos/estado`. No confundirlo con `nivel` (el anual, de
   cashback) que sí viene en la respuesta del sync.
@@ -1452,25 +1534,31 @@ verificación" son el mismo momento.
   guarda en su propio Keychain (acceso "después del primer desbloqueo", solo en
   este dispositivo) y **nunca lo escribe en logs**.
 - **Sin token:** no enviar. El día queda pendiente. Aplica a los tres caminos de
-  envío: el sync de hoy, la cola de reintentos y el backfill.
-- **`401`:** no es error permanente. El día queda pendiente y **no se corta el
-  procesamiento de los demás días**. Hecho (A24).
+  envío: el sync de hoy, la cola de reintentos y ponerse al día.
+- **`401`:** no es error permanente: el día queda pendiente (A24). **Desde el 3
+  oct corta la vuelta**, igual que sin red o con el servidor caído: fallaría
+  igual para los demás días. No se pierde nada.
 - **`usuario_id` fuera del payload** y sin la constante `"alvaro-001"`. Hecho (A24).
 - **`actualizarSesion(null)`:** borra el token del Keychain. Hecho (A24).
-- **[PENDIENTE] Cola, caducidad:** la regla es 14 días (confirmado el 1 oct).
-  Hoy Swift guarda hasta 30 días pendientes, sin mirar la antigüedad de cada
-  uno.
-- **[PENDIENTE] Cola, error `422`:** cuando el servidor rechaza un día por
-  viejo, Swift debería sacar solo ese día y **seguir** con los demás. Hoy
-  cualquier `4xx` que no sea `401`/`408`/`429` corta toda la vuelta: los días
-  que quedaban esperan a la siguiente vez que la app vuelve a primer plano.
-- **[PENDIENTE] Wrapper de Dart:** agregar `actualizarSesion` a
-  `lib/datos/healthkit_bridge.dart`. Es el puente por el que Flutter le entrega
-  el token a Swift: sin él, Swift no puede enviar el `sync` con sesión y todo
-  queda `encolado`.
-- **[PENDIENTE] Backfill después del login:** hoy solo se reintenta en la
-  siguiente llamada a `solicitarPermisos`. Decidir si `actualizarSesion` con un
-  token debe dispararlo.
+- **Hecho en A31 (3 oct):** cola de 14 días; `422` de la ventana (descarta y
+  sigue); una sola regla para los días que fallan (`AccionDiaFallido`,
+  `RecorridoDias`); ponerse al día al abrir la app, al iniciar sesión y al dar
+  el permiso (`MarcaEnvios`, reemplaza al backfill); al cambiar de cuenta se
+  olvidan la marca y la cola; respuesta ilegible como enviada, con log. El
+  wrapper de Dart lo hizo Daniel (D11), con dos ajustes de Alvaro.
+- **[PENDIENTE] Segundo plano (A32):** `HKObserverQuery` con *background
+  delivery* registrados en `AppDelegate` al arrancar; con el teléfono bloqueado
+  no leer (`isProtectedDataAvailable`); mandar solo hoy y ayer en ~25 s y
+  **siempre** llamar al `completionHandler` (si no, a las 3 veces iOS deja de
+  despertar la app); pedirle a iOS tiempo extra si la app pasa a segundo plano a
+  mitad de una vuelta. Solo se prueba en un iPhone real.
+- **[PENDIENTE] Identidad de la app:** el identificador es
+  `com.example.vidaDemo`. Push y *background delivery* se configuran en Apple
+  Developer para un identificador concreto: hay que fijar el definitivo antes.
+  Lo mismo la URL del backend (IP fija, A10) antes de TestFlight.
+- **Carrera angosta (anotada):** si un envío de la cuenta anterior sigue en vuelo
+  cuando entra otra cuenta, puede mover la marca de la nueva, que recibiría
+  menos días.
 - **Workouts y lo manual (1 oct) — hecho:** Swift no manda una sesión si no hay
   ritmo cardíaco medido en su ventana (antes mandaba `fc_promedio`/`fc_maxima`
   en `0`), ni los workouts, pasos o lecturas de ritmo cardíaco escritos a mano
@@ -1487,6 +1575,26 @@ verificación" son el mismo momento.
 ---
 
 ## Puntos abiertos
+
+*Del 3 oct (sincronización):*
+
+- **Margen de gracia del cierre semanal (Luis o Alvaro):** hoy el lunes 00:00
+  fija `cumplido` y paga, y la corrida de las 12:00 actualiza totales pero no
+  cambia `cumplido`: un domingo que llega tarde nunca completa el objetivo.
+  Discovery Vitality espera hasta el martes a medianoche; StepBet da 24 h.
+  Decidir: cerrar el martes 00:00, o el lunes 12:00. La regla "un ciclo cerrado
+  no se reabre" se mantiene.
+- **Notificaciones push:** cómo se registra el teléfono (directo en Swift con
+  APNs, recomendado: sin un tercero con datos del usuario, o con Firebase desde
+  Flutter) y cuándo suena el recordatorio (24 h sin datos, domingo en la tarde,
+  o las dos). Necesita: llave `.p8` en Apple Developer, modelo y endpoint de
+  dispositivos en el backend, envío programado y la pantalla del permiso.
+- **Monedas de La Liga:** este contrato dice **premios por percentil**; los
+  términos (`hoja_terminos.dart`) y `CLAUDE.md` dicen "los 3 primeros". Decidir
+  cuál es la regla.
+- **Textos de los términos:** dicen que los demás ven "tu nombre y tu posición"
+  (desde el 2 oct también ven los puntos) y "4 temporadas de 13 semanas" (la
+  season 4 de 2026 tiene 14).
 
 *De la reunión del 2 oct:*
 
@@ -1559,10 +1667,8 @@ verificación" son el mismo momento.
   las copias locales (`actualizarSesion(null)`).
 - **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
   Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
-- **Cola y backfill al cerrar sesión o entrar otra cuenta:** HealthKit pertenece
-  al teléfono, no a la cuenta. Sin una regla, los días pendientes de una cuenta se
-  subirían a nombre de la siguiente. Propuesta: al cerrar sesión, Swift vacía la
-  cola y reinicia la bandera del backfill.
+- **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct):**
+  Swift vacía la cola y olvida la marca; la cuenta que sigue recibe sus 7 días.
 - **Caducidad y renovación del token:** hoy no caduca. Las plataformas grandes usan
   tokens de vida corta con uno de renovación. Conviene también exigir HTTPS fuera
   de pruebas locales.
