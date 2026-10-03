@@ -21,6 +21,12 @@
 //   4. git checkout lib/main.dart para dejarlo como estaba
 //
 // Verificado asi el 6 de septiembre de 2026: los cuatro casos pasaron.
+//
+// Tarjeta 0 (sesion, desde A31): pegar un token del backend (el que devuelve
+// POST /api/v1/login) y "Entregar token" -> espera estado=ok; despues el
+// boton 2 ya firma el envio. "Cerrar sesion" -> estado=ok, y el boton 2
+// vuelve a dar encolado (sin sesion). El token nunca se escribe en el log:
+// solo cuantos caracteres tiene.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,14 +44,13 @@ class PantallaPruebaHealthKit extends StatefulWidget {
 class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
   final _bridge = HealthKitBridge();
   final _scroll = ScrollController();
+  final _token = TextEditingController();
   final List<String> _log = [];
 
   // Resultado mas reciente de cada boton, por separado. Un log unico se
   // presta a leer la linea del otro boton.
-  String? _resPermisos;
-  String? _resSync;
-  bool _okPermisos = false;
-  bool _okSync = false;
+  final Map<String, String> _res = {};
+  final Map<String, bool> _ok = {};
 
   bool _ocupado = false;
 
@@ -92,15 +97,21 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
   void _fijar(String tag, String texto, bool ok) {
     if (!mounted) return;
     setState(() {
-      if (tag == 'PERMISOS') {
-        _resPermisos = texto;
-        _okPermisos = ok;
-      } else {
-        _resSync = texto;
-        _okSync = ok;
-      }
+      _res[tag] = texto;
+      _ok[tag] = ok;
     });
   }
+
+  Future<void> _actualizarSesion(String? token) => _correr('SESION', (tag) async {
+    // Solo el largo: el token es una contrasena.
+    _anotar(tag, token == null ? 'token=null' : 'token (${token.length} caracteres)');
+    final r = await _bridge.actualizarSesion(token);
+    final texto =
+        'estado=${r.estado.name}'
+        '${r.detalle != null ? '\ndetalle=${r.detalle}' : ''}';
+    _fijar(tag, texto, r.estado == EstadoSesion.ok);
+    _anotar(tag, texto.replaceAll('\n', '  '));
+  });
 
   Future<void> _pedirPermisos() => _correr('PERMISOS', (tag) async {
     final r = await _bridge.solicitarPermisos();
@@ -128,6 +139,7 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
 
   @override
   void dispose() {
+    _token.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -194,13 +206,47 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
             children: [
               // Cada boton tiene su propia tarjeta: no hay forma de confundir
               // el resultado de uno con el del otro.
-              _tarjeta('1 - PERMISOS', _resPermisos, _okPermisos),
+              _tarjeta('0 - SESION', _res['SESION'], _ok['SESION'] ?? false),
+              TextField(
+                controller: _token,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Token del backend',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _ocupado
+                          ? null
+                          : () => _actualizarSesion(_token.text),
+                      child: const Text('Entregar token'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _ocupado ? null : () => _actualizarSesion(null),
+                      child: const Text('Cerrar sesion'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _tarjeta('1 - PERMISOS', _res['PERMISOS'], _ok['PERMISOS'] ?? false),
               FilledButton(
                 onPressed: _ocupado ? null : _pedirPermisos,
                 child: const Text('Solicitar permisos'),
               ),
               const SizedBox(height: 18),
-              _tarjeta('2 - SYNC', _resSync, _okSync),
+              _tarjeta('2 - SYNC', _res['SYNC'], _ok['SYNC'] ?? false),
               FilledButton(
                 onPressed: _ocupado ? null : _sincronizar,
                 child: const Text('Sincronizar'),

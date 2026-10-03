@@ -1,9 +1,9 @@
 import 'package:flutter/services.dart';
 
-/// Puente hacia el MethodChannel nativo de HealthKit (ver contrato-v3_1.md
-/// y AppDelegate.swift). Expone únicamente los 2 métodos del contrato —
-/// todo lo demás (dashboard, niveles, retos) es HTTP directo contra la API
-/// de Luis, sin pasar por acá.
+/// Puente hacia el MethodChannel nativo de HealthKit (ver "MethodChannel" en
+/// contrato-tecnico.md y AppDelegate.swift). Expone únicamente los 3 métodos
+/// del contrato — todo lo demás (dashboard, niveles, objetivos) es HTTP
+/// directo contra la API de Luis, sin pasar por acá.
 class HealthKitBridge {
   static const MethodChannel _canal = MethodChannel(
     'com.assures.masvida/healthkit',
@@ -38,6 +38,33 @@ class HealthKitBridge {
     return ResultadoSincronizacion(
       estado: EstadoSync.desde(respuesta?['estado'] as String?),
       sincronizadoEn: respuesta?['sincronizado_en'] as String?,
+      detalle: respuesta?['detalle'] as String?,
+    );
+  }
+
+  /// Le entrega a Swift el token de la sesión, para que firme cada envío a
+  /// /api/v1/sync. `null` (o un texto vacío) significa "no hay sesión": Swift
+  /// borra el que tenga guardado.
+  ///
+  /// Llamarlo:
+  /// 1. al iniciar sesión o registrarse, con el token;
+  /// 2. al cerrar sesión, con `null`;
+  /// 3. cada vez que abre la app, con el token actual (o `null`). El Keychain
+  ///    sobrevive a desinstalar la app, así que sin esto Swift podría seguir
+  ///    con el token de una sesión vieja.
+  ///
+  /// Es idempotente: mandar el mismo token dos veces no cambia nada. No hay
+  /// forma de leer el token de vuelta — Flutter guarda su propia copia y, al
+  /// cerrar sesión, borra las dos.
+  ///
+  /// El token es una contraseña: nunca escribirlo en logs ni mostrarlo.
+  Future<ResultadoActualizarSesion> actualizarSesion(String? token) async {
+    final respuesta = await _canal.invokeMapMethod<String, dynamic>(
+      'actualizarSesion',
+      {'token': token},
+    );
+    return ResultadoActualizarSesion(
+      estado: EstadoSesion.desde(respuesta?['estado'] as String?),
       detalle: respuesta?['detalle'] as String?,
     );
   }
@@ -143,6 +170,34 @@ enum EstadoSync {
     'error_permanente' => EstadoSync.errorPermanente,
     _ => EstadoSync.desconocido,
   };
+}
+
+enum EstadoSesion {
+  /// Swift guardó el token (o lo borró, si se mandó `null`).
+  ok,
+
+  /// No se pudo escribir o borrar en el Keychain: el token NO quedó guardado
+  /// y el sync no va a poder firmar. No se pierden datos — los días quedan
+  /// pendientes —, pero conviene reintentar la próxima vez que abra la app.
+  errorAlmacenamiento,
+
+  /// Llegó un estado que esta versión de la app no conoce.
+  desconocido;
+
+  static EstadoSesion desde(String? valor) => switch (valor) {
+    'ok' => EstadoSesion.ok,
+    'error_almacenamiento' => EstadoSesion.errorAlmacenamiento,
+    _ => EstadoSesion.desconocido,
+  };
+}
+
+class ResultadoActualizarSesion {
+  final EstadoSesion estado;
+
+  /// Mensaje técnico. Para logs — nunca trae el token.
+  final String? detalle;
+
+  const ResultadoActualizarSesion({required this.estado, this.detalle});
 }
 
 class ResultadoPermisos {
