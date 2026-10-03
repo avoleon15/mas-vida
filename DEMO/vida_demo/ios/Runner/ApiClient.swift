@@ -59,8 +59,7 @@ enum ApiError: LocalizedError {
     /// cuenta están mal y reintentar no lo arregla).
     ///
     /// Que `401` sea reintentable es lo que evita perder días de datos: un
-    /// error permanente saca el día de la cola y corta el procesamiento de los
-    /// demás.
+    /// error permanente saca el día de la cola (ver `AccionDiaFallido`).
     var esReintentable: Bool {
         switch self {
         case .urlInvalida, .respuestaInvalida, .respuestaIlegible, .fueraDeVentana:
@@ -70,6 +69,32 @@ enum ApiError: LocalizedError {
         case .servidor(let codigo, _):
             return codigo == 401 || codigo >= 500 || codigo == 408 || codigo == 429
         }
+    }
+}
+
+/// Qué hacer con un día cuyo envío falló. Es la ÚNICA regla: la usan el sync
+/// de hoy, la cola de reintentos y el backfill (ver `RecorridoDias` en
+/// SyncQueue.swift y HealthKitManager.swift).
+enum AccionDiaFallido: Equatable {
+    /// El día queda pendiente y se vuelve a intentar: sin red, sin sesión,
+    /// `401`, `408`, `429`, `5xx`, o HealthKit no se pudo leer.
+    case reintentarDespues
+    /// Se saca de la cola y la vuelta SIGUE con los demás días. Solo el `422`
+    /// de la ventana: el problema es de ese día (es demasiado viejo), no del
+    /// payload ni de la cuenta.
+    case descartarYSeguir
+    /// Se saca de la cola y la vuelta se CORTA: cualquier otro error
+    /// permanente. Si el servidor rechaza el payload o la cuenta, lo más
+    /// probable es que rechace igual los días siguientes; esos no se pierden,
+    /// siguen en la cola para la próxima vuelta.
+    case descartarYCortar
+
+    static func para(_ error: Error) -> AccionDiaFallido {
+        // Un error que no es de `ApiError` (red caída, tiempo agotado, lectura
+        // de HealthKit) se reintenta.
+        guard let error = error as? ApiError else { return .reintentarDespues }
+        if case .fueraDeVentana = error { return .descartarYSeguir }
+        return error.esReintentable ? .reintentarDespues : .descartarYCortar
     }
 }
 

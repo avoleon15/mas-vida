@@ -537,6 +537,139 @@ final class ApiClientVentanaTests: XCTestCase {
   }
 }
 
+/// La única regla para un día que falló: reintentar, descartar y seguir, o
+/// descartar y cortar.
+final class AccionDiaFallidoTests: XCTestCase {
+
+  private func servidor(_ codigo: Int) -> ApiError { .servidor(codigo: codigo, cuerpo: nil) }
+
+  func testSinRedOHealthKit_SeReintenta() {
+    XCTAssertEqual(AccionDiaFallido.para(URLError(.notConnectedToInternet)), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(URLError(.timedOut)), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(NSError(domain: "com.apple.healthkit", code: 6)), .reintentarDespues)
+  }
+
+  func testSinSesion401_408_429Y5xx_SeReintentan() {
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.sinSesion), .reintentarDespues)
+    for codigo in [401, 408, 429, 500, 503] {
+      XCTAssertEqual(AccionDiaFallido.para(servidor(codigo)), .reintentarDespues, "\(codigo)")
+    }
+  }
+
+  func testEl422DeLaVentana_SeDescartaYSigue() {
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: "2026-09-01")), .descartarYSeguir)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: nil)), .descartarYSeguir)
+  }
+
+  func testOtrosPermanentes_SeDescartanYCortan() {
+    for codigo in [400, 403, 404, 422] {
+      XCTAssertEqual(AccionDiaFallido.para(servidor(codigo)), .descartarYCortar, "\(codigo)")
+    }
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.urlInvalida), .descartarYCortar)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaInvalida), .descartarYCortar)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaIlegible), .descartarYCortar)
+  }
+}
+
+/// La vuelta día por día de la cola y el backfill: cuándo sigue y cuándo corta.
+@MainActor
+final class RecorridoDiasTests: XCTestCase {
+
+  /// Un desenlace sin el error adentro, para poder comparar.
+  private enum Visto: Equatable { case enviado, saltado, reintentar, descartado, cortado }
+
+  private struct Falla: Error {}
+
+  /// Corre la vuelta con `respuestas[dia]` (nil = se envía bien) y devuelve
+  /// qué días se intentaron y qué se registró de cada uno.
+  private func recorrer(
+    _ dias: [String],
+    _ respuestas: [String: Result<Bool, Error>]
+  ) async -> (intentados: [String], registrados: [String], vistos: [Visto]) {
+    var intentados: [String] = []
+    var registrados: [String] = []
+    var vistos: [Visto] = []
+    await RecorridoDias.recorrer(
+      dias,
+      enviar: { dia in
+        intentados.append(dia)
+        return try (respuestas[dia] ?? .success(true)).get()
+      },
+      registrar: { dia, desenlace in
+        registrados.append(dia)
+        switch desenlace {
+        case .enviado: vistos.append(.enviado)
+        case .saltado: vistos.append(.saltado)
+        case .reintentarDespues: vistos.append(.reintentar)
+        case .descartado: vistos.append(.descartado)
+        case .cortado: vistos.append(.cortado)
+        }
+      }
+    )
+    return (intentados, registrados, vistos)
+  }
+
+  private let ventana = ApiError.fueraDeVentana(fecha: "2026-09-01")
+  private let invalido = ApiError.servidor(codigo: 400, cuerpo: nil)
+
+  func testTodoBien_SeEnvianTodosEnOrden() async {
+    let r = await recorrer(["d1", "d2", "d3"], [:])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"])
+    XCTAssertEqual(r.vistos, [.enviado, .enviado, .enviado])
+  }
+
+  func testUn422EnMedio_SeDescartaYLosDemasSiguen() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(ventana)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"], "El 422 no debe cortar la vuelta")
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .enviado])
+  }
+
+  func testVarios422Seguidos_NingunoCorta() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d1": .failure(ventana), "d2": .failure(ventana)])
+
+    XCTAssertEqual(r.vistos, [.descartado, .descartado, .enviado])
+  }
+
+  func testUnPermanenteEnMedio_CortaYNoTocaLosDemas() async {
+    let r = await recorrer(["d1", "d2", "d3", "d4"], ["d2": .failure(invalido)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2"], "Después de cortar no se intenta ningún día más")
+    XCTAssertEqual(r.registrados, ["d1", "d2"], "Ni se registra nada de los que no se intentaron")
+    XCTAssertEqual(r.vistos, [.enviado, .cortado])
+  }
+
+  func testSinRed_SeReintentaDespuesYSigue() async {
+    let r = await recorrer(["d1", "d2"], ["d1": .failure(URLError(.notConnectedToInternet))])
+
+    XCTAssertEqual(r.vistos, [.reintentar, .enviado])
+  }
+
+  func testUnDiaVacio_SeSaltaYSigue() async {
+    let r = await recorrer(["d1", "d2"], ["d1": .success(false)])
+
+    XCTAssertEqual(r.vistos, [.saltado, .enviado])
+  }
+
+  func testMezcla_ElCorteGanaSoloDesdeDondeAparece() async {
+    let r = await recorrer(
+      ["d1", "d2", "d3", "d4", "d5"],
+      ["d2": .failure(ventana), "d3": .failure(Falla()), "d4": .failure(invalido)]
+    )
+
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .reintentar, .cortado])
+    XCTAssertEqual(r.intentados.last, "d4", "d5 nunca se intenta")
+  }
+
+  func testSinDias_NoLlamaANada() async {
+    let r = await recorrer([], [:])
+
+    XCTAssertTrue(r.intentados.isEmpty)
+    XCTAssertTrue(r.registrados.isEmpty)
+  }
+}
+
 /// `actualizarSesion`: qué hace Swift con lo que entrega Flutter.
 final class SesionAplicarTests: XCTestCase {
 

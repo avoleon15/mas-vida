@@ -64,3 +64,53 @@ final class SyncQueue {
         UserDefaults.standard.set(fechas, forKey: Self.clave)
     }
 }
+
+/// Cómo terminó un día dentro de una vuelta de envíos.
+enum DesenlaceDia {
+    case enviado
+    /// No había nada que mandar (payload vacío): no se envió.
+    case saltado
+    case reintentarDespues(Error)
+    /// El `422` de la ventana: ese día ya no entra nunca, los demás sí.
+    case descartado(Error)
+    /// Error permanente: la vuelta se corta después de este día.
+    case cortado(Error)
+}
+
+/// La vuelta día por día que comparten la cola de reintentos y el backfill.
+/// Vive aparte (sin HealthKit ni red) para poder probar cuándo sigue y cuándo
+/// corta: antes cada uno tenía su propio `for` con su propio `break`.
+enum RecorridoDias {
+    /// Recorre `dias` en orden. `enviar` manda un día y devuelve `false` si no
+    /// había nada que mandar. Después de CADA día llama a `registrar`, para que
+    /// quien llama toque la cola en ese momento (si la app se cierra a mitad
+    /// de la vuelta, lo ya hecho queda hecho).
+    ///
+    /// Decide con `AccionDiaFallido`: tras un `descartarYCortar` no se intenta
+    /// ningún día más, ni se llama a `registrar` por ellos.
+    @MainActor
+    static func recorrer(
+        _ dias: [String],
+        enviar: (String) async throws -> Bool,
+        registrar: (String, DesenlaceDia) -> Void
+    ) async {
+        for dia in dias {
+            do {
+                let seEnvio = try await enviar(dia)
+                registrar(dia, seEnvio ? .enviado : .saltado)
+            } catch {
+                switch AccionDiaFallido.para(error) {
+                case .reintentarDespues:
+                    registrar(dia, .reintentarDespues(error))
+                case .descartarYSeguir:
+                    registrar(dia, .descartado(error))
+                case .descartarYCortar:
+                    registrar(dia, .cortado(error))
+                    // `return`, no `break`: dentro de un `switch`, `break` solo
+                    // saldría del `switch` y la vuelta seguiría.
+                    return
+                }
+            }
+        }
+    }
+}

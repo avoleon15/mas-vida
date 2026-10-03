@@ -638,22 +638,18 @@ final class HealthKitManager {
             await reintentarPendientes()
             return .ok(sincronizadoEn: ahora)
         } catch {
-            if esReintentable(error) {
+            // Misma regla que la cola y el backfill (`AccionDiaFallido`). Acá
+            // hay un solo día, así que "seguir" y "cortar" dan lo mismo.
+            switch AccionDiaFallido.para(error) {
+            case .reintentarDespues:
                 syncQueue.encolar(fecha: payload.fecha)
                 pendientesEnCola = syncQueue.pendientes().count
                 return .encolado(detalle: error.localizedDescription)
-            } else {
+            case .descartarYSeguir, .descartarYCortar:
                 // Permanente: encolarlo solo dejaría la cola atascada.
                 return .errorPermanente(detalle: error.localizedDescription)
             }
         }
-    }
-
-    // MARK: - esReintentable() (A8)
-    // La política vive en `ApiError.esReintentable` (ver ApiClient.swift). Un
-    // error que no es de `ApiError` (red caída, tiempo agotado) se reintenta.
-    private func esReintentable(_ error: Error) -> Bool {
-        (error as? ApiError)?.esReintentable ?? true
     }
 
     // MARK: - reintentarPendientes() (A8)
@@ -683,18 +679,27 @@ final class HealthKitManager {
         errorReintento = nil
         defer { reintentando = false }
 
-        var fallaron = 0
-
+        // Una fecha que no se puede leer no se va a poder mandar nunca.
+        var fechas: [String: Date] = [:]
         for dia in dias {
-            guard let fecha = FormatoFechas.diaCalendario.date(from: dia) else {
+            if let fecha = FormatoFechas.diaCalendario.date(from: dia) {
+                fechas[dia] = fecha
+            } else {
                 syncQueue.remover(fecha: dia)
-                continue
             }
+        }
 
-            do {
+        var fallaron = 0
+        var descartados = 0
+
+        await RecorridoDias.recorrer(
+            dias.filter { fechas[$0] != nil },
+            enviar: { dia in
+                guard let fecha = fechas[dia] else { return false }
+
                 // Se reconstruye el día desde HealthKit en vez de mandar una
                 // foto vieja — ver razón completa en SyncQueue.swift.
-                let payload = try await construirPayload(fecha: fecha)
+                let payload = try await self.construirPayload(fecha: fecha)
 
                 // Ante la duda, el día se queda pendiente: un payload vacío
                 // puede ser un día sin actividad, pero también un permiso de
@@ -702,24 +707,32 @@ final class HealthKitManager {
                 // distinguirlos.
                 guard !payload.pasos.isEmpty
                         || !payload.sesiones.isEmpty
-                        || !payload.frecuencia_cardiaca.isEmpty else {
-                    fallaron += 1
-                    continue
-                }
+                        || !payload.frecuencia_cardiaca.isEmpty else { return false }
 
                 _ = try await cliente.enviarSincronizacion(payload)
-                syncQueue.remover(fecha: dia)
-                pendientesEnCola = syncQueue.pendientes().count
-            } catch {
-                fallaron += 1
-
-                if !esReintentable(error) {
-                    syncQueue.remover(fecha: dia)
-                    errorReintento = "Día \(dia): \(error.localizedDescription)"
-                    break
+                return true
+            },
+            registrar: { dia, desenlace in
+                switch desenlace {
+                case .enviado:
+                    self.syncQueue.remover(fecha: dia)
+                case .saltado, .reintentarDespues:
+                    fallaron += 1
+                case .descartado:
+                    // Demasiado viejo: no va a entrar nunca. Los demás días
+                    // de la vuelta siguen.
+                    self.syncQueue.remover(fecha: dia)
+                    descartados += 1
+                case .cortado(let error):
+                    // Los días que quedaban siguen en la cola y salen en la
+                    // próxima vuelta.
+                    self.syncQueue.remover(fecha: dia)
+                    fallaron += 1
+                    self.errorReintento = "Día \(dia): \(error.localizedDescription)"
                 }
+                self.pendientesEnCola = self.syncQueue.pendientes().count
             }
-        }
+        )
 
         pendientesEnCola = syncQueue.pendientes().count
 
@@ -727,6 +740,11 @@ final class HealthKitManager {
             errorReintento = fallaron == 1
                 ? "1 día sigue sin poder enviarse."
                 : "\(fallaron) días siguen sin poder enviarse."
+        }
+        if descartados > 0 && errorReintento == nil {
+            errorReintento = descartados == 1
+                ? "1 día tenía más de 14 días y el servidor ya no lo acepta: se descartó."
+                : "\(descartados) días tenían más de 14 días y el servidor ya no los acepta: se descartaron."
         }
     }
 
@@ -762,11 +780,17 @@ final class HealthKitManager {
         var encolados = 0
         huboRecorridoCompleto = true
 
-        for fecha in fechas {
-            let dia = FormatoFechas.diaCalendario.string(from: fecha)
+        let fechaDe = Dictionary(
+            fechas.map { (FormatoFechas.diaCalendario.string(from: $0), $0) },
+            uniquingKeysWith: { primera, _ in primera }
+        )
 
-            do {
-                let payload = try await construirPayload(fecha: fecha)
+        await RecorridoDias.recorrer(
+            fechas.map { FormatoFechas.diaCalendario.string(from: $0) },
+            enviar: { dia in
+                guard let fecha = fechaDe[dia] else { return false }
+
+                let payload = try await self.construirPayload(fecha: fecha)
 
                 // Mismo criterio que en reintentarPendientes(): un día vacío
                 // puede ser un día sin actividad, pero también un permiso
@@ -775,21 +799,30 @@ final class HealthKitManager {
                 // vuelva a mandar nunca.
                 guard !payload.pasos.isEmpty
                         || !payload.sesiones.isEmpty
-                        || !payload.frecuencia_cardiaca.isEmpty else { continue }
+                        || !payload.frecuencia_cardiaca.isEmpty else { return false }
 
                 _ = try await cliente.enviarSincronizacion(payload)
-                syncQueue.remover(fecha: dia)
-            } catch {
-                if esReintentable(error) {
-                    syncQueue.encolar(fecha: dia)
-                    encolados += 1
-                } else {
-                    errorBackfill = "Día \(dia): \(error.localizedDescription)"
-                    huboRecorridoCompleto = false
+                return true
+            },
+            registrar: { dia, desenlace in
+                switch desenlace {
+                case .enviado:
+                    self.syncQueue.remover(fecha: dia)
+                case .saltado:
                     break
+                case .reintentarDespues:
+                    self.syncQueue.encolar(fecha: dia)
+                    encolados += 1
+                case .descartado:
+                    // No va a entrar nunca: repetir el backfill no lo arregla,
+                    // así que no cuenta como recorrido incompleto.
+                    self.syncQueue.remover(fecha: dia)
+                case .cortado(let error):
+                    self.errorBackfill = "Día \(dia): \(error.localizedDescription)"
+                    self.huboRecorridoCompleto = false
                 }
             }
-        }
+        )
 
         pendientesEnCola = syncQueue.pendientes().count
 
