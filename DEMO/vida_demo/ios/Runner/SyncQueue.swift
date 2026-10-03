@@ -92,6 +92,12 @@ final class SyncQueue {
         guardar(pendientes().filter { $0 != fecha })
     }
 
+    /// Al cambiar de cuenta: lo que esperaba era de la cuenta anterior. La
+    /// nueva empieza como la primera vez (ver `Sesion.aplicar(token:en:marca:cola:)`).
+    func vaciar() {
+        almacen.removeObject(forKey: Self.clave)
+    }
+
     /// Aplica a un día lo que decidió `DesenlaceDia` (ver `efectoEnReintento`
     /// y `efectoAlPonerseAlDia`).
     func aplicar(_ efecto: EfectoEnCola, a fecha: String) {
@@ -252,20 +258,36 @@ final class MarcaEnvios {
 /// La vuelta día por día que comparten la cola de reintentos y ponerse al día.
 /// Vive aparte (sin HealthKit ni red) para poder probar cuándo sigue y cuándo
 /// corta: antes cada uno tenía su propio `for` con su propio `break`.
+/// Cómo terminó una vuelta.
+enum FinDeVuelta: Equatable {
+    case completa
+    /// Sin red, servidor caído, token rechazado o Salud bloqueada: lo que
+    /// quedaba fallaría igual. No se pierde nada: lo que no se intentó sigue
+    /// en la cola o detrás de la marca.
+    case cortadaPorFalloGeneral
+    /// El servidor rechazó un día de forma permanente.
+    case cortadaPorRechazo
+}
+
 enum RecorridoDias {
     /// Recorre `dias` en orden. `enviar` manda un día y devuelve `false` si no
     /// había nada que mandar. Después de CADA día llama a `registrar`, para que
     /// quien llama toque la cola en ese momento (si la app se cierra a mitad
     /// de la vuelta, lo ya hecho queda hecho).
     ///
-    /// Decide con `AccionDiaFallido`: tras un `descartarYCortar` no se intenta
+    /// Decide con `AccionDiaFallido`, y corta en dos casos: tras un
+    /// `descartarYCortar`, y tras el primer `reintentarDespues` — todos sus
+    /// motivos (red, servidor, token, Salud bloqueada) son del teléfono o del
+    /// servidor, no del día, así que seguir solo gasta intentos (con el
+    /// servidor caído, hasta 20 s cada uno). En los dos casos no se intenta
     /// ningún día más, ni se llama a `registrar` por ellos.
     @MainActor
+    @discardableResult
     static func recorrer(
         _ dias: [String],
         enviar: (String) async throws -> Bool,
         registrar: (String, DesenlaceDia) -> Void
-    ) async {
+    ) async -> FinDeVuelta {
         for dia in dias {
             do {
                 let seEnvio = try await enviar(dia)
@@ -274,6 +296,7 @@ enum RecorridoDias {
                 switch AccionDiaFallido.para(error) {
                 case .reintentarDespues:
                     registrar(dia, .reintentarDespues(error))
+                    return .cortadaPorFalloGeneral
                 case .descartarYSeguir:
                     registrar(dia, .descartado(error))
                 case .tomarComoEnviado:
@@ -284,9 +307,10 @@ enum RecorridoDias {
                     registrar(dia, .cortado(error))
                     // `return`, no `break`: dentro de un `switch`, `break` solo
                     // saldría del `switch` y la vuelta seguiría.
-                    return
+                    return .cortadaPorRechazo
                 }
             }
         }
+        return .completa
     }
 }

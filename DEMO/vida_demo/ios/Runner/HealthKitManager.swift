@@ -655,23 +655,26 @@ final class HealthKitManager {
     // Recorre la cola persistida y reintenta cada día. Idempotente del lado
     // de Luis (external_id, L4): reintentar un payload ya guardado nunca
     // duplica una fila en el ledger.
-    func reintentarPendientes() async {
-        guard !reintentando else { return }
+    /// Devuelve cómo terminó: `ponerseAlDia()` no sigue si la cola se cortó
+    /// por un fallo general (fallaría igual).
+    @discardableResult
+    func reintentarPendientes() async -> FinDeVuelta {
+        guard !reintentando else { return .completa }
 
         let dias = syncQueue.pendientes()
         pendientesEnCola = dias.count
-        guard !dias.isEmpty else { return }
+        guard !dias.isEmpty else { return .completa }
 
         // Sin sesión los días se quedan donde están: no se lee HealthKit ni se
         // toca la cola. Se intenta de nuevo cuando vuelva a primer plano.
         guard haySesion else {
             errorReintento = ApiError.sinSesion.localizedDescription
-            return
+            return .cortadaPorFalloGeneral
         }
 
         guard let cliente = try? clienteAPI() else {
             errorReintento = "La URL del backend no es válida."
-            return
+            return .cortadaPorRechazo
         }
 
         reintentando = true
@@ -691,7 +694,7 @@ final class HealthKitManager {
         var fallaron = 0
         var descartados = 0
 
-        await RecorridoDias.recorrer(
+        let fin = await RecorridoDias.recorrer(
             dias.filter { fechas[$0] != nil },
             enviar: { dia in
                 guard let fecha = fechas[dia] else { return false }
@@ -748,6 +751,7 @@ final class HealthKitManager {
                 ? "1 día tenía más de 14 días y el servidor ya no lo acepta: se descartó."
                 : "\(descartados) días tenían más de 14 días y el servidor ya no los acepta: se descartaron."
         }
+        return fin
     }
 
     // MARK: - ponerseAlDia()
@@ -769,8 +773,13 @@ final class HealthKitManager {
         defer { poniendoseAlDia = false }
 
         // Primero la cola: días que fallaron antes, que pueden ser más viejos
-        // que la marca.
-        await reintentarPendientes()
+        // que la marca. Si se cortó por un fallo general (sin red, servidor
+        // caído, token rechazado), los días nuevos fallarían igual: se
+        // intentan la próxima vez, desde la marca, que no se movió.
+        guard await reintentarPendientes() != .cortadaPorFalloGeneral else {
+            errorPonerseAlDia = errorReintento
+            return
+        }
 
         // Sin sesión no hay a nombre de quién enviar: la marca no se mueve y
         // se intenta de nuevo cuando llegue el token.
@@ -836,8 +845,10 @@ final class HealthKitManager {
 
     func actualizarSesion(token: String?) -> ResultadoActualizarSesion {
         // Si cambió la cuenta, también olvida hasta qué día se había mandado
-        // (ver `Sesion.aplicar(token:en:marca:)`).
-        let (resultado, haySesion) = Sesion.aplicar(token: token, en: almacenSesion, marca: marcaEnvios)
+        // y la cola (ver `Sesion.aplicar(token:en:marca:cola:)`).
+        let (resultado, haySesion) = Sesion.aplicar(
+            token: token, en: almacenSesion, marca: marcaEnvios, cola: syncQueue)
+        pendientesEnCola = syncQueue.pendientes().count
         // Con sesión, se manda lo que falte. Sin `await`: Flutter espera esta
         // respuesta y no puede colgarse por la red.
         if resultado == .ok && haySesion {

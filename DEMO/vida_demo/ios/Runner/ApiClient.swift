@@ -230,14 +230,16 @@ enum Sesion {
     }
 
     /// Lo mismo, y además: si la cuenta cambió (otro token, o se cerró la
-    /// sesión) se olvida hasta qué día se había mandado, para que la cuenta
-    /// que sigue empiece como la primera vez. El mismo token que Flutter
-    /// manda en cada arranque no cambia nada. Devuelve también si quedó una
-    /// sesión, para saber si ponerse al día.
+    /// sesión) se olvidan hasta qué día se había mandado y la cola de
+    /// reintentos, para que la cuenta que sigue empiece como la primera vez
+    /// (sus 7 días) y no reciba días que esperaban a nombre de la anterior.
+    /// El mismo token que Flutter manda en cada arranque no cambia nada.
+    /// Devuelve también si quedó una sesión, para saber si ponerse al día.
     static func aplicar(
         token: String?,
         en almacen: AlmacenSesion,
-        marca: MarcaEnvios
+        marca: MarcaEnvios,
+        cola: SyncQueue
     ) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
         let anterior = almacen.leerToken()
         let resultado = aplicar(token: token, en: almacen)
@@ -245,6 +247,7 @@ enum Sesion {
         // Si falló el Keychain, el token anterior sigue ahí: no cambió nada.
         if resultado == .ok && actual != anterior {
             marca.olvidar()
+            cola.vaciar()
         }
         return (resultado, actual != nil)
     }

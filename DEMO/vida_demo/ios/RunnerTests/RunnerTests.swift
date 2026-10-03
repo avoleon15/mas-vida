@@ -589,11 +589,11 @@ final class RecorridoDiasTests: XCTestCase {
   private func recorrer(
     _ dias: [String],
     _ respuestas: [String: Result<Bool, Error>]
-  ) async -> (intentados: [String], registrados: [String], vistos: [Visto]) {
+  ) async -> (intentados: [String], registrados: [String], vistos: [Visto], fin: FinDeVuelta) {
     var intentados: [String] = []
     var registrados: [String] = []
     var vistos: [Visto] = []
-    await RecorridoDias.recorrer(
+    let fin = await RecorridoDias.recorrer(
       dias,
       enviar: { dia in
         intentados.append(dia)
@@ -610,7 +610,7 @@ final class RecorridoDiasTests: XCTestCase {
         }
       }
     )
-    return (intentados, registrados, vistos)
+    return (intentados, registrados, vistos, fin)
   }
 
   private let ventana = ApiError.fueraDeVentana(fecha: "2026-09-01")
@@ -644,10 +644,38 @@ final class RecorridoDiasTests: XCTestCase {
     XCTAssertEqual(r.vistos, [.enviado, .cortado])
   }
 
-  func testSinRed_SeReintentaDespuesYSigue() async {
-    let r = await recorrer(["d1", "d2"], ["d1": .failure(URLError(.notConnectedToInternet))])
+  func testSinRed_SeReintentaDespuesYCorta() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d1": .failure(URLError(.notConnectedToInternet))])
 
-    XCTAssertEqual(r.vistos, [.reintentar, .enviado])
+    XCTAssertEqual(r.vistos, [.reintentar])
+    XCTAssertEqual(r.intentados, ["d1"], "Los demás fallarían igual: no se gastan intentos")
+    XCTAssertEqual(r.fin, .cortadaPorFalloGeneral)
+  }
+
+  func testServidorCaidoOTokenRechazado_TambienCortan() async {
+    for error in [ApiError.servidor(codigo: 503, cuerpo: nil),
+                  ApiError.servidor(codigo: 401, cuerpo: nil),
+                  ApiError.sinSesion] {
+      let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(error)])
+
+      XCTAssertEqual(r.intentados, ["d1", "d2"], "\(error)")
+      XCTAssertEqual(r.fin, .cortadaPorFalloGeneral, "\(error)")
+    }
+  }
+
+  func testComoTermina_CadaVuelta() async {
+    let completa = await recorrer(["d1", "d2"], [:])
+    XCTAssertEqual(completa.fin, .completa)
+
+    let conVentanaEIlegible = await recorrer(
+      ["d1", "d2"], ["d1": .failure(ventana), "d2": .failure(ApiError.respuestaIlegible)])
+    XCTAssertEqual(conVentanaEIlegible.fin, .completa, "Ninguno de los dos corta")
+
+    let rechazo = await recorrer(["d1", "d2"], ["d1": .failure(invalido)])
+    XCTAssertEqual(rechazo.fin, .cortadaPorRechazo)
+
+    let vacia = await recorrer([], [:])
+    XCTAssertEqual(vacia.fin, .completa)
   }
 
   func testUnDiaVacio_SeSaltaYSigue() async {
@@ -659,11 +687,11 @@ final class RecorridoDiasTests: XCTestCase {
   func testMezcla_ElCorteGanaSoloDesdeDondeAparece() async {
     let r = await recorrer(
       ["d1", "d2", "d3", "d4", "d5"],
-      ["d2": .failure(ventana), "d3": .failure(Falla()), "d4": .failure(invalido)]
+      ["d2": .failure(ventana), "d3": .failure(invalido), "d4": .failure(Falla())]
     )
 
-    XCTAssertEqual(r.vistos, [.enviado, .descartado, .reintentar, .cortado])
-    XCTAssertEqual(r.intentados.last, "d4", "d5 nunca se intenta")
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .cortado])
+    XCTAssertEqual(r.intentados.last, "d3", "d4 y d5 nunca se intentan")
   }
 
   func testUnaRespuestaIlegible_CuentaComoEnviadaYSigue() async {
@@ -804,6 +832,15 @@ final class SyncQueueTests: XCTestCase {
     cola.encolar(fecha: "2026-10-01")
 
     XCTAssertEqual(UserDefaults.standard.stringArray(forKey: "vida.diasPendientes"), real)
+  }
+
+  func testVaciar() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-10-02")
+
+    cola.vaciar()
+
+    XCTAssertEqual(cola.pendientes(), [])
   }
 
   func testAplicarCadaEfecto() {
@@ -974,15 +1011,16 @@ final class SesionYMarcaTests: XCTestCase {
   private var defaults: UserDefaults!
   private var nombre: String!
   private var marca: MarcaEnvios!
+  private var cola: SyncQueue!
 
   override func setUp() {
     super.setUp()
     almacen = AlmacenEnMemoria()
     nombre = "pruebas.sesionmarca.\(UUID().uuidString)"
     defaults = UserDefaults(suiteName: nombre)
-    marca = MarcaEnvios(almacen: defaults, hoy: {
-      FormatoFechas.diaCalendario.date(from: "2026-10-03")!.addingTimeInterval(15 * 3600)
-    })
+    let hoy = { FormatoFechas.diaCalendario.date(from: "2026-10-03")!.addingTimeInterval(15 * 3600) }
+    marca = MarcaEnvios(almacen: defaults, hoy: hoy)
+    cola = SyncQueue(almacen: defaults, hoy: hoy)
   }
 
   override func tearDown() {
@@ -991,52 +1029,60 @@ final class SesionYMarcaTests: XCTestCase {
   }
 
   func testElMismoTokenEnCadaArranque_NoOlvidaLaMarca() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
     marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
 
-    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
 
     XCTAssertEqual(r.resultado, .ok)
     XCTAssertTrue(r.haySesion)
     XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
+    XCTAssertEqual(cola.pendientes(), ["2026-09-25"], "La cola tampoco se toca")
   }
 
-  func testOtraCuenta_OlvidaLaMarca() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+  func testOtraCuenta_OlvidaLaMarcaYVaciaLaCola() {
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
     marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")   // esperaba a nombre de la cuenta anterior
 
-    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca)
+    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca, cola: cola)
 
     XCTAssertTrue(r.haySesion)
     XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(cola.pendientes(), [], "La cuenta nueva no recibe días de la anterior")
   }
 
   func testCerrarSesion_OlvidaLaMarca_YNoHaySesion() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
     marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
 
-    let r = Sesion.aplicar(token: nil, en: almacen, marca: marca)
+    let r = Sesion.aplicar(token: nil, en: almacen, marca: marca, cola: cola)
 
     XCTAssertEqual(r.resultado, .ok)
     XCTAssertFalse(r.haySesion)
     XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(cola.pendientes(), [])
   }
 
   func testSiFallaElKeychain_NoSeOlvidaNada() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
     marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
     almacen.falla = ErrorAlmacenSesion(operacion: "guardar", estado: -25308)
 
-    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca)
+    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca, cola: cola)
 
     guard case .errorAlmacenamiento = r.resultado else { return XCTFail("Debió fallar") }
     XCTAssertTrue(r.haySesion, "Sigue el token anterior")
     XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02",
                    "El token no cambió, así que la cuenta tampoco")
+    XCTAssertEqual(cola.pendientes(), ["2026-09-25"])
   }
 
   func testElPrimerLogin_NoTeniaMarca_YQuedaSesion() {
-    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca)
+    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
 
     XCTAssertEqual(r.resultado, .ok)
     XCTAssertTrue(r.haySesion)
