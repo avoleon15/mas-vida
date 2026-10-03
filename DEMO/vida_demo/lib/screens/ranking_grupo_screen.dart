@@ -9,8 +9,10 @@ import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/boton_relieve.dart';
 import '../widgets/hoja_invitar_grupo.dart';
+import '../widgets/hoja_vida.dart';
 import '../widgets/patrocinio.dart';
 import '../widgets/ranking_widgets.dart';
+import '../widgets/chip_monedas.dart' show BotonInfo;
 import 'social_screen.dart' show cuandoCierra, diasParaCerrar;
 
 // ============================================================
@@ -59,9 +61,24 @@ class RankingGrupoScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      grupo.nombre,
-                      style: AppTheme.sectionTitle.copyWith(fontSize: 28),
+                    // La marca va AL LADO del nombre de la liga (pedido
+                    // de Daniel, 2 de octubre de 2026): es lo que la
+                    // alianza compró y tiene que verse antes que la tabla.
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            grupo.nombre,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.sectionTitle.copyWith(fontSize: 28),
+                          ),
+                        ),
+                        if (grupo.patrocinio case final p?) ...[
+                          const SizedBox(width: 12),
+                          Flexible(child: MarcaDeLaLiga(patrocinio: p)),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -81,7 +98,18 @@ class RankingGrupoScreen extends StatelessWidget {
                       _BotonInvitar(grupo: grupo),
                     ],
                     const SizedBox(height: AppSpacing.seccion),
-                    const EtiquetaSeccion('TABLA DEL MES'),
+                    Row(
+                      children: [
+                        const Expanded(child: EtiquetaSeccion('TABLA DEL MES')),
+                        // Las reglas a un toque de la tabla: cómo se
+                        // ordena y qué pasa con un empate.
+                        if (_esLiga)
+                          BotonInfo(
+                            semantica: 'Reglas de La Liga',
+                            onPressed: () => mostrarReglasLiga(context, grupo),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     // Una competencia recién creada tiene un solo
                     // integrante: una "tabla" de uno es una espera.
@@ -117,7 +145,6 @@ class RankingGrupoScreen extends StatelessWidget {
           : _meses[enHoraDeGuatemala(arranca).month - 1];
       return [
         if (mes != null) mes[0].toUpperCase() + mes.substring(1),
-        ?grupo.franjaEdad,
         personas,
       ].join(' · ');
     }
@@ -128,8 +155,9 @@ class RankingGrupoScreen extends StatelessWidget {
   }
 }
 
-/// Lo que paga La Liga: monedas al podio y, si el mes tiene marca, un
-/// cupón además. Nunca en lugar de las monedas.
+/// Lo que paga La Liga: monedas al podio. El cupón de la marca, si el
+/// mes tiene una, lo cuentan las reglas: la marca ya está junto al
+/// título y una cinta más repetía quién patrocina.
 class _PremiosDeLaLiga extends StatelessWidget {
   const _PremiosDeLaLiga({required this.liga});
 
@@ -147,13 +175,6 @@ class _PremiosDeLaLiga extends StatelessWidget {
             ],
           ],
         ),
-      if (liga.patrocinio case final p?) ...[
-        const SizedBox(height: AppSpacing.entre),
-        CintaPatrocinio(
-          patrocinio: p,
-          texto: 'Los 3 primeros se llevan además ${p.cupon}.',
-        ),
-      ],
     ],
   );
 }
@@ -174,7 +195,7 @@ class _AccionesLiga extends StatelessWidget {
       _FilaAccion(
         icono: CupertinoIcons.info,
         texto: 'Cómo funciona',
-        onPressed: () => _mostrarReglas(context),
+        onPressed: () => mostrarReglasLiga(context, liga),
       ),
       if (liga.estoyUnido) ...[
         Container(height: 0.5, color: AppColors.separador),
@@ -186,16 +207,6 @@ class _AccionesLiga extends StatelessWidget {
       ],
     ],
   );
-
-  void _mostrarReglas(BuildContext context) {
-    HapticFeedback.selectionClick();
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: AppColors.textPrimary.withValues(alpha: 0.35),
-      builder: (_) => _HojaReglasLiga(liga: liga),
-    );
-  }
 
   /// La hoja de compartir de iOS con tu puesto. Solo el tuyo: nunca los
   /// puntos ni los nombres de los demás.
@@ -365,17 +376,13 @@ class _NotaPrivacidad extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Icon(
-        CupertinoIcons.eye_slash,
-        size: 14,
-        color: AppColors.textSecondary,
-      ),
+      const Icon(CupertinoIcons.eye, size: 14, color: AppColors.textSecondary),
       const SizedBox(width: 6),
       Expanded(
         child: Text(
           esLiga
-              ? 'En La Liga nadie ve los puntos de nadie, solo la posición. '
-                    'Los tuyos solo los ves tú.'
+              ? 'En La Liga se ven los puntos de todos, pero nunca los '
+                    'pasos de nadie.'
               : 'Esta competencia eligió no mostrar los puntos de cada '
                     'quien. Solo se ve la posición.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -390,6 +397,67 @@ class _NotaPrivacidad extends StatelessWidget {
 
 /// Las reglas de La Liga, en una hoja aparte: importan la primera vez y
 /// estorban a partir de la segunda.
+/// Abre las reglas de La Liga en una hoja.
+///
+/// Se abre desde la (i) de la tarjeta de La Liga en Social, desde la (i)
+/// de la tabla y desde "Cómo funciona". Una sola hoja para las tres.
+void mostrarReglasLiga(BuildContext context, GrupoRanking liga) =>
+    mostrarHojaVida<void>(context, hoja: (_) => _HojaReglasLiga(liga: liga));
+
+/// La marca que patrocina el mes de la liga, al lado del nombre: el logo
+/// y "Patrocinada por Montanos", con el nombre en el color de la marca.
+class MarcaDeLaLiga extends StatelessWidget {
+  const MarcaDeLaLiga({super.key, required this.patrocinio});
+
+  final Patrocinio patrocinio;
+
+  @override
+  Widget build(BuildContext context) {
+    final acento = acentoDeMarca(patrocinio);
+
+    // Una PASTILLA al lado del título (pedido de Daniel, 2 de octubre de
+    // 2026): el logo y el nombre en el color de la marca, sobre un
+    // lavado de ese mismo color. Se lee como "esta liga es de Ookii" sin
+    // necesitar una oración ni una cinta aparte.
+    return Semantics(
+      label: 'Patrocinada por ${patrocinio.marca}',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+        decoration: BoxDecoration(
+          color: acento.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadios.pildora),
+          border: Border.all(color: acento.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipOval(
+              child: SizedBox(
+                width: 26,
+                height: 26,
+                child: LogoPatrocinio(patrocinio: patrocinio, tamano: 26),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                patrocinio.marca,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: acento,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _HojaReglasLiga extends StatelessWidget {
   const _HojaReglasLiga({required this.liga});
 
@@ -413,86 +481,82 @@ class _HojaReglasLiga extends StatelessWidget {
       height: 1.4,
     );
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 38,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Text(
-                'Cómo funciona La Liga',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.entre),
-              _Regla(
-                icono: CupertinoIcons.person_3,
-                texto:
-                    'Cada mes te sorteamos con hasta 30 personas de tu edad'
-                    '${liga.franjaEdad == null ? '' : ' (${liga.franjaEdad})'}. '
-                    'No tienes que hacer nada para entrar.',
-                estilo: estilo,
-              ),
-              _Regla(
-                icono: CupertinoIcons.eye_slash,
-                texto:
-                    'Nadie ve los puntos de nadie, solo la posición. Tú sí '
-                    'ves los tuyos.',
-                estilo: estilo,
-              ),
-              _Regla(
-                icono: CupertinoIcons.money_dollar_circle,
-                texto:
-                    'Los tres primeros se llevan MONEDAS, que se gastan en '
-                    'Premios. Nunca puntos: los puntos son de tu cashback y '
-                    'no se ganan compitiendo.',
-                estilo: estilo,
-              ),
-              if (liga.patrocinio case final p?)
-                _Regla(
-                  icono: CupertinoIcons.ticket,
-                  texto:
-                      'Este mes la patrocina ${p.marca}: los tres primeros se '
-                      'llevan además ${p.cupon}.',
-                  estilo: estilo,
-                ),
-              _Regla(
-                icono: CupertinoIcons.clock,
-                texto: _reglaDelCiclo(liga),
-                estilo: estilo,
-              ),
-              const SizedBox(height: AppSpacing.entre),
-              SizedBox(
-                width: double.infinity,
-                child: CupertinoButton.filled(
-                  borderRadius: BorderRadius.circular(AppRadios.pildora),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Entendido'),
-                ),
-              ),
-            ],
+    return HojaVida(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cómo funciona La Liga',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
+          const SizedBox(height: AppSpacing.entre),
+          _Regla(
+            icono: CupertinoIcons.person_3,
+            texto:
+                'Compites con todos los asegurados de +Vida que tienen su '
+                'póliza verificada. No tienes que hacer nada para entrar.',
+            estilo: estilo,
+          ),
+          // El puntaje y el desempate (reunión del 2 de octubre de
+          // 2026). Los pasos de los demás nunca se muestran: el
+          // servidor los usa para ordenar y acá solo se explica por
+          // qué alguien con tus mismos puntos puede ir arriba.
+          _Regla(
+            icono: CupertinoIcons.bolt,
+            texto:
+                'Compites con los puntos que sumas en el mes, los mismos '
+                'de tu cashback.',
+            estilo: estilo,
+          ),
+          _Regla(
+            icono: CupertinoIcons.arrow_up_arrow_down,
+            texto:
+                'Si empatas en puntos con alguien, queda arriba quien '
+                'caminó más pasos en el mes.',
+            estilo: estilo,
+          ),
+          _Regla(
+            icono: CupertinoIcons.eye_slash,
+            texto:
+                'Se ven los puntos de todos, pero nunca los pasos de '
+                'nadie.',
+            estilo: estilo,
+          ),
+          _Regla(
+            icono: CupertinoIcons.money_dollar_circle,
+            texto:
+                'Los tres primeros se llevan MONEDAS, que se gastan en '
+                'Premios. Nunca puntos: los puntos son de tu cashback y '
+                'no se ganan compitiendo.',
+            estilo: estilo,
+          ),
+          if (liga.patrocinio case final p?)
+            _Regla(
+              icono: CupertinoIcons.ticket,
+              texto:
+                  'Este mes la patrocina ${p.marca}: los tres primeros se '
+                  'llevan además ${p.cupon}.',
+              estilo: estilo,
+            ),
+          _Regla(
+            icono: CupertinoIcons.clock,
+            texto: _reglaDelCiclo(liga),
+            estilo: estilo,
+          ),
+          const SizedBox(height: AppSpacing.entre),
+          SizedBox(
+            width: double.infinity,
+            child: CupertinoButton.filled(
+              borderRadius: BorderRadius.circular(AppRadios.pildora),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ),
+        ],
       ),
     );
   }
