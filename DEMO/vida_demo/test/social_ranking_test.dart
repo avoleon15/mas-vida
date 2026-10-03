@@ -68,7 +68,7 @@ void main() {
       expect(find.textContaining('Zona'), findsNothing);
     });
 
-    testWidgets('la tarjeta va limpia: sin foto, puntos ni franja', (t) async {
+    testWidgets('la tarjeta va limpia: sin foto ni puntos', (t) async {
       await _montar(t);
       final tarjeta = find.byKey(llaveTarjetaLiga);
       expect(
@@ -79,16 +79,17 @@ void main() {
         find.descendant(of: tarjeta, matching: find.textContaining('pts')),
         findsNothing,
       );
-      expect(
-        find.descendant(of: tarjeta, matching: find.text(_liga.franjaEdad!)),
-        findsNothing,
-      );
     });
 
-    testWidgets('la franja de edad sale en la tabla', (t) async {
+    testWidgets('es un solo grupo para todos: no hay franja de edad', (
+      t,
+    ) async {
+      // Reunión del 2 de octubre de 2026: La Liga es de todos los
+      // asegurados con póliza verificada, no por franjas de 10 años.
+      expect(_liga.franjaEdad, isNull);
       await montarPantalla(t, RankingGrupoScreen(grupo: _liga));
       await t.pump();
-      expect(find.textContaining(_liga.franjaEdad!), findsOneWidget);
+      expect(find.textContaining('años'), findsNothing);
     });
 
     testWidgets('tocarla abre la tabla', (t) async {
@@ -147,20 +148,26 @@ void main() {
   });
 
   group('La tabla', () {
-    testWidgets('en La Liga solo se ven los puntos propios', (t) async {
+    testWidgets('en La Liga se ven los puntos de todos, nunca los pasos', (
+      t,
+    ) async {
       t.view.physicalSize = const Size(390, 2000);
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
       await montarPantalla(t, RankingGrupoScreen(grupo: _liga));
       await t.pump();
 
-      for (final otro in _liga.miembros.where((m) => !m.esUsuario)) {
+      // Reunión del 2 de octubre de 2026: se ven los puntos de cada
+      // participante. Los de la tabla (del 4.º para abajo) con su número.
+      final enTabla = _liga.miembros.skip(3).where((m) => !m.esUsuario);
+      for (final otro in enTabla.where((m) => m.puntosPeriodo > 0)) {
         expect(
           find.textContaining('${otro.puntosPeriodo}'),
-          findsNothing,
-          reason: 'se filtraron los puntos de ${otro.nombre}',
+          findsWidgets,
+          reason: 'no se ven los puntos de ${otro.nombre}',
         );
       }
+      expect(find.textContaining('pasos'), findsNothing);
     });
 
     testWidgets('dice TABLA DEL MES, no de la semana', (t) async {
@@ -191,27 +198,28 @@ void main() {
   });
 
   group('Privacidad de los puntos', () {
-    test('La Liga nunca muestra puntos, aunque el JSON diga que sí', () {
+    test('La Liga siempre muestra los puntos, aunque el JSON diga que no', () {
       final liga = GrupoRanking(
         id: 'x',
         nombre: 'La Liga',
         tipo: TipoGrupo.desconocidos,
-        mostrarPuntos: true,
+        mostrarPuntos: false,
         miembros: const [],
       );
-      expect(liga.mostrarPuntos, isFalse);
+      expect(liga.mostrarPuntos, isTrue);
     });
 
-    test('una competencia respeta lo que eligió quien la creó', () {
-      GrupoRanking conocidos({required bool ver}) => GrupoRanking(
+    test('en Tus Ligas también se ven los puntos de todos', () {
+      // Reunión del 2 de octubre de 2026: todo ranking muestra los puntos
+      // de cada participante. Ya no se elige al crear la competencia.
+      final grupo = GrupoRanking(
         id: 'x',
         nombre: 'Oficina',
         tipo: TipoGrupo.conocidos,
-        mostrarPuntos: ver,
+        mostrarPuntos: false,
         miembros: const [],
       );
-      expect(conocidos(ver: true).mostrarPuntos, isTrue);
-      expect(conocidos(ver: false).mostrarPuntos, isFalse);
+      expect(grupo.mostrarPuntos, isTrue);
     });
   });
 }

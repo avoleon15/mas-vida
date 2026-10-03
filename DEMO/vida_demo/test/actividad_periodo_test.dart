@@ -197,6 +197,8 @@ void main() {
     });
 
     testWidgets('Mes lista las semanas del mes', (t) async {
+      // Un mes con varias semanas: ver `usarMesConVariasSemanas`.
+      addTearDown(usarMesConVariasSemanas());
       await montar(t);
       await t.tap(find.text('Mes'));
       await t.pump();
@@ -269,6 +271,8 @@ void main() {
     });
 
     testWidgets('en Mes las semanas se numeran de 1 en adelante', (t) async {
+      // Un mes con varias semanas: ver `usarMesConVariasSemanas`.
+      addTearDown(usarMesConVariasSemanas());
       await montar(t);
       await t.tap(find.text('Mes'));
       await t.pump();
@@ -306,6 +310,8 @@ void main() {
     });
 
     testWidgets('el rótulo de la línea es la suma de lo que dibuja', (t) async {
+      // Un mes con varias semanas: ver `usarMesConVariasSemanas`.
+      addTearDown(usarMesConVariasSemanas());
       // "Pasos acumulados" tiene que cuadrar con los días que la app
       // tiene cargados, no con un techo redondeado.
       await montar(t);

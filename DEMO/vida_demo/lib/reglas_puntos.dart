@@ -1,21 +1,13 @@
 // ============================================================
-// Motor de cálculo de puntos de +Vida.
+// Las tablas de puntos y niveles que la app DIBUJA.
 //
-// IMPORTANTE — este motor NO es la fuente de verdad. En producción los
-// puntos los calcula el backend de Luis: el contrato v1 es explícito en
-// que la app nunca manda puntos, edad ni FCM calculada, porque un iPhone
-// jailbreakeado podría acreditarse lo que quiera.
+// Esto NO calcula los puntos de nadie: los calcula el servidor, y la
+// app nunca manda puntos, edad ni FCmáx (un iPhone modificado podría
+// acreditarse lo que quiera). Las pantallas leen los puntos ya hechos
+// del repositorio. Lo que vive acá son las tablas que se muestran: los
+// tramos de pasos del anillo, los niveles de la escalera y los techos.
 //
-// Esta clase existe para dos cosas:
-//   1. Generar y validar los datos de prueba mientras no hay backend.
-//   2. Poder verificar el motor de Luis contra las mismas reglas.
-//
-// Ninguna pantalla debe llamar a este motor para decidir qué mostrar:
-// las pantallas leen los puntos ya calculados que devuelve el
-// repositorio (campos `puntos_pasos`, `puntos_intensidad`, `puntos_dia`
-// del JSON #2 del contrato).
-//
-// Fuente: contrato-v1-corregido.md, congelado.
+// Fuente: contrato-v1-corregido.md y CLAUDE.md.
 // ============================================================
 
 /// Techo diario absoluto, sumando TODAS las fuentes (pasos + intensidad).
@@ -68,116 +60,6 @@ int puntosPorPasos(int pasos) {
     if (pasos >= escalon.pasosMinimos) return escalon.puntos;
   }
   return 0;
-}
-
-// ------------------------------------------------------------
-// Puntos por intensidad (ritmo cardíaco).
-// ------------------------------------------------------------
-
-/// Duración mínima de una sesión para que cuente. Tiene que ser
-/// CONTINUA: dos bloques de 20 minutos no son una sesión de 40.
-const int minutosMinimosSesion = 30;
-
-/// Frecuencia cardíaca máxima. Es 219 − edad, NO 220 − edad.
-///
-/// Se deja acá solo para simular el servidor: el teléfono nunca calcula
-/// ni envía este valor, manda la edad y el servidor lo deriva.
-int frecuenciaCardiacaMaxima(int edad) => 219 - edad;
-
-/// Puntos de intensidad de una sesión.
-///
-/// Devuelve `null` cuando el par (duración, % de FCM) cae en una celda de
-/// la matriz que todavía no está definida — quien llame decide qué hacer
-/// con el hueco, pero nunca debe rellenarlo con un número inventado.
-///
-/// TODO: falta la matriz completa de duración × % de FCM. El contrato y
-/// el Excel fijan un solo punto de la matriz (42 min al 74% = 100 pts).
-/// La define Luis en la tarea L7. Hasta entonces no hay más escalones.
-int? puntosPorIntensidad({
-  required int minutos,
-  required int porcentajeFcm,
-  required bool continua,
-}) {
-  if (!continua || minutos < minutosMinimosSesion) return 0;
-
-  // Única celda conocida de la matriz.
-  if (minutos == 42 && porcentajeFcm == 74) return 100;
-
-  return null; // celda sin definir
-}
-
-/// Bonus para usuarios de 60 años o más: ×1.25 sobre los puntos de
-/// intensidad (nunca sobre los de pasos).
-///
-/// REQUIERE validación médica/actuarial antes de salir a piloto.
-int aplicarBonus60Mas(int puntosIntensidad, int edad) {
-  if (edad < 60) return puntosIntensidad;
-  return (puntosIntensidad * 1.25).round();
-}
-
-// ------------------------------------------------------------
-// Total del día.
-// ------------------------------------------------------------
-
-/// Resultado del cálculo de un día, con la misma forma que los campos
-/// relevantes del JSON #2 del contrato.
-class PuntosDelDia {
-  const PuntosDelDia({
-    required this.puntosPasos,
-    required this.puntosIntensidad,
-    required this.puntosBrutos,
-    required this.puntosAcreditados,
-    required this.topeAplicado,
-  });
-
-  final int puntosPasos;
-  final int puntosIntensidad;
-
-  /// Lo que sumaron las dos vías antes de aplicar el techo.
-  final int puntosBrutos;
-
-  /// Lo que efectivamente se acredita, ya con el techo aplicado.
-  final int puntosAcreditados;
-
-  /// True solo si el techo recortó el resultado. Llegar a exactamente
-  /// 200 no cuenta como recorte.
-  final bool topeAplicado;
-}
-
-/// Suma las dos vías del día y aplica el techo diario.
-///
-/// [manual] marca los datos ingresados a mano en la app de Salud: no
-/// acreditan ningún punto en v1.
-PuntosDelDia calcularDia({
-  required int pasos,
-  required int edad,
-  int minutosSesion = 0,
-  int porcentajeFcm = 0,
-  bool sesionContinua = true,
-  bool manual = false,
-}) {
-  final pPasos = manual ? 0 : puntosPorPasos(pasos);
-
-  var pIntensidad = 0;
-  if (!manual && minutosSesion > 0) {
-    final crudo = puntosPorIntensidad(
-      minutos: minutosSesion,
-      porcentajeFcm: porcentajeFcm,
-      continua: sesionContinua,
-    );
-    // Celda sin definir: se cuenta como 0 y el hueco queda visible en la
-    // UI, en vez de inventar un valor.
-    pIntensidad = aplicarBonus60Mas(crudo ?? 0, edad);
-  }
-
-  final brutos = pPasos + pIntensidad;
-  return PuntosDelDia(
-    puntosPasos: pPasos,
-    puntosIntensidad: pIntensidad,
-    puntosBrutos: brutos,
-    puntosAcreditados: brutos > techoDiario ? techoDiario : brutos,
-    topeAplicado: brutos > techoDiario,
-  );
 }
 
 // ------------------------------------------------------------
@@ -241,15 +123,6 @@ const List<Nivel> niveles = [
   Nivel(3, 10000, 14999, 10),
   Nivel(4, 15000, 15000, 20),
 ];
-
-/// Nivel que corresponde a un acumulado anual.
-int nivelParaPuntos(int puntosAnuales) {
-  // De mayor a menor: el primero cuyo piso se alcanza es el nivel.
-  for (final n in niveles.reversed) {
-    if (puntosAnuales >= n.puntosMinimos!) return n.numero;
-  }
-  return 0;
-}
 
 /// Si [nivel] se puede alcanzar con la actividad del año, que topa en
 /// [techoAnual]. El nivel 4 no: es la consecuencia aceptada del piloto.

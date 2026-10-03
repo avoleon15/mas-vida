@@ -1,14 +1,14 @@
 {
   "_comentario": [
     "Mock de la pantalla Social: La Liga y Mis competencias. Sin amigos, solicitudes ni duelos (sacados el 25 de septiembre de 2026).",
-    "Mis competencias (tipo 'conocidos') se arman con un codigo: quien crea la competencia lo comparte por WhatsApp o cualquier app, y quien lo escribe entra. No hay que agregarse como amigos.",
-    "La Liga (tipo 'desconocidos') la arma la app: cada mes sortea a la gente en grupos de hasta 30 personas de la misma franja de edad de 10 anios. Sus puntos NUNCA se muestran, solo la posicion.",
-    "puntos_periodo son los puntos del MES en curso.",
+    "Mis competencias (tipo conocidos) se arman con un codigo. Compiten por PUNTOS del mes (2 oct 2026) y no piden poliza. Quien la crea elige si se ven los puntos de cada quien.",
+    "La Liga (tipo desconocidos) es UN SOLO GRUPO con todos los usuarios con poliza verificada (2 oct 2026). Se ven los puntos de cada participante y NUNCA los pasos. A igualdad de puntos queda arriba quien camino mas pasos: el orden lo manda el servidor (aca, Jose Barrios va arriba de Diego con los mismos 25).",
+    "puntos_periodo son los puntos del MES en curso: octubre, que lleva dos dias (el hoy del mock es el viernes 2 oct 2026). Nadie puede pasar de 400 (200 por dia).",
     "Los grupos que el usuario crea NO viven aca: se guardan en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
   ],
   "yo": {
     "nombre": "Diego",
-    "puntos_periodo": 850,
+    "puntos_periodo": 25,
     "tendencia": "subida"
   },
   "grupos": [
@@ -20,12 +20,12 @@
       "miembros": [
         {
           "nombre": "Ana Martinez",
-          "puntos_periodo": 1350,
+          "puntos_periodo": 200,
           "tendencia": "subida"
         },
         {
           "nombre": "David S.",
-          "puntos_periodo": 1100,
+          "puntos_periodo": 150,
           "tendencia": "igual"
         },
         {
@@ -33,12 +33,12 @@
         },
         {
           "nombre": "Juan Perez",
-          "puntos_periodo": 600,
+          "puntos_periodo": 0,
           "tendencia": "bajada"
         },
         {
           "nombre": "Sofia L.",
-          "puntos_periodo": 500,
+          "puntos_periodo": 0,
           "tendencia": "igual"
         }
       ]
@@ -50,16 +50,16 @@
       "mostrar_puntos": false,
       "miembros": [
         {
-          "es_usuario": true
-        },
-        {
           "nombre": "Maria Rodriguez",
-          "puntos_periodo": 700,
+          "puntos_periodo": 125,
           "tendencia": "subida"
         },
         {
+          "es_usuario": true
+        },
+        {
           "nombre": "Carlos Piña",
-          "puntos_periodo": 400,
+          "puntos_periodo": 0,
           "tendencia": "bajada"
         }
       ]
@@ -72,20 +72,20 @@
       "miembros": [
         {
           "nombre": "Pablo A.",
-          "puntos_periodo": 1050,
+          "puntos_periodo": 250,
           "tendencia": "subida"
+        },
+        {
+          "nombre": "Rodrigo M.",
+          "puntos_periodo": 100,
+          "tendencia": "igual"
         },
         {
           "es_usuario": true
         },
         {
-          "nombre": "Rodrigo M.",
-          "puntos_periodo": 760,
-          "tendencia": "igual"
-        },
-        {
           "nombre": "Joaquin Monrroy",
-          "puntos_periodo": 360,
+          "puntos_periodo": 0,
           "tendencia": "bajada"
         }
       ]
@@ -94,12 +94,11 @@
       "id": "liga_local",
       "nombre": "La Liga",
       "tipo": "desconocidos",
-      "mostrar_puntos": false,
+      "mostrar_puntos": true,
       "liga": {
-        "franja_edad": "30 a 39 años",
         "ciclo": "mes",
-        "arranca": "2026-09-01T00:00:00-06:00",
-        "cierra": "2026-09-30T23:59:59-06:00",
+        "arranca": "2026-10-01T00:00:00-06:00",
+        "cierra": "2026-10-31T23:59:59-06:00",
         "premios_monedas": [
           10,
           6,
@@ -108,70 +107,74 @@
         "patrocinio": {
           "marca": "Ookii",
           "logo": "assets/img/premios/restaurantes/ookii.webp",
-          "cupon": "2x1 en sushi de Ookii"
+          "cupon": "2x1 en sushi de Ookii",
+          "fotos": [
+            "assets/img/premios/restaurantes/ookii.webp",
+            "assets/img/premios/restaurantes/ookii.webp",
+            "assets/img/premios/restaurantes/ookii.webp"
+          ]
         },
-        "_nota_ciclo": "La Liga corre por MES: del dia 1 al ultimo dia del mes, en hora de Guatemala. Se arma por franja de edad de 10 anios, no por zona (la zona es del modelo viejo).",
+        "_nota_ciclo": "La Liga corre por MES: del dia 1 al ultimo dia del mes, en hora de Guatemala. Es un solo grupo con todos los usuarios con poliza verificada (2 oct 2026); ya no hay franjas de edad.",
         "_nota_patrocinio": "PLACEHOLDER: Ookii es un ejemplo, la alianza real todavia no esta cerrada (Diego la sustituye cuando cierre). El logo sale del catalogo de Premios para no meter un asset nuevo por algo provisional. Cuando exista el endpoint de Luis esto llega de la API y este bloque se borra."
       },
       "miembros": [
         {
           "nombre": "Daniel Piñol",
-          "puntos_periodo": 3200,
+          "puntos_periodo": 375,
           "tendencia": "subida"
         },
         {
           "nombre": "Luis Montenegro",
-          "puntos_periodo": 2900,
+          "puntos_periodo": 300,
           "tendencia": "igual"
         },
         {
           "nombre": "Dhidel Osorio",
-          "puntos_periodo": 2400,
+          "puntos_periodo": 250,
           "tendencia": "subida"
         },
         {
-          "_nota": "Los puntos del usuario en La Liga. Tiene que quedar entre el 3.o (2400) y el 5.o (1500) o la tabla deja de estar ordenada.",
-          "es_usuario": true,
-          "puntos_periodo": 2100
-        },
-        {
           "nombre": "Alexander López",
-          "puntos_periodo": 1500,
+          "puntos_periodo": 200,
           "tendencia": "bajada"
         },
         {
           "nombre": "Sofía Bilbao",
-          "puntos_periodo": 1150,
+          "puntos_periodo": 150,
           "tendencia": "igual"
         },
         {
           "nombre": "Andrea Castillo",
-          "puntos_periodo": 1020,
+          "puntos_periodo": 125,
           "tendencia": "subida"
         },
         {
           "nombre": "Pablo Estrada",
-          "puntos_periodo": 940,
+          "puntos_periodo": 100,
           "tendencia": "bajada"
         },
         {
           "nombre": "Daniela De León",
-          "puntos_periodo": 780,
+          "puntos_periodo": 75,
           "tendencia": "bajada"
         },
         {
           "nombre": "Mariana Cifuentes",
-          "puntos_periodo": 610,
+          "puntos_periodo": 50,
           "tendencia": "igual"
         },
         {
           "nombre": "José Barrios",
-          "puntos_periodo": 450,
+          "puntos_periodo": 25,
           "tendencia": "subida"
         },
         {
+          "es_usuario": true,
+          "puntos_periodo": 25
+        },
+        {
           "nombre": "Lucía Morales",
-          "puntos_periodo": 300,
+          "puntos_periodo": 0,
           "tendencia": "bajada"
         }
       ]

@@ -288,7 +288,7 @@ class _TarjetaPuntosState extends State<TarjetaPuntos> {
 /// pieza llamaba toda la atención y las gráficas —que son lo que esta
 /// pantalla vino a mostrar— quedaban de relleno debajo.
 ///
-/// Acá el total es CONTEXTO, no el protagonista: dice cuánto llevás en
+/// Acá el total es CONTEXTO, no el protagonista: dice cuánto llevas en
 /// el período para que las gráficas de abajo se puedan leer. Por eso no
 /// tiene superficie propia, el número volvió a 44 px y todo el apoyo va
 /// en gris de texto. Lo que tiene que saltar son los dibujos.
@@ -358,7 +358,7 @@ class _TarjetaNumero extends StatelessWidget {
         const SizedBox(height: AppSpacing.entre),
 
         // NI BARRA NI TECHO (pedido de Daniel, 21 de septiembre de
-        // 2026). El encabezado dice UN número: cuántos puntos llevás.
+        // 2026). El encabezado dice UN número: cuántos puntos llevas.
         //
         // Lo que se sacó es la barra de "200 de 1.400 posibles" con su
         // renglón. El techo era el máximo teórico del período (el tope
@@ -373,7 +373,7 @@ class _TarjetaNumero extends StatelessWidget {
         // de esa línea.
 
         // La comparación es la única referencia que queda, y es la que
-        // sirve: contra vos mismo la semana pasada, no contra un máximo
+        // sirve: contra ti mismo la semana pasada, no contra un máximo
         // que nadie alcanza.
         if (cambio != null && textoComparacion != null) ...[
           const SizedBox(height: 4),
@@ -384,7 +384,7 @@ class _TarjetaNumero extends StatelessWidget {
   }
 }
 
-/// Cómo venís contra el período anterior.
+/// Cómo vienes contra el período anterior.
 ///
 /// Era una frase de dos renglones en NARANJA ("Vas 53% abajo de la
 /// semana pasada, que cerró en 425 pts"): lo más ruidoso del encabezado
@@ -614,7 +614,6 @@ class _Subtitulo extends StatelessWidget {
 /// Es el `CupertinoSlidingSegmentedControl` del sistema, no una imitación:
 /// trae gratis el deslizamiento de la píldora, el rebote al soltar y el
 /// comportamiento que un usuario de iPhone ya conoce de Ajustes y Salud.
-
 class _SelectorPeriodo extends StatelessWidget {
   const _SelectorPeriodo({required this.seleccionado, required this.onChanged});
 

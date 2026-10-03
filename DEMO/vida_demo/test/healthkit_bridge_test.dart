@@ -7,8 +7,10 @@ import 'package:vida_demo/datos/healthkit_bridge.dart';
 //
 // Lo que se protege: que el token llegue a Swift con el nombre de método y
 // la forma que espera AppDelegate.swift (`{ "token": String? }`), que el
-// cierre de sesión viaje como `null`, y que cada respuesta posible del
-// contrato se lea bien — incluida una que esta versión no conoce.
+// cierre de sesión viaje como `null`, y que cada respuesta posible se lea
+// bien — incluida una que esta versión no conoce.
+//
+// El flujo (entrar, salir, abrir la app) lo cubre sesion_nativa_test.dart.
 // ============================================================
 
 const _canal = MethodChannel('com.assures.masvida/healthkit');
@@ -70,88 +72,55 @@ void main() {
   });
 
   group('lo que se lee', () {
+    Future<EstadoSesionNativa> con(Object? respuesta) {
+      responder((_) => respuesta);
+      return HealthKitBridge().actualizarSesion('abc123');
+    }
+
     test('ok', () async {
-      responder((_) => {'estado': 'ok'});
-
-      final r = await HealthKitBridge().actualizarSesion('abc123');
-
-      expect(r.estado, EstadoSesion.ok);
-      expect(r.detalle, isNull);
+      expect(await con({'estado': 'ok'}), EstadoSesionNativa.ok);
     });
 
-    test('error_almacenamiento trae su detalle', () async {
-      responder(
-        (_) => {
+    test('error_almacenamiento', () async {
+      expect(
+        await con({
           'estado': 'error_almacenamiento',
-          'detalle':
-              'No se pudo guardar la sesión en el Keychain (código -25308).',
-        },
+          'detalle': 'No se pudo guardar la sesión en el Keychain.',
+        }),
+        EstadoSesionNativa.errorAlmacenamiento,
       );
-
-      final r = await HealthKitBridge().actualizarSesion('abc123');
-
-      expect(r.estado, EstadoSesion.errorAlmacenamiento);
-      expect(r.detalle, contains('Keychain'));
     });
 
-    test(
-      'un estado que esta versión no conoce es desconocido, no un crash',
-      () async {
-        responder((_) => {'estado': 'algo_nuevo'});
-
-        final r = await HealthKitBridge().actualizarSesion('abc123');
-
-        expect(r.estado, EstadoSesion.desconocido);
-      },
-    );
+    test('un estado que esta versión no conoce es desconocido', () async {
+      expect(
+        await con({'estado': 'algo_nuevo'}),
+        EstadoSesionNativa.desconocido,
+      );
+      expect(await con({'estado': 'OK'}), EstadoSesionNativa.desconocido);
+    });
 
     test('una respuesta vacía es desconocido', () async {
-      responder((_) => null);
-
-      final r = await HealthKitBridge().actualizarSesion('abc123');
-
-      expect(r.estado, EstadoSesion.desconocido);
+      expect(await con(null), EstadoSesionNativa.desconocido);
     });
 
-    test('un FlutterError de Swift llega como PlatformException', () async {
-      responder(
-        (_) => throw PlatformException(
-          code: 'ARGUMENTOS_INVALIDOS',
-          message: 'actualizarSesion espera { "token": String? }',
-        ),
-      );
-
-      await expectLater(
-        HealthKitBridge().actualizarSesion('abc123'),
-        throwsA(
-          isA<PlatformException>().having(
-            (e) => e.code,
-            'code',
-            'ARGUMENTOS_INVALIDOS',
+    // Swift solo responde con FlutterError si los argumentos llegan mal: es
+    // un error de programación. Contarlo como falla del Keychain mandaría a
+    // buscar el problema al lugar equivocado.
+    test(
+      'un FlutterError de Swift es desconocido, no error de almacenamiento',
+      () async {
+        responder(
+          (_) => throw PlatformException(
+            code: 'ARGUMENTOS_INVALIDOS',
+            message: 'actualizarSesion espera { "token": String? }',
           ),
-        ),
-      );
-    });
+        );
 
-    // Lo que ve quien llama sin lado nativo (las pruebas de Flutter, sin
-    // reemplazar el puente). El wrapper no se lo traga: si lo hiciera, un
-    // canal mal registrado pasaría por "desconocido" sin que nadie se entere.
-    test('sin lado nativo, el error llega a quien llamó', () async {
-      // Sin responder(): nadie atiende el canal.
-      await expectLater(
-        HealthKitBridge().actualizarSesion('abc123'),
-        throwsA(isA<MissingPluginException>()),
-      );
-    });
-  });
-
-  test('los textos del contrato se traducen uno por uno', () {
-    expect(EstadoSesion.desde('ok'), EstadoSesion.ok);
-    expect(
-      EstadoSesion.desde('error_almacenamiento'),
-      EstadoSesion.errorAlmacenamiento,
+        expect(
+          await HealthKitBridge().actualizarSesion('abc123'),
+          EstadoSesionNativa.desconocido,
+        );
+      },
     );
-    expect(EstadoSesion.desde(null), EstadoSesion.desconocido);
-    expect(EstadoSesion.desde('OK'), EstadoSesion.desconocido);
   });
 }

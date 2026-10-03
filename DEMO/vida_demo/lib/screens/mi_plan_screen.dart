@@ -14,33 +14,31 @@ import '../reglas_puntos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/escalera_cashback.dart';
 import '../widgets/numero_animado.dart';
-import '../widgets/hoja_niveles.dart';
 import '../widgets/refresco_vida.dart';
 
 // ============================================================
-// MI PLAN — UNA ZONA FIJA ARRIBA Y UNA ZONA QUE CAMBIA ABAJO.
+// MI PLAN — UNA TARJETA ARRIBA Y UNA ZONA QUE CAMBIA ABAJO.
 //
 // Esta pantalla no lee JSON: todo sale de `Datos.i`.
 //
 // REGLA DURA DEL PROYECTO: acá NUNCA aparecen monedas — esa es la moneda
 // que se gasta en Premios. Mi Plan es solo puntos/cashback/póliza.
 //
-// ARRIBA, FIJO, SIEMPRE A LA VISTA:
+// ARRIBA:
 //   el título MI PLAN
-//   el cabezal -> el cashback del año, el nivel y la nota regulatoria
+//   la tarjeta -> el cashback del año, la escalera de niveles con tu foto
+//                 y la nota regulatoria, todo en UNA sola pieza
 //   el riel    -> Póliza · Cobertura · Pagos · Contacto
 //
 // ABAJO, LO ÚNICO QUE CAMBIA:
-//   sin elegir     -> la proyección y el calendario
+//   sin elegir     -> el calendario de pagos
 //   con categoría  -> ESA categoría y nada más
 //
-// POR QUÉ EL CABEZAL NO SCROLLEA. El monto del año es la respuesta a la
-// pregunta con la que alguien entra a esta pantalla, y el riel es la
-// única manera de moverse dentro de ella. Si los dos se van con el
-// scroll, a media pantalla ya no se sabe ni cuánto se lleva ni cómo
-// cambiar de sección. Fijos, el usuario siempre tiene el número y
-// siempre tiene el control: lo único que se mueve es la respuesta.
+// TODO SCROLLEA JUNTO. Antes la tarjeta y el riel quedaban fijos arriba;
+// con la escalera adentro (reunión del 2 de octubre de 2026) la tarjeta
+// mide el doble y fija se comía la pantalla.
 //
 // POR QUÉ UN RIEL A LA VISTA Y NO UN MENÚ. Esto pasó por un acordeón,
 // por un selector de cuatro tiles y por una barra lateral que se abría
@@ -68,11 +66,12 @@ import '../widgets/refresco_vida.dart';
 // la regla de reparto de CLAUDE.md, que reserva el color por tamaño de
 // superficie y deja el naranja para cuatro cosas puntuales.
 //
-// UN SOLO NÚMERO GRANDE POR TARJETA. En el cabezal el monto es lo único
-// en display(46); el nivel va en un medallón chico al costado y el
-// porcentaje baja al renglón de apoyo.
+// UNA SOLA TARJETA PARA LA PLATA Y EL NIVEL. El monto es lo único en
+// grande; el porcentaje va en el renglón de apoyo y el nivel lo dice la
+// escalera, en blanco sobre el mismo azul, con tu foto en tu escalón.
+// Ningún dato se repite: el % no vuelve a aparecer en la escalera.
 //
-// LA PRIMA VA COMPLETA Y SIN TACHAR, SIEMPRE. Tacharla diría "pagás
+// LA PRIMA VA COMPLETA Y SIN TACHAR, SIEMPRE. Tacharla diría "pagas
 // menos", que es exactamente lo que la Superintendencia de Bancos no
 // permite: el cashback se devuelve como dinero DESPUÉS de pagar la
 // prima. La nota regulatoria vive DENTRO del cabezal, al pie y separada
@@ -88,22 +87,14 @@ import '../widgets/refresco_vida.dart';
 // espera que no existe.
 // ============================================================
 
-// La tabla completa de niveles no se muestra acá: Mi Plan enseña el
-// nivel de HOY. La escalera con la foto del usuario vive en Home.
+// La escalera de niveles, con la foto del usuario, va en la vista de la
+// plata, unida a la barra de avance (reunión del 2 de octubre de 2026).
 
 int get nivelActual => Datos.i.resumen.nivel;
 int get puntosAnuales => Datos.i.resumen.puntosAno;
 
 /// Cashback de fin de año: el % del nivel aplicado sobre la prima anual.
 int get cashbackProyectado => Datos.i.resumen.cashback.proyectadoQ;
-
-/// TODO: falta la fórmula de devengo del cashback a mitad de año. Lo
-/// único fijado es que se devuelve como dinero DESPUÉS del pago de la
-/// prima, nunca como descuento directo (Superintendencia de Bancos).
-///
-/// Mientras esto sea null, el hero dice lo que paga el nivel de HOY y no
-/// "lo que llevás acumulado": lo segundo sería un número inventado.
-int? get cashbackDevengado => Datos.i.resumen.cashback.devengadoQ;
 
 // ---- Detalles de póliza ----
 String get numeroPoliza => Datos.i.perfil.poliza.numero;
@@ -114,17 +105,14 @@ String get deducible => Datos.i.perfil.poliza.deducible;
 String get coaseguro => Datos.i.perfil.poliza.coaseguro;
 String get vigencia => Datos.i.perfil.poliza.vigencia;
 String get fechaRenovacion => Datos.i.perfil.poliza.fechaRenovacion;
+String? get fechaNacimientoPoliza => Datos.i.perfil.poliza.fechaNacimiento;
 String get primaAnual => Datos.i.perfil.poliza.primaAnual;
 String get formaPago => Datos.i.perfil.poliza.formaPago;
 String get redCobertura => Datos.i.perfil.poliza.redCobertura;
 String get estadoPoliza => Datos.i.perfil.poliza.estado;
 
-/// La prima como número, para la única cuenta de la pantalla: cuánto
-/// pagaría el nivel siguiente. Puede ser null (ver [Poliza.primaAnualQ]).
-int? get primaAnualNumero => Datos.i.perfil.poliza.primaAnualQ;
-
-/// Cuándo cierra el año del programa. Se nombra una sola vez: lo dicen
-/// la proyección y el calendario, y tienen que decir lo mismo.
+/// Cuándo cierra el año del programa. Vive en un solo lugar para que
+/// ningún texto diga otra fecha.
 const String cierreDelAno = '31 de diciembre';
 
 // ============================================================
@@ -134,13 +122,6 @@ const String cierreDelAno = '31 de diciembre';
 // de Home y de los números. Una pantalla con su propia curva se siente
 // de otra app.
 // ============================================================
-
-/// Cuánto tarda un botón del riel en prenderse o apagarse.
-///
-/// Más corto que una apertura (300 ms) a propósito: esto es un CAMBIO de
-/// estado, no algo que se despliega. Un cambio que tarda lo mismo que
-/// una apertura se siente pesado, como si la app estuviera pensando.
-const Duration duracionCambioDeCategoria = Duration(milliseconds: 180);
 
 /// Cuánto tarda el panel en aparecer.
 ///
@@ -168,26 +149,6 @@ const Duration escalonEntradaBoton = Duration(milliseconds: 70);
 /// aparece. Un desplazamiento grande convierte una aparición en un
 /// aterrizaje, y la app tiene que transmitir calma.
 const double desplazamientoEntradaPanel = 0.06;
-
-/// A partir de qué tamaño de texto del sistema la zona fija deja de
-/// estar fija.
-///
-/// Arriba de esto, el cabezal y el riel juntos se comerían la pantalla y
-/// el panel quedaría en una franja de 80 px. Entonces todo vuelve a
-/// scrollear junto: es mejor perder el cabezal fijo que dejar el
-/// contenido sin lugar.
-const double escalaQueSueltaElCabezal = 1.3;
-
-/// Cuánto alto hace falta para que valga la pena tener el cabezal fijo.
-///
-/// El cabezal mide unos 350 px, y entre el header de la marca y la barra
-/// de abajo se van otros 160. En un iPhone SE (568 de alto) eso deja 60
-/// px para el panel, que no es una zona de contenido: es una rendija.
-/// Por debajo de este alto todo vuelve a scrollear junto.
-///
-/// 720 y no 700: deja fijo el cabezal del iPhone 12 para arriba (844) y
-/// lo suelta en los SE (568 y 667), que es justo donde no entra.
-const double altoMinimoParaCabezalFijo = 720;
 
 // ============================================================
 // EL ASPECTO DE UN BLOQUE
@@ -296,7 +257,7 @@ class MiPlanScreen extends StatefulWidget {
 
 class _MiPlanScreenState extends State<MiPlanScreen> {
   /// La categoría abierta, o null cuando se está en la vista de la
-  /// plata (proyección y calendario).
+  /// plata (el calendario).
   _Categoria? _elegida;
 
   void _elegir(_Categoria categoria) {
@@ -321,14 +282,6 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
     // de relleno presentado como bueno es peligroso de verdad.
     final sinVerificar = !aseguradora.verificado || !uso.verificado;
 
-    // Dos motivos para soltar el cabezal: un texto del sistema muy
-    // grande, o una pantalla corta. En los dos casos la zona fija no
-    // cabe, y ahí todo vuelve a scrollear junto.
-    final medidas = MediaQuery.of(context);
-    final sueltoElCabezal =
-        medidas.textScaler.scale(1) > escalaQueSueltaElCabezal ||
-        medidas.size.height < altoMinimoParaCabezalFijo;
-
     // El margen de 20 va PIEZA POR PIEZA y no envolviendo al cabezal
     // entero: el riel de categorías tiene que llegar hasta los dos
     // bordes de la pantalla, y con el margen puesto arriba no habría
@@ -336,26 +289,13 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
     final cabezal = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // EL NIVEL VA ACÁ ARRIBA, a la altura del título y pegado al
-        // borde derecho.
-        //
-        // Vivía adentro de la tarjeta del cashback, al costado del
-        // monto, y ahí competía con él: dos cosas azules a 20 px una
-        // de la otra, y la que importa es el monto. Arriba tiene el
-        // renglón para él solo, se ve antes de leer nada, y de paso le
-        // devuelve a la tarjeta el ancho completo para el número.
-        //
         // El título usa el `sectionTitle` de `AppTheme` tal cual, sin
-        // retoques locales: las cinco pantallas titulan igual.
+        // retoques locales: las cinco pantallas titulan igual. Ya no
+        // lleva el medallón del nivel: el nivel lo dice la escalera,
+        // adentro de la tarjeta, con tu foto parada en tu escalón.
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              Expanded(child: Text('MI PLAN', style: AppTheme.sectionTitle)),
-              const SizedBox(width: AppSpacing.entre),
-              _MedallonNivel(nivel: nivelActual),
-            ],
-          ),
+          child: Text('MI PLAN', style: AppTheme.sectionTitle),
         ),
         const SizedBox(height: AppSpacing.entre),
         Padding(
@@ -385,22 +325,9 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
                 child: const AppHeader(),
               ),
               const SizedBox(height: 16),
-              // ---- LA ZONA FIJA ----
-              //
-              // El cabezal no scrollea: el monto del año y el riel de
-              // categorías tienen que estar SIEMPRE a la vista, porque
-              // son la pantalla. Lo único que cambia es lo de abajo, y
-              // cambia solo cuando se toca un botón.
-              //
-              // `RepaintBoundary` porque abajo hay un scroll: sin esto,
-              // cada cuadro del scroll vuelve a pintar también el
-              // cabezal, que tiene degradado y sombras. Es una de las
-              // cosas que hacían que se sintiera trabado.
-              if (!sueltoElCabezal) RepaintBoundary(child: cabezal),
-              if (!sueltoElCabezal) const SizedBox(height: AppSpacing.entre),
               Expanded(
                 child: _ZonaQueCambia(
-                  cabezal: sueltoElCabezal ? cabezal : null,
+                  cabezal: cabezal,
                   elegida: _elegida,
                   aseguradora: aseguradora,
                   uso: uso,
@@ -419,26 +346,14 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
 /// Lo único que cambia de la pantalla: la plata, o UNA categoría.
 ///
 /// SOLO SE ANIMA LO QUE CAMBIA (revisión de Daniel, 22 de septiembre de
-/// 2026). El título, el medallón de nivel y la tarjeta del cashback
-/// dicen lo mismo con cualquier filtro puesto, así que no tienen por qué
-/// volver a entrar cada vez que se toca uno: una pieza que se desvanece
-/// y vuelve se lee como que cambió, y ahí el usuario la vuelve a leer
-/// para nada.
+/// 2026). El título, la tarjeta del cashback y el riel dicen lo mismo con
+/// cualquier filtro puesto: van adentro del scroll pero AFUERA del
+/// `AnimatedSwitcher`, así no vuelven a entrar cada vez que se toca un
+/// botón. Una pieza que se desvanece y vuelve se lee como que cambió.
 ///
-/// Con la pantalla alta eso ya pasaba solo, porque el cabezal vive
-/// afuera del scroll. El que se animaba de más era el caso contrario
-/// —pantalla corta o letra grande—, donde el cabezal baja adentro del
-/// scroll para poder scrollear: ahí quedaba adentro del `AnimatedSwitcher`
-/// y entraba con todo lo demás. Ahora el switcher envuelve SOLO al
-/// contenido de abajo, en los dos casos.
-///
-/// El scroll vuelve arriba al cambiar de vista, que antes lo hacía una
-/// llave en el `CustomScrollView`. La llave reconstruía el scroll
-/// entero —cabezal incluido— y era justamente lo que obligaba a animar
-/// todo junto; ahora el salto lo hace el controlador y no se toca nada
-/// más. Sin esto, entrar a Contacto después de haber bajado en Cobertura
-/// dejaría la pantalla a mitad de camino de un contenido que ya no
-/// existe.
+/// El scroll vuelve arriba al cambiar de vista con el controlador, no
+/// con una llave: la llave reconstruía el scroll entero y obligaba a
+/// animar todo junto.
 class _ZonaQueCambia extends StatefulWidget {
   const _ZonaQueCambia({
     required this.cabezal,
@@ -448,9 +363,9 @@ class _ZonaQueCambia extends StatefulWidget {
     required this.alCerrar,
   });
 
-  /// Solo cuando el texto del sistema es tan grande que el cabezal dejó
-  /// de estar fijo y viaja adentro del scroll.
-  final Widget? cabezal;
+  /// La tarjeta y el riel. Viajan adentro del scroll, afuera de lo que
+  /// se anima.
+  final Widget cabezal;
   final _Categoria? elegida;
   final Aseguradora aseguradora;
   final UsoDelSeguro uso;
@@ -545,16 +460,15 @@ class _ZonaQueCambiaState extends State<_ZonaQueCambia> {
         const RefrescoVida(),
         // El cabezal va AFUERA del switcher aunque scrollee con lo
         // demás: no cambia con el filtro, así que no se mueve.
-        if (cabezal != null)
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                cabezal,
-                const SizedBox(height: AppSpacing.seccion),
-              ],
-            ),
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              cabezal,
+              const SizedBox(height: AppSpacing.seccion),
+            ],
           ),
+        ),
         SliverPadding(
           // Sin margen lateral acá: el cabezal trae el suyo pieza por
           // pieza, porque el riel de categorías tiene que llegar hasta
@@ -572,22 +486,13 @@ class _ZonaQueCambiaState extends State<_ZonaQueCambia> {
   }
 }
 
-/// La vista por defecto: lo que queda de la plata cuando el monto del
-/// año ya está arriba, fijo.
+/// La vista por defecto, debajo del riel: el calendario de pagos. El
+/// monto, el nivel y cuánto falta ya los dice la tarjeta de arriba.
 class _VistaDeLaPlata extends StatelessWidget {
   const _VistaDeLaPlata({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SeccionProyeccion(),
-        const SizedBox(height: AppSpacing.seccion),
-        _SeccionCalendario(),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => _SeccionCalendario();
 }
 
 // ============================================================
@@ -659,7 +564,7 @@ class _HeroCashback extends StatelessWidget {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        'TU CASHBACK DE ESTE AÑO',
+                        'TU CASHBACK DE ESTE AÑO DE PÓLIZA',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -668,9 +573,7 @@ class _HeroCashback extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.dentro),
-                    // EL número de la pantalla, y ahora con la tarjeta
-                    // entera para él: el medallón del nivel se fue
-                    // arriba, al renglón del título.
+                    // EL número de la pantalla.
                     //
                     // Sube desde 0 con `NumeroAnimado`, que ya trae los
                     // dígitos de ancho fijo (para que no tiemble al
@@ -700,6 +603,18 @@ class _HeroCashback extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+              // EN QUÉ NIVEL VAS, ADENTRO DE LA MISMA TARJETA (pedido de
+              // Daniel, 2 de octubre de 2026): la escalera de los cinco
+              // niveles con tu foto en tu escalón, dibujada en blanco
+              // directo sobre el azul, pegada al monto que paga.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+                child: EscaleraCashback(
+                  nivelActual: nivelActual,
+                  puntosTotal: puntosAnuales,
+                  techoActividad: Datos.i.resumen.techoAnual,
                 ),
               ),
               // El hairline y no un cambio de relleno: el degradado sigue
@@ -748,165 +663,6 @@ class _HeroCashback extends StatelessWidget {
   }
 }
 
-/// El medallón del nivel: disco con el número adentro.
-///
-/// SE ANIMA CUANDO EL NIVEL CAMBIA, no cuando la pantalla se monta.
-/// Subir de nivel mientras estás mirando es raro pero puede pasar justo
-/// después de jalar para refrescar, y ahí el número no puede cambiar en
-/// seco. Animar al montarse sería lo contrario de lo que se quiere: la
-/// barra de abajo navega con `pushReplacementNamed`, así que cada cambio
-/// de pestaña monta la pantalla de cero y el medallón latiría cada vez.
-///
-/// El número NO cuenta hacia arriba. "Nivel 3" es una etiqueta, no una
-/// cantidad, y `numero_animado.dart` es explícito: verla girar convierte
-/// la app en una tragamonedas. Lo que se anima es el medallón entero —un
-/// acercamiento con fundido—, no la cifra.
-///
-/// El color sale de `colorForNivel`, así que el medallón dice el nivel
-/// dos veces: con el número y con la luminosidad del azul (nivel 1 el
-/// más claro, nivel 4 el `accent` entero).
-class _MedallonNivel extends StatefulWidget {
-  const _MedallonNivel({required this.nivel});
-
-  final int nivel;
-
-  @override
-  State<_MedallonNivel> createState() => _MedallonNivelState();
-}
-
-class _MedallonNivelState extends State<_MedallonNivel>
-    with SingleTickerProviderStateMixin {
-  /// 58 y no 52: ahora el medallón vive en la esquina de arriba, al lado
-  /// del título, y tiene que competir con una tarjeta azul entera que
-  /// está justo abajo. A 52 se leía como un adorno del título.
-  static const double _lado = 58;
-
-  late final AnimationController _controlador = AnimationController(
-    vsync: this,
-    duration: duracionNumeroAnimado,
-    // Quieto y terminado por defecto. Solo se rebobina si el nivel
-    // cambió de verdad.
-    value: 1,
-  );
-
-  @override
-  void didUpdateWidget(_MedallonNivel anterior) {
-    super.didUpdateWidget(anterior);
-    if (anterior.nivel == widget.nivel) return;
-    if (MediaQuery.of(context).disableAnimations) return;
-    _controlador.forward(from: 0);
-  }
-
-  @override
-  void dispose() {
-    _controlador.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = AppColors.colorForNivel(widget.nivel);
-
-    // El disco CRECE un poco con el texto del sistema, pero no lo sigue
-    // hasta el final: al 160% un medallón proporcional se comería el
-    // monto. Crece hasta el 130% y de ahí el FittedBox acomoda el
-    // contenido adentro.
-    final escala = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.3);
-    final lado = _lado * escala;
-
-    // RELLENO ENTERO, no un disco pálido con borde.
-    //
-    // Era el color del nivel al 12% con un aro al 35%: casi blanco, y en
-    // la esquina de arriba desaparecía. Ahora el disco va con el color
-    // del nivel de verdad y el texto en blanco, así que el nivel se ve
-    // antes de leer nada — que es justamente lo que tiene que pasar con
-    // el dato que decide cuánto cashback cobrás.
-    //
-    // El degradado OSCURECE hacia abajo, igual que el del cabezal y el
-    // de la faja: es el mismo color con menos luz, nunca un matiz nuevo.
-    // Aclarando hacia arriba el medallón se veía de plástico.
-    final medallon = Container(
-      width: lado,
-      height: lado,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [color, Color.lerp(color, Colors.black, 0.3)!],
-        ),
-        shape: BoxShape.circle,
-        // El aro blanco lo despega de lo que tenga detrás, igual que la
-        // marca naranja de los botones del riel.
-        border: Border.all(color: Colors.white, width: 2.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.azulSombra.withValues(alpha: 0.26),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'NIVEL',
-              style: TextStyle(
-                // Blanco al 85% y no entero: así la palabra se lee pero
-                // no le compite al número, que es el dato.
-                color: Colors.white.withValues(alpha: 0.85),
-                fontSize: 8,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${widget.nivel}',
-              style: AppTheme.display(24).copyWith(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    return Semantics(
-      button: true,
-      label: 'Nivel ${widget.nivel}, ver la escalera de niveles',
-      excludeSemantics: true,
-      // EL MEDALLÓN ABRE LA ESCALERA (decisión de Daniel, 22 de
-      // septiembre de 2026). La gráfica de los cinco niveles vivía
-      // siempre abierta en Hoy; ahora se abre acá, que es donde alguien
-      // pregunta por su nivel. Un disco con un número adentro es
-      // exactamente lo que se toca para saber qué significa ese número.
-      child: GestureDetector(
-        onTap: () => mostrarHojaNiveles(context),
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedBuilder(
-          animation: _controlador,
-          builder: (context, hijo) {
-            // La MISMA curva que el resto de la app (easeOutCubic).
-            final avance = curvaNumeroAnimado.transform(_controlador.value);
-            return Opacity(
-              opacity: 0.35 + 0.65 * avance,
-              child: Transform.scale(scale: 0.82 + 0.18 * avance, child: hijo),
-            );
-          },
-          child: medallon,
-        ),
-      ),
-    );
-  }
-}
-
-/// La nota regulatoria, al pie del hero y adentro de la misma tarjeta.
-///
-/// No dice "cashback aplicado": "aplicado" se lee como aplicado A la
-/// prima, que es justo lo que la Superintendencia de Bancos no permite.
 class _PieRegulatorio extends StatelessWidget {
   const _PieRegulatorio();
 
@@ -933,135 +689,6 @@ class _PieRegulatorio extends StatelessWidget {
 // 2. PROYECCIÓN — CUÁNTO FALTA PARA EL NIVEL SIGUIENTE
 // ============================================================
 
-/// El nivel de arriba y qué falta para llegar.
-///
-/// NO dice "a tu ritmo terminarías el año en nivel X": eso necesitaría
-/// una regresión sobre el histórico real que nadie calculó todavía, y
-/// prometer un nivel por una cuenta que no existe es peor que no decir
-/// nada. Lo que sí se puede afirmar es condicional y exacto: cuántos
-/// puntos faltan y cuánto pagaría ese nivel.
-class _SeccionProyeccion extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final siguiente = siguienteNivelAlcanzable(nivelActual);
-
-    // Sin superficie: el título de bloque y el aire de abajo alcanzan
-    // para separarla de lo que sigue. El mismo encabezado que el
-    // calendario, para que las dos secciones se lean como hermanas y no
-    // como dos piezas de distinto origen.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _TituloDeBloque(
-          icono: Icons.trending_up_rounded,
-          texto: siguiente == null
-              ? 'Tu nivel del año'
-              : 'Tu proyección al siguiente nivel',
-        ),
-        const SizedBox(height: AppSpacing.entre),
-        if (siguiente == null)
-          _sinNivelSiguiente(context)
-        else
-          ..._conNivelSiguiente(context, siguiente),
-      ],
-    );
-  }
-
-  /// Ya está en el nivel más alto que se puede alcanzar: no hay barra
-  /// que llenar. En el piloto eso pasa en el nivel 3, porque el 4 queda
-  /// por encima de lo que da la actividad física en un año.
-  Widget _sinNivelSiguiente(BuildContext context) {
-    final pct = nivelPorNumero(nivelActual)?.porcentajeCashback;
-    final hayArriba = nivelPorNumero(nivelActual + 1) != null;
-    final donde = hayArriba
-        ? 'el nivel más alto que da la actividad física'
-        : 'el nivel más alto del programa';
-    return Text(
-      pct == null
-          ? 'Llegaste a $donde. El año cierra el $cierreDelAno.'
-          : 'Llegaste a $donde, con el ${_porcentaje(pct)}% de '
-                'cashback. El año cierra el $cierreDelAno.',
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        color: AppColors.textPrimary,
-        height: 1.4,
-      ),
-    );
-  }
-
-  List<Widget> _conNivelSiguiente(BuildContext context, Nivel siguiente) {
-    final piso = nivelPorNumero(nivelActual)?.puntosMinimos ?? 0;
-    final techo = siguiente.puntosMinimos!;
-    final avance = techo > piso
-        ? ((puntosAnuales - piso) / (techo - piso)).clamp(0.0, 1.0)
-        : 1.0;
-    final faltan = techo - puntosAnuales;
-
-    final pct = siguiente.porcentajeCashback;
-    final prima = primaAnualNumero;
-    // El monto solo si hay con qué calcularlo. Si la aseguradora no
-    // mandó la prima como número, la tarjeta dice los puntos y se calla
-    // el monto — nunca lo deriva dividiendo el cashback por el
-    // porcentaje, que reventaría en el nivel 0.
-    final montoSiguiente = (pct != null && prima != null)
-        ? (prima * pct / 100).round()
-        : null;
-
-    return [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: LinearProgressIndicator(
-          value: avance,
-          minHeight: 8,
-          backgroundColor: AppColors.cardBorder,
-          valueColor: AlwaysStoppedAnimation(
-            AppColors.colorForNivel(siguiente.numero),
-          ),
-        ),
-      ),
-      const SizedBox(height: AppSpacing.entre),
-      if (montoSiguiente != null) ...[
-        Text.rich(
-          TextSpan(
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textPrimary,
-              height: 1.35,
-            ),
-            children: [
-              TextSpan(
-                text: 'Q${milesConComa(montoSiguiente)}',
-                style: const TextStyle(
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const TextSpan(text: ' — lo que pagaría el nivel siguiente'),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.dentro),
-      ],
-      Text.rich(
-        TextSpan(
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-          children: [
-            const TextSpan(text: 'Te faltan '),
-            TextSpan(
-              text: '${milesConComa(faltan)} pts',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            TextSpan(text: ' para Nivel ${siguiente.numero}'),
-          ],
-        ),
-      ),
-    ];
-  }
-}
-
 // ============================================================
 // 3. EL CALENDARIO
 // ============================================================
@@ -1078,7 +705,7 @@ class _SeccionCalendario extends StatelessWidget {
     (
       icono: Icons.event_outlined,
       cuando: cierreDelAno,
-      que: 'Se cierra tu nivel del año',
+      que: 'Se cierra tu nivel del año de póliza',
     ),
     (
       icono: Icons.calculate_outlined,
@@ -1256,7 +883,7 @@ enum _Categoria {
   ///     a la cruz de la marca) y no `shield_outlined`.
   ///   - `credit_card_outlined` y no `payments_outlined`, que el
   ///     calendario ya usa para "Te lo depositamos". Son plata en
-  ///     direcciones opuestas: lo que pagás contra lo que te devuelven,
+  ///     direcciones opuestas: lo que pagas contra lo que te devuelven,
   ///     y es el peor lugar para compartir un ícono.
   ///   - `apartment_outlined` (el edificio) y no un teléfono: adentro de
   ///     ese bloque las filas de contacto ya tienen cada una su ícono
@@ -1293,8 +920,11 @@ class _BloqueCategoria extends StatelessWidget {
             // dictar o pegar cada vez que se llama a la aseguradora.
             _FilaDato('Número de póliza', numeroPoliza, copiable: true),
             _FilaDato('Titular y dependientes', titularYDependientes),
+            // La que confirmó la aseguradora: es la que manda para la edad.
+            if (fechaNacimientoPoliza case final f?)
+              _FilaDato('Fecha de nacimiento', f),
             _FilaDato('Tipo de plan', tipoPlan),
-            _FilaDato('Vigencia', vigencia),
+            _FilaDato('Año de póliza', vigencia),
             _FilaDato('Renovación', fechaRenovacion),
           ],
         );
@@ -1336,7 +966,7 @@ class _BloqueCategoria extends StatelessWidget {
 // iguales. No hay un solo pedazo de fondo a la vista.
 //
 // EL SELECCIONADO NO SE PRENDE: SE DESLIZA HASTA AHÍ. La píldora azul
-// viaja del segmento que dejás al que tocás, con la misma curva y casi
+// viaja del segmento que dejas al que tocas, con la misma curva y casi
 // el mismo tiempo que el indicador de la barra de abajo. Es lo que hace
 // que la tira se sienta un control y no cuatro botones que se
 // encienden y se apagan: el movimiento dice que los cuatro son partes

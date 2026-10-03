@@ -1,9 +1,10 @@
 import 'package:flutter/services.dart';
 
-/// Puente hacia el MethodChannel nativo de HealthKit (ver "MethodChannel" en
-/// contrato-tecnico.md y AppDelegate.swift). Expone únicamente los 3 métodos
-/// del contrato — todo lo demás (dashboard, niveles, objetivos) es HTTP
-/// directo contra la API de Luis, sin pasar por acá.
+/// Puente hacia el MethodChannel nativo (ver contrato-tecnico.md,
+/// "MethodChannel", y AppDelegate.swift). Expone los 3 métodos del
+/// contrato y ni uno más: `solicitarPermisos`, `sincronizar` y
+/// `actualizarSesion`. Todo lo demás (dashboard, niveles, objetivos) es
+/// HTTP directo contra la API de Luis, sin pasar por acá.
 class HealthKitBridge {
   static const MethodChannel _canal = MethodChannel(
     'com.assures.masvida/healthkit',
@@ -42,32 +43,61 @@ class HealthKitBridge {
     );
   }
 
-  /// Le entrega a Swift el token de la sesión, para que firme cada envío a
-  /// /api/v1/sync. `null` (o un texto vacío) significa "no hay sesión": Swift
-  /// borra el que tenga guardado.
+  /// Le entrega a Swift el token de la sesión, o `null` cuando se cierra.
+  /// Swift lo guarda en su propio Keychain y lo usa para firmar el `sync`.
   ///
-  /// Llamarlo:
-  /// 1. al iniciar sesión o registrarse, con el token;
-  /// 2. al cerrar sesión, con `null`;
-  /// 3. cada vez que abre la app, con el token actual (o `null`). El Keychain
-  ///    sobrevive a desinstalar la app, así que sin esto Swift podría seguir
-  ///    con el token de una sesión vieja.
+  /// Se llama al entrar o registrarse (con el token), al cerrar sesión
+  /// (con null) y cada vez que abre la app (con lo que haya): así la copia
+  /// de Swift no se desincroniza ni después de reinstalar. Es idempotente.
   ///
-  /// Es idempotente: mandar el mismo token dos veces no cambia nada. No hay
-  /// forma de leer el token de vuelta — Flutter guarda su propia copia y, al
-  /// cerrar sesión, borra las dos.
-  ///
-  /// El token es una contraseña: nunca escribirlo en logs ni mostrarlo.
-  Future<ResultadoActualizarSesion> actualizarSesion(String? token) async {
-    final respuesta = await _canal.invokeMapMethod<String, dynamic>(
-      'actualizarSesion',
-      {'token': token},
-    );
-    return ResultadoActualizarSesion(
-      estado: EstadoSesion.desde(respuesta?['estado'] as String?),
-      detalle: respuesta?['detalle'] as String?,
-    );
+  /// Nunca falla hacia afuera: donde no hay lado nativo (Web, los tests)
+  /// el canal no existe y se devuelve [EstadoSesionNativa.noDisponible].
+  /// El token nunca se escribe en un log ni en un error.
+  Future<EstadoSesionNativa> actualizarSesion(String? token) async {
+    try {
+      final respuesta = await _canal.invokeMapMethod<String, dynamic>(
+        'actualizarSesion',
+        {'token': token},
+      );
+      return switch (respuesta?['estado']) {
+        'ok' => EstadoSesionNativa.ok,
+        'error_almacenamiento' => EstadoSesionNativa.errorAlmacenamiento,
+        _ => EstadoSesionNativa.desconocido,
+      };
+    } on MissingPluginException {
+      return EstadoSesionNativa.noDisponible;
+    } on PlatformException {
+      // Swift solo responde con error si los argumentos llegan mal
+      // (`ARGUMENTOS_INVALIDOS`): es un error de programación, no del
+      // Keychain. Las fallas del Keychain llegan como respuesta normal,
+      // con `estado: error_almacenamiento`.
+      return EstadoSesionNativa.desconocido;
+    }
   }
+}
+
+/// Cómo le fue a Swift guardando (o borrando) el token.
+enum EstadoSesionNativa {
+  /// Guardado, o borrado si vino null.
+  ok,
+
+  /// Swift no pudo escribir o borrar en el Keychain, y **se queda con el
+  /// token que tenía antes**. Eso no siempre es inofensivo:
+  /// - primer ingreso (no había token): el `sync` no firma; los días
+  ///   quedan pendientes y no se pierde nada.
+  /// - cambio de cuenta: el `sync` sigue firmando con la cuenta ANTERIOR.
+  /// - cierre de sesión: el `sync` sigue mandando datos a la cuenta que
+  ///   se cerró.
+  ///
+  /// El próximo arranque lo vuelve a mandar y lo corrige; si importa
+  /// cerrar esa ventana, reintentar en el momento.
+  errorAlmacenamiento,
+
+  /// No hay lado nativo: Web o un test.
+  noDisponible,
+
+  /// Llegó un estado que esta versión de la app no conoce.
+  desconocido,
 }
 
 enum EstadoPermisos {
@@ -104,7 +134,7 @@ enum EstadoPermisos {
 /// reloj" mucho más seguido que "negó el permiso".
 ///
 /// Por eso el texto para el usuario tiene que ser condicional, no acusatorio:
-/// "No vemos datos de ritmo cardíaco. Si usás un reloj, revisá que +Vida tenga
+/// "No vemos datos de ritmo cardíaco. Si usas un reloj, revisa que +Vida tenga
 /// permiso en Ajustes › Salud." Decirle a todo el que no tiene reloj que
 /// arregle un permiso sería ruido para casi todos.
 class TiposVisibles {
@@ -170,42 +200,6 @@ enum EstadoSync {
     'error_permanente' => EstadoSync.errorPermanente,
     _ => EstadoSync.desconocido,
   };
-}
-
-enum EstadoSesion {
-  /// Swift guardó el token (o lo borró, si se mandó `null`).
-  ok,
-
-  /// No se pudo escribir o borrar en el Keychain. **Swift se queda con el
-  /// token que tenía antes**, y eso no siempre es inofensivo:
-  /// - primer login (no había token): el sync no firma; los días quedan
-  ///   pendientes y no se pierde nada.
-  /// - cambio de cuenta: el sync sigue firmando con la cuenta ANTERIOR.
-  /// - cierre de sesión: el sync sigue mandando datos a la cuenta que se
-  ///   cerró.
-  ///
-  /// Por eso, si pasa al cerrar sesión o al cambiar de cuenta, hay que
-  /// reintentar (y como Flutter lo vuelve a llamar cada vez que abre la app,
-  /// a más tardar se corrige ahí).
-  errorAlmacenamiento,
-
-  /// Llegó un estado que esta versión de la app no conoce.
-  desconocido;
-
-  static EstadoSesion desde(String? valor) => switch (valor) {
-    'ok' => EstadoSesion.ok,
-    'error_almacenamiento' => EstadoSesion.errorAlmacenamiento,
-    _ => EstadoSesion.desconocido,
-  };
-}
-
-class ResultadoActualizarSesion {
-  final EstadoSesion estado;
-
-  /// Mensaje técnico. Para logs — nunca trae el token.
-  final String? detalle;
-
-  const ResultadoActualizarSesion({required this.estado, this.detalle});
 }
 
 class ResultadoPermisos {

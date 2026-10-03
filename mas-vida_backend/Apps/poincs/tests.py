@@ -18,7 +18,7 @@ class HistorialTests(APITestCase):
             usuario_id="ana-1",
             birth_date=date(1990, 1, 1),
         )
-        self.version = VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        self.version = VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         # El token lo crea la senal de users al crear el User.
         token = Token.objects.get(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")

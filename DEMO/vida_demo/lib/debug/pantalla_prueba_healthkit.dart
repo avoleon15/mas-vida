@@ -112,12 +112,12 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
           tag,
           token == null ? 'token=null' : 'token (${token.length} caracteres)',
         );
-        final r = await _bridge.actualizarSesion(token);
-        final texto =
-            'estado=${r.estado.name}'
-            '${r.detalle != null ? '\ndetalle=${r.detalle}' : ''}';
-        _fijar(tag, texto, r.estado == EstadoSesion.ok);
-        _anotar(tag, texto.replaceAll('\n', '  '));
+        // El wrapper nunca lanza: un canal sin registrar llega como
+        // `noDisponible`, no como MissingPluginException.
+        final estado = await _bridge.actualizarSesion(token);
+        final texto = 'estado=${estado.name}';
+        _fijar(tag, texto, estado == EstadoSesionNativa.ok);
+        _anotar(tag, texto);
       });
 
   Future<void> _pedirPermisos() => _correr('PERMISOS', (tag) async {

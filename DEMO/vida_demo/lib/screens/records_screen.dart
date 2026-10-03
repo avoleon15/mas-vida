@@ -24,7 +24,7 @@ import '../widgets/app_header.dart';
 //      mirar, y acá lo que se mira son los números.
 //   3. LOS TOTALES, en renglones limpios. Sin las notas explicativas
 //      que llevaba cada uno —"los puntos nunca se gastan", "las monedas
-//      caducan a los 90 días"—: son reglas del producto y viven en Mi
+//      vencen con la temporada"—: son reglas del producto y viven en Mi
 //      Plan y en Premios, no debajo de un número.
 //
 // DE DÓNDE SALEN LOS DATOS se quedó, porque es lo que hace auditable el
@@ -434,7 +434,7 @@ class _Totales extends StatelessWidget {
       titulo: 'TOTALES',
       filas: [
         ('Pasos registrados', RecordsScreen._miles(pasos)),
-        ('Puntos del año', RecordsScreen._miles(resumen.puntosAno)),
+        ('Puntos del año de póliza', RecordsScreen._miles(resumen.puntosAno)),
         ('Nivel de cashback', 'Nivel ${resumen.nivel}'),
         ('Monedas ganadas este año', '${resumen.monedasGanadasAnio}'),
       ],

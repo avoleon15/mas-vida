@@ -4,8 +4,9 @@ import 'package:http/http.dart' as http;
 
 /// Cliente HTTP contra la API de Django (`mas-vida_backend/`).
 ///
-/// Por ahora habla con dos endpoints, los que ya funcionan de punta a
+/// Por ahora habla con tres endpoints, los que ya funcionan de punta a
 /// punta:
+///   - `POST /api/v1/registro`  → crea la cuenta y devuelve su token.
 ///   - `POST /api/v1/login`     → devuelve el token del usuario.
 ///   - `GET  /api/v1/historial` → los puntos acreditados día por día.
 ///
@@ -46,6 +47,55 @@ class ClienteApi {
     }
     final json = jsonDecode(respuesta.body) as Map<String, dynamic>;
     return token = json['token'] as String;
+  }
+
+  /// Crea la cuenta y guarda el token que devuelve en [token].
+  ///
+  /// El correo va como `username`: el backend usa el `User` de Django,
+  /// y así el login de después es con el mismo correo.
+  ///
+  /// La póliza es opcional acá porque la cuenta base va sin ella, pero
+  /// hoy el servidor la pide obligatoria (ver `ServicioSesionApi`).
+  Future<String> registrar({
+    required String correo,
+    required String contrasena,
+    required String usuarioId,
+    required DateTime fechaNacimiento,
+    String? numeroPoliza,
+    String? aseguradora,
+    DateTime? inicioVigencia,
+  }) async {
+    final respuesta = await _http.post(
+      Uri.parse('$baseUrl/api/v1/registro'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'username': correo,
+        'password': contrasena,
+        'usuario_id': usuarioId,
+        'birth_date': _soloFecha(fechaNacimiento),
+        'policy_number': ?numeroPoliza,
+        'insurer': ?aseguradora,
+        if (inicioVigencia != null)
+          'policy_start_date': _soloFecha(inicioVigencia),
+      }),
+    );
+    final cuerpo = respuesta.body.isEmpty
+        ? const <String, dynamic>{}
+        : jsonDecode(utf8.decode(respuesta.bodyBytes)) as Map<String, dynamic>;
+    if (respuesta.statusCode != 201) {
+      throw ErrorApi(respuesta.statusCode, _primerError(cuerpo));
+    }
+    return token = cuerpo['token'] as String;
+  }
+
+  /// El primer mensaje de un 400 de DRF, que llega como
+  /// `{"campo": ["mensaje", ...]}`.
+  static String _primerError(Map<String, dynamic> cuerpo) {
+    for (final valor in cuerpo.values) {
+      if (valor is List && valor.isNotEmpty) return valor.first.toString();
+      if (valor is String) return valor;
+    }
+    return 'No pudimos crear tu cuenta. Intenta de nuevo.';
   }
 
   /// Los puntos de cada día, del más nuevo al más viejo.

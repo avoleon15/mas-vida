@@ -18,7 +18,7 @@ class MonedasTests(TestCase):
         self.usuario = Usuario.objects.create(
             user=user, usuario_id="ana-1", birth_date=date(1990, 1, 1)
         )
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
 
     def _ganar(self, cantidad, fecha=ENERO):
         return monedas.acreditar(self.usuario, cantidad, GANAR, fecha=fecha)

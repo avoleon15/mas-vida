@@ -169,7 +169,7 @@ class EjecutarTests(TestCase):
     SIGUIENTE = date(2026, 10, 5)
 
     def setUp(self):
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         self.ana = crear_usuario("ana")
         ResumenDiario.objects.create(
             usuario=self.ana, fecha=self.LUNES, pasos_totales_dia=31_000,
@@ -212,7 +212,7 @@ class EjecutarTests(TestCase):
 
 class ComandoProgramadorTests(TestCase):
     def setUp(self):
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         self.ana = crear_usuario("ana")
 
     def test_una_vez_se_pone_al_dia_y_dice_cuando_es_la_proxima_corrida(self):

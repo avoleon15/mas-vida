@@ -67,7 +67,7 @@ void main() {
 
     expect(find.text('TOTALES'), findsOneWidget);
     expect(find.text('Pasos registrados'), findsOneWidget);
-    expect(find.text('Puntos del año'), findsOneWidget);
+    expect(find.text('Puntos del año de póliza'), findsOneWidget);
     expect(find.text('Nivel ${Datos.i.resumen.nivel}'), findsOneWidget);
     // Lo que vuelve auditable el puntaje: de qué reloj salió cada día.
     expect(find.text('DE DÓNDE SALEN TUS DATOS'), findsOneWidget);

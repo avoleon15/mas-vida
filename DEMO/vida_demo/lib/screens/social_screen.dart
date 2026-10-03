@@ -5,15 +5,17 @@ import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../hora_guatemala.dart';
 import '../theme.dart';
+import '../widgets/despliegue.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/chip_monedas.dart' show BotonInfo;
 import '../widgets/flujos_social.dart';
 import '../widgets/hoja_invitar_grupo.dart';
 import '../widgets/moneda_animada.dart';
-import '../widgets/patrocinio.dart';
 import '../widgets/ranking_widgets.dart';
 import '../widgets/refresco_vida.dart';
-import 'ranking_grupo_screen.dart';
+import 'ranking_grupo_screen.dart'
+    show MarcaDeLaLiga, RankingGrupoScreen, mostrarReglasLiga;
 
 // ============================================================
 // SOCIAL (rediseño de Daniel, 25 de septiembre de 2026).
@@ -103,7 +105,7 @@ class _SocialScreenState extends State<SocialScreen> {
                         sliver: SliverToBoxAdapter(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                            children: desplegar([
                               Text('SOCIAL', style: AppTheme.sectionTitle),
                               const SizedBox(height: 20),
                               if (liga == null)
@@ -115,7 +117,7 @@ class _SocialScreenState extends State<SocialScreen> {
                                 ),
                               const SizedBox(height: AppSpacing.seccion),
                               ..._misCompetencias(context),
-                            ],
+                            ]),
                           ),
                         ),
                       ),
@@ -282,15 +284,14 @@ class TarjetaLiga extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppRadios.tarjeta),
             boxShadow: AppSombras.tarjeta,
           ),
-          // Tres renglones y nada más: qué es y cuánto le queda, tu
-          // puesto, y lo que paga. La franja de edad, los puntos y las
-          // reglas viven en la tabla.
+          // Qué es y cuánto le queda, quién la patrocina, tu puesto y lo
+          // que paga. Los puntos de cada quien viven en la tabla.
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Text(
                       mes == null
                           ? 'LA LIGA'
@@ -300,13 +301,25 @@ class TarjetaLiga extends StatelessWidget {
                       style: AppTheme.subsectionTitle,
                     ),
                   ),
-                  if (dias != null)
-                    Text(
-                      cuandoCierra(dias),
-                      style: tema.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                  // LA MARCA, AL LADO DEL TÍTULO (pedido de Daniel, 2 de
+                  // octubre de 2026). Sin marca no se dibuja nada: un
+                  // ciclo sin patrocinio es el caso normal.
+                  if (liga.patrocinio case final p?) ...[
+                    const SizedBox(width: 10),
+                    Flexible(child: MarcaDeLaLiga(patrocinio: p)),
+                  ],
+                  const Spacer(),
+                  // Las reglas a un toque: cómo se ordena la tabla y qué
+                  // pasa con un empate (reunión del 2 de octubre de 2026).
+                  // Adentro de la tarjeta gana el botón de adentro: tocar
+                  // la (i) abre las reglas, no la tabla.
+                  Transform.translate(
+                    offset: const Offset(8, 0),
+                    child: BotonInfo(
+                      semantica: 'Reglas de La Liga',
+                      onPressed: () => mostrarReglasLiga(context, liga),
                     ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -322,11 +335,20 @@ class TarjetaLiga extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      '$puesto.º',
-                      style: AppTheme.display(
-                        56,
-                      ).copyWith(color: AppColors.textPrimary, height: 0.95),
+                    // "11.º" es más ancho que "4.º": se achica antes de
+                    // empujar el resto fuera de la tarjeta.
+                    Flexible(
+                      child: FittedBox(
+                        alignment: Alignment.bottomLeft,
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$puesto.º',
+                          style: AppTheme.display(56).copyWith(
+                            color: AppColors.textPrimary,
+                            height: 0.95,
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -368,12 +390,21 @@ class TarjetaLiga extends StatelessWidget {
                             ),
                             const SizedBox(width: 12),
                           ],
-                          if (liga.patrocinio case final p?)
-                            LogoPatrocinio(patrocinio: p, tamano: 20),
                         ],
                       ),
                     ),
                   ),
+                  // Cuánto le queda, al pie: arriba el renglón es del
+                  // título y de la marca.
+                  if (dias != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      cuandoCierra(dias),
+                      style: tema.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   const Icon(
                     CupertinoIcons.chevron_right,
@@ -441,8 +472,8 @@ class _SinLiga extends StatelessWidget {
         Text('LA LIGA', style: AppTheme.subsectionTitle),
         const SizedBox(height: 8),
         Text(
-          'Cada mes te sorteamos en una liga con gente de tu edad. Te '
-          'avisamos cuando arranque la próxima.',
+          'La Liga es de todos los asegurados con su póliza verificada. '
+          'Vincula la tuya y entras en la del próximo mes.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: AppColors.textSecondary,
             height: 1.4,

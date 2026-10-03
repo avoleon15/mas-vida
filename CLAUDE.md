@@ -8,6 +8,15 @@ Si algo que se pide en el chat contradice una regla dura de este documento,
 señalalo antes de proceder — no asumas que se quiere romper la regla sin
 confirmarlo primero.
 
+**Reunión del 2 de octubre de 2026:** las decisiones de esa reunión (login
+con Apple y Google, Hoy sin racha ni cajas de etapas, objetivos que pagan
+por separado, pantalla de las 13 semanas, temporadas de 13 semanas,
+monedas que vencen por temporada y sin tope, Mi Plan con la escalera
+adentro de la tarjeta del cashback, La Liga
+por puntos con desempate por pasos, usados y vencidos en un desplegable)
+están aplicadas abajo y mandan sobre lo que digan los documentos vivos
+hasta que se actualicen.
+
 **Actualizado 22 de septiembre de 2026.** Esta versión parte de la de Daniel
 (rama `D7-correcion-2-ui`, 21 sep) y corrige las reglas de negocio que chocaban
 con los documentos vivos del proyecto. Todo lo de UI y diseño de Daniel quedó
@@ -457,23 +466,32 @@ Reglas visuales:
 - **La foto del usuario sale de `lib/widgets/avatar_usuario.dart`** y de
   ningún otro lado. Aparece en tres lugares —el header, la ficha de
   Perfil y el escalón de la escalera de cashback donde el
-  usuario está parado, que ahora vive en la hoja de niveles de **Mi
-  Plan**— y los tres tienen que mostrar la MISMA. Es el
+  usuario está parado, en la tarjeta del cashback de **Mi Plan**— y los
+  tres tienen que mostrar la MISMA. Es el
   único archivo que nombra la ruta del asset; el día que la foto llegue
   del backend cambia ahí y nada más. En la escalera de cashback la foto
   REEMPLAZA al cartel "ESTÁS AQUÍ": una cara se reconoce sola y un
   cartel hay que leerlo.
 
-  La escalera con la foto (`escalera_cashback.dart`) se abre **tocando el
-  medallón del nivel en Mi Plan**, dentro de la hoja de niveles
-  (`hoja_niveles.dart`), que trae los puntos del año, el nivel y la
-  escalera completa. Esto reemplaza a la versión anterior de este
-  documento, que la dejaba siempre abierta en Home (decisión de Daniel,
-  22 de septiembre de 2026): son cinco barras que el usuario ya conoce a
-  la segunda semana ocupando media pantalla todos los días para
-  contestar una pregunta que se hace una vez por mes. Un disco con un
+  La escalera con la foto (`escalera_cashback.dart`) vive **adentro de
+  la tarjeta azul del cashback de Mi Plan**, dibujada en blanco a
+  distintas opacidades directo sobre el azul, sin panel propio (pedido
+  de Daniel, 2 de octubre de 2026). Ya no hay medallón ni hoja de
+  niveles. Su brillo se apaga con "Reducir movimiento". Esto reemplaza
+  a la versión anterior de este documento, que la dejaba siempre
+  abierta en Home (decisión de Daniel, 22 de septiembre de 2026): son
+  cinco barras que el usuario ya conoce a la segunda semana ocupando
+  media pantalla todos los días para contestar una pregunta que se hace
+  una vez por mes. Un disco con un
   número adentro es exactamente lo que se toca para saber qué significa
   ese número.
+- **Cambiar de pestaña es INMEDIATO** (`navegacion.dart`, pedido de
+  Daniel, 2 de octubre de 2026): el fundido de la pantalla entera dejaba
+  ver las dos encimadas y se leía como transparente. Lo que se anima es
+  el contenido de la que llega: sus bloques suben y aparecen en cascada
+  (`desplegar()` de `despliegue.dart`, quieto con "Reducir
+  movimiento"). Premios (logos) y Mi Plan (tarjeta) ya traían su entrada
+  con `flutter_animate`: no se les pone otra encima
 - **Barra inferior** (`lib/widgets/bottom_nav_bar.dart`, reutilizada en
   TODAS las pantallas): 5 ítems fijos en este orden: Hoy, Progreso,
   Social, Premios, Mi Plan. El ítem activo necesita fondo de píldora sutil
@@ -583,13 +601,53 @@ resuelven, no por cómo se ven de fábrica.
     6 px (`cardBorder` → degradado `azulMedio` → `accent`). El cumplido
     lleva el check naranja suelto al lado del número
   - al pie, en gris: el conteo y el plazo, una sola vez
-  - en la hoja que se abre desde un nodo del camino no hay botón: la
-    semana va de titular ("Semana 7") y el resto es igual
+  - si una marca compró la semana, **un renglón CHICO**
+    (`PremioSemanaChico` en `premio_semana.dart`): el logo en una placa
+    apaisada con el fondo de la marca (en un disco chico no se leía),
+    "Cumple los dos y ganas" y el cupón en el color de la marca, sobre un
+    lavado de ese color. **Sin foto** (pedido de Daniel, 2 de octubre de 2026):
+    la foto grande pesaba más que los objetivos. El carrusel vive en la
+    card de la semana
+- **Las semanas de la temporada** (`semanas_temporada_screen.dart`, se
+  abre con el botón; pedido de Daniel, 2 de octubre de 2026): arriba
+  "Temporada 3" en grande y el **chip del saldo** a la derecha; tocarlo
+  abre la temporada en tres datos (monedas ganadas en ella, semanas
+  completas con los dos objetivos y cuándo vencen). **Ya no hay "Tu
+  temporada" debajo.** Una card por semana que **mide lo que tiene
+  adentro**, **sin scroll vertical**: la pantalla solo se mueve de lado.
+  Solo la card que se mira se anima (las monedas son Lottie: con todas
+  girando la pantalla se trababa). Se abre con `rutaPesada`
+  (`navegacion.dart`): al volver, la pantalla se desliza como una imagen
+  quieta (`SnapshotWidget`) y la de atrás no se mueve ni se oscurece; con
+  la `CupertinoPageRoute` la vuelta se trababa y se veía transparente Arriba, una
+  cabecera en el degradado de marca (`accent` → `azulSombra`; las
+  futuras en `azulMedio` → `nivel3`) con el estado ("ESTA SEMANA",
+  "COMPLETADA" con el check naranja, "CERRADA", "PRÓXIMAMENTE"),
+  "Semana 7 de 13", el número de la semana enorme de marca de agua y el
+  logo de la marca si está vendida (58 px: se tiene que notar). Abajo, en
+  blanco, la MISMA tarjeta de la semana de Hoy, y al pie **el carrusel
+  del premio** si hay marca (`PremioSemana`: fotos que se deslizan solas,
+  la marca en una pastilla y el cupón abajo; quieta con "Reducir
+  movimiento"). **Sin marca, el pie es un panel del mismo alto con las
+  monedas que paga la semana** y tres monedas apiladas: así ninguna card
+  queda con un hueco blanco, y no anuncia que falte un patrocinador. Se desliza de lado y **tiene que verse que se desliza**: las
+  cards vecinas asoman por los bordes, más chicas y apagadas
+  (`viewportFraction` 0,86); abajo una fila de puntos; y al abrir, la
+  card se corre sola un poquito y vuelve (nunca con "Reducir
+  movimiento"). El pie
+  de cada card (premio o lo que paga) es una franja BAJA de 118 px
+  (`altoPieDeSemana`): estirado hasta abajo, el carrusel pesaba más que
+  la semana
+- **Toda hoja que sube desde abajo usa `hoja_vida.dart`**: la barrita
+  vive AFUERA del scroll y la hoja se cierra arrastrándola, o tirando del
+  contenido hacia abajo cuando ya está arriba. Con la barrita adentro del
+  scroll el gesto se lo llevaba el contenido y la hoja no se cerraba
 - **Tocar un objetivo abre su DETALLE** (`hoja_objetivo.dart`, pedido
-  de Daniel, 24 de septiembre de 2026): el número en grande con su
+  de Daniel, 24 de septiembre de 2026), **que entra sin scroll** (2 de
+  octubre de 2026): el número en grande con su
   barra, cuánto falta dicho como cantidad ("42 min más y lo cumples"),
   cómo se cuenta, cuándo se cierra —"No tienes que marcar nada"— y lo
-  que paga la semana. Es una hoja de INFORMACIÓN: tocar un objetivo
+  que paga ESE objetivo. Es una hoja de INFORMACIÓN: tocar un objetivo
   nunca lo marca
 - **Los títulos de sección de Hoy llevan el ícono en un disco
   `azulBruma`** con el ícono en `accent`: en negro suelto se perdían
@@ -659,24 +717,16 @@ resuelven, no por cómo se ven de fábrica.
   sube. Debajo del título va directo el camino. El camino no asume
   cuántas semanas son: dibuja las que manda el servidor
 - **Semanas patrocinadas:** una alianza puede comprar una semana. Esa
-  semana paga un cupón de esa marca **además** de las monedas del objetivo semanal,
-  nunca en lugar de ellas. Se ve en tres lugares: el logo del local
-  montado en el borde del nodo, un anillo con el color de la marca
-  alrededor del círculo, y —solo si la semana EN CURSO está vendida— la
-  tarjeta animada con la foto, debajo del título. Las semanas vendidas
-  que faltan viven detrás del botón "Patrocinadores de las próximas
-  semanas", no a la vista: el protagonista es el camino
+  semana paga un cupón de esa marca **además** de las monedas de los
+  objetivos, nunca en lugar de ellas, y el cupón pide COMPLETAR la
+  semana (los dos objetivos). Se ve en su card (logo y pie del premio)
+  y, si es la semana en curso, en el carrusel del premio de Hoy
 - **No todas las semanas tienen marca, y ese es el caso normal.** Sin
-  patrocinador no se dibuja tarjeta, ni logo, ni botón, y el título no
-  menciona el patrocinio: **nunca un hueco ni un cartel que anuncie la
-  ausencia.** El nodo no cambia de tamaño ni de lugar por tener marca —
-  la celda mide 160 px de alto clavados y la curva se dibuja aparte,
-  contra los centros ya calculados, así que un nodo que crece se despega
-  de su propia curva
+  patrocinador no se dibuja nada: **nunca un hueco ni un cartel que
+  anuncie la ausencia**
 - La marca trae dos colores y **no son lo mismo**: `fondo` es el color
   detrás de la foto (el de Montanos es negro, y sin él su logo blanco
-  desaparece) y `acento` es el del anillo y el cupón. Un anillo negro no
-  va con una app que tiene que transmitir calma
+  desaparece) y `acento` es el del nombre y el cupón
 
 **Progress** (`lib/screens/progress_screen.dart`) — construida
 - Selector Semana/Mes/Año con contenido real por pestaña
@@ -750,6 +800,18 @@ contrato. Antes de eso decía trimestral.)
 septiembre; esta tabla decía lo contrario) y, desde el 2 de octubre de 2026,
 también **compite por puntos** con el mismo desempate por pasos.
 
+**La Liga compite por PUNTOS del mes** (reunión del 2 de octubre de 2026).
+**Desempate:** con los mismos puntos queda arriba quien caminó más pasos
+en el mes. El orden lo manda el SERVIDOR; los pasos de los demás nunca
+llegan al teléfono ni se muestran — el usuario solo ve que alguien con sus
+mismos puntos va arriba. Las reglas (puntaje, desempate, premios, ciclo)
+están a un toque: una (i) en la tarjeta de La Liga en Social, otra junto a
+"TABLA DEL MES" y el renglón "Cómo funciona". **El patrocinador va en una
+pastilla al lado del nombre de la liga** (logo redondo y nombre en el
+color de la marca, sobre un lavado de ese color), en la tarjeta y en la
+tabla. Ya no hay cinta "Patrocina Ookii · los 3 primeros se llevan…": el
+cupón lo cuentan las reglas.
+
 **Tus Ligas** (competencias con conocidos): la duración **no se elige** — el
 selector de 1/2/3 meses se borró.
 
@@ -803,15 +865,9 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
   octubre de 2026). Cashback en quetzales = **% del nivel × prima anual**,
   devuelto después del pago de la prima
 - **Al cambiar de filtro se anima SOLO lo que cambia** (decisión de
-  Daniel, 22 de septiembre de 2026): el contenido de abajo entra con su
-  transición y el título, el medallón de nivel y la tarjeta del cashback
-  se quedan quietos. Dicen lo mismo con cualquier filtro puesto, y una
-  pieza que se desvanece y vuelve se lee como que cambió. En pantalla
-  alta eso pasaba solo, porque el cabezal vive afuera del scroll; el
-  caso que había que arreglar era el corto —o con la letra de iOS
-  grande—, donde el cabezal baja adentro del scroll. El scroll vuelve
-  arriba con un controlador, no con una llave: la llave reconstruía el
-  scroll entero y era lo que obligaba a animar todo junto
+  Daniel, 22 de septiembre de 2026): el título, la tarjeta y el riel
+  van adentro del scroll pero afuera del `AnimatedSwitcher`. El scroll
+  vuelve arriba con un controlador, no con una llave
 - Sección "Detalles de tu Póliza" (datos que la aseguradora expone al
   asegurado, agrupados en 2-3 tarjetas por tema): número de póliza,
   titular y dependientes, tipo de plan, suma asegurada, deducible,
@@ -870,6 +926,11 @@ más estricto que esto — solo agregados de cohorte, nada a nivel de persona �
 y ya no refleja lo que realmente se comparte. Hay que reescribirlo para que
 diga la verdad: se comparten agregados diarios por persona, no datos crudos.
 No copiar el texto viejo si se toca esa pantalla.
+
+**Datos que necesitamos que nos dé la aseguradora** (reunión del 2 de
+octubre de 2026): nombre y apellido, prima, número de póliza, fecha de
+nacimiento, plan y vencimiento. Es la lista para pedírsela; la pantalla de
+Mi Plan no se cambió.
 
 Para septiembre el reporte es solo un Excel manual. Landing, login y dashboard
 para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
