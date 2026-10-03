@@ -1,48 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
 import 'progress_ring.dart';
 
-/// Tarjeta de los puntos de hoy, con el desglose plegable de dónde sale
-/// la cifra.
+/// Tarjeta de los puntos de hoy, con el desglose de dónde sale la cifra.
 ///
-/// Cerrada muestra el número grande y ya. Abierta explica las dos vías
-/// que dan puntos en el día: los pasos (tabla escalonada) y la intensidad
+/// EL DESGLOSE SE VE SIEMPRE (reunión del 2 de octubre de 2026). Antes
+/// era plegable y cerrado mostraba solo el número: había que tocar para
+/// saber de dónde salían los puntos, y es justo lo que la persona quiere
+/// entender al mirar el número. Ahora explica de una las dos vías que
+/// dan puntos en el día: los pasos (tabla escalonada) y la intensidad
 /// del workout (matriz de duración x % de FCM).
 ///
 /// Todos los números vienen ya calculados por el servidor en
 /// [DiaActividad]: acá no se recalcula nada.
-class DesglosePuntosHoy extends StatefulWidget {
+class DesglosePuntosHoy extends StatelessWidget {
   const DesglosePuntosHoy({super.key, required this.dia});
 
   final DiaActividad dia;
 
   @override
-  State<DesglosePuntosHoy> createState() => _DesglosePuntosHoyState();
-}
-
-class _DesglosePuntosHoyState extends State<DesglosePuntosHoy> {
-  bool _abierta = false;
-
-  void _alternar() {
-    // La háptica va en el momento causal: cuando la tarjeta se abre, no
-    // cuando termina la animación.
-    HapticFeedback.selectionClick();
-    setState(() => _abierta = !_abierta);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final dia = widget.dia;
-
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        // Degradado muy suave hacia el naranja de marca. Es la excepción
-        // a la regla de que el naranja va solo en detalles chicos: acá
-        // entra tan diluido (12% sobre blanco) que funciona como un tinte
-        // de papel, no como un relleno naranja.
+        // Degradado muy suave hacia el azul de marca: entra tan diluido
+        // que funciona como un tinte de papel, no como un relleno.
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -65,120 +48,53 @@ class _DesglosePuntosHoyState extends State<DesglosePuntosHoy> {
       ),
       child: Column(
         children: [
-          // Toda la cabecera es tocable, no solo el botón: es un blanco
-          // mucho más grande y no hay que apuntarle fino al chevron.
-          _CabeceraPresionable(
-            onTap: _alternar,
-            abierta: _abierta,
-            puntos: dia.puntosDia,
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 260),
-            sizeCurve: Curves.easeOutCubic,
-            crossFadeState: _abierta
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: _Detalle(dia: dia),
-          ),
+          _Cabecera(puntos: dia.puntosDia),
+          _Detalle(dia: dia),
         ],
       ),
     );
   }
 }
 
-class _CabeceraPresionable extends StatefulWidget {
-  const _CabeceraPresionable({
-    required this.onTap,
-    required this.abierta,
-    required this.puntos,
-  });
+class _Cabecera extends StatelessWidget {
+  const _Cabecera({required this.puntos});
 
-  final VoidCallback onTap;
-  final bool abierta;
   final int puntos;
 
   @override
-  State<_CabeceraPresionable> createState() => _CabeceraPresionableState();
-}
-
-class _CabeceraPresionableState extends State<_CabeceraPresionable> {
-  bool _presionada = false;
-
-  void _marcar(bool v) {
-    if (_presionada != v) setState(() => _presionada = v);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      // El hundido responde en el instante del press, no al soltar.
-      onTapDown: (_) => _marcar(true),
-      onTapUp: (_) => _marcar(false),
-      onTapCancel: () => _marcar(false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _presionada ? 0.985 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              // Medalla del ícono: le da un ancla visual al número.
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.azulBruma,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.bolt,
-                  color: AppColors.accent,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.entre),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${widget.puntos}', style: AppTheme.display(52)),
-                    Text(
-                      'PUNTOS HOY',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // El chevron gira al abrir: dice hacia dónde va la tarjeta
-              // antes de que termine de abrirse.
-              AnimatedRotation(
-                turns: widget.abierta ? 0.5 : 0,
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: const BoxDecoration(
-                    color: AppColors.card,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.keyboard_arrow_down,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          // Medalla del ícono: le da un ancla visual al número.
+          Container(
+            width: 52,
+            height: 52,
+            decoration: const BoxDecoration(
+              color: AppColors.azulBruma,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.bolt, color: AppColors.accent, size: 28),
           ),
-        ),
+          const SizedBox(width: AppSpacing.entre),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$puntos', style: AppTheme.display(52)),
+                Text(
+                  'PUNTOS HOY',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -215,7 +131,7 @@ class _Detalle extends StatelessWidget {
           if (sesion == null)
             const _Fila(
               icono: Icons.favorite_border,
-              titulo: 'Workout',
+              titulo: 'Entrenamiento',
               detalle: 'Hoy no registraste ninguno',
               puntos: 0,
             )
