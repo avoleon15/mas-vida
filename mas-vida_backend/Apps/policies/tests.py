@@ -32,7 +32,7 @@ class PolizaTests(APITestCase):
         self.usuario = Usuario.objects.create(
             user=self.user, usuario_id="ana-1", birth_date=NACIMIENTO
         )
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         token = Token.objects.get(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
         self.datos = {
@@ -275,7 +275,7 @@ class VinculacionYRetroactivoTests(APITestCase):
         parche.start()
         self.addCleanup(parche.stop)
         self.hoy = timezone.localdate()
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
 
     def _cuenta(self, nacimiento):
         user = User.objects.create_user(username="ana", password="clave-segura-1")

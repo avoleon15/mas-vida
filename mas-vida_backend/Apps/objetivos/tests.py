@@ -92,7 +92,7 @@ class ObjetivoTests(TestCase):
 
 class CerrarSemanaTests(TestCase):
     def setUp(self):
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         self.ana = crear_usuario("ana")      # cumple
         self.beto = crear_usuario("beto")    # pasos sin workout
         self.carla = crear_usuario("carla")  # sin actividad
@@ -354,7 +354,7 @@ class PonerseAlDiaTests(TestCase):
     LUNES_5_OCT = date(2026, 10, 5)  # la última semana terminada es la del 28 sep
 
     def setUp(self):
-        VersionRegla.objects.create(version=1, vigente_desde=date(2026, 1, 1))
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         self.ana = crear_usuario("ana")
 
     def _cumple(self, lunes):

@@ -489,8 +489,12 @@ Las cifras vienen de lo que ya impone la base de datos (en PostgreSQL una
 restricción rota tumba todo el `INSERT`, y en SQLite se ignora en silencio),
 por eso se aplican antes: el resultado no depende del motor.
 
-Si el servidor no tiene ninguna versión de reglas cargada responde `500`, y
-Swift reintenta los `5xx` (ver "Puntos abiertos").
+Si el servidor no tiene ninguna versión de reglas vigente responde `500`, y
+Swift reintenta los `5xx`. **Una base migrada ya la trae:** la migración
+`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026), así que un
+despliegue limpio con `migrate` no tiene este problema. Solo ocurriría si
+alguien borra la versión. Cada fila del ledger queda sellada con la versión
+vigente en la fecha del día que puntúa.
 
 ---
 
@@ -1542,9 +1546,10 @@ verificación" son el mismo momento.
   como cualquier otro dispositivo en la elección de fuente. Hoy el backend,
   además, infiere sesiones intensas desde `frecuencia_cardiaca[]` cuando no hay
   un workout que las cubra, para todos los dispositivos.
-- **`VersionRegla` inicial:** sin una versión de reglas cargada, `sync` responde
-  `500` y Swift reintenta los `5xx`. Hace falta cargar la versión 1 al
-  desplegar (comando o fixture), no depender de que alguien la cree a mano.
+- **`VersionRegla` inicial — resuelto (2 oct):** la migración `poincs/0007` carga
+  la versión 1 sola, con cualquier `migrate`; no hace falta comando ni fixture.
+  Cuando cambie una regla de puntaje o de monedas, se agrega una versión nueva
+  con su `vigente_desde` (por ejemplo con otra migración de datos igual a esa).
 - **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
   fila por día ya no se lee. No hay datos reales en ese formato; una base de
   pruebas vieja se vuelve a sincronizar.
