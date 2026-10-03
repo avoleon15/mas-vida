@@ -5,10 +5,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
+import '../widgets/despliegue.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/chip_monedas.dart';
 import '../widgets/mis_cupones.dart';
+import '../widgets/pase_temporada.dart' show fechaLargaTemporada;
 import '../widgets/moneda_animada.dart';
 import '../widgets/placeholder_imagen.dart';
 import '../widgets/refresco_vida.dart';
@@ -162,7 +164,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                         sliver: SliverToBoxAdapter(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                            children: desplegar([
                               _buildTituloYSaldo(context),
                               const SizedBox(height: 18),
                               _SelectorVista(
@@ -182,7 +184,7 @@ class _PremiosScreenState extends State<PremiosScreen> {
                                 const SizedBox(height: 16),
                                 _buildChipsCategorias(context),
                               ],
-                            ],
+                            ]),
                           ),
                         ),
                       ),
@@ -251,7 +253,11 @@ class _PremiosScreenState extends State<PremiosScreen> {
   /// se busca y no ocupa la pantalla el resto del tiempo.
   void _mostrarInfoMonedas(BuildContext context) {
     HapticFeedback.selectionClick();
-    final lote = Datos.i.resumen.monedas.proximoLoteACaducar;
+    // TODAS vencen juntas, el día que cierra la temporada (reunión del 2
+    // de octubre de 2026). No se habla de lotes: "6 de ellas vencen"
+    // daba a entender que las demás duraban más.
+    final temporada = Datos.i.resumen.objetivosSemana.temporada;
+    final dias = Datos.i.resumen.monedas.proximoLoteACaducar?.diasParaCaducar;
 
     showCupertinoDialog<void>(
       context: context,
@@ -267,11 +273,14 @@ class _PremiosScreenState extends State<PremiosScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                lote == null
-                    ? 'Las monedas duran 90 días desde que las ganas.'
-                    : '${lote.cantidad} de ellas vencen en '
-                          '${lote.diasParaCaducar} días. Cada moneda dura 90 '
-                          'días desde que la ganas.',
+                temporada == null
+                    ? 'Todas vencen cuando cierra la temporada. Gástalas '
+                          'antes.'
+                    : 'Todas vencen el '
+                          '${fechaLargaTemporada(temporada.cierra)}, cuando '
+                          'cierra la temporada ${temporada.numero}'
+                          '${dias == null ? '' : ' (en $dias días)'}. '
+                          'Gástalas antes.',
                 style: const TextStyle(height: 1.35),
               ),
             ],

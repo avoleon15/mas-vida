@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
-import '../rachas_recompensas.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/boton_principal.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/desglose_puntos_hoy.dart';
-import '../widgets/hoja_niveles.dart';
+import '../widgets/despliegue.dart';
+import '../widgets/pastilla_nivel.dart';
+import '../widgets/como_sumar.dart';
 import '../widgets/numero_animado.dart';
+import '../widgets/premio_semana.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/refresco_vida.dart';
 import '../widgets/semanas_objetivos.dart';
-import '../widgets/stepper_etapas.dart';
 import '../widgets/tarjeta_borde_animado.dart';
 
 // ============================================================
@@ -23,25 +24,16 @@ import '../widgets/tarjeta_borde_animado.dart';
 // `lib/datos/fuente_datos.dart`.
 // ============================================================
 
-/// Racha activa del usuario, en semanas seguidas cumpliendo la meta.
-int get rachaSemanas => Datos.i.resumen.rachaSemanas;
-
 // ============================================================
 // OBJETIVOS DE LA SEMANA. Acá se pagan MONEDAS — la moneda que se gasta
-// en Premios y caduca a los 90 días. Nunca puntos: los puntos mueven el
-// cashback anual y las dos monedas del producto no se mezclan.
+// en Premios y vence al cerrar la temporada. Nunca puntos: los puntos
+// mueven el cashback anual y las dos monedas del producto no se mezclan.
 //
-// Son dos por semana —pasos y minutos de entrenamiento— y cumplir los
-// dos paga las monedas de esa semana. Cuántas, lo manda el servidor.
+// Son dos por semana —pasos y minutos de entrenamiento— y cada uno paga
+// sus propias monedas. Cuántas, lo manda el servidor.
 // ============================================================
 
 ObjetivosSemana get _semana => Datos.i.resumen.objetivosSemana;
-
-int get monedasEsteMes => Datos.i.resumen.monedas.ganadasEsteMes;
-
-/// Null mientras el techo mensual de monedas no esté definido. Ninguna
-/// pantalla lo muestra todavía.
-int? get techoMonedasMensual => Datos.i.resumen.monedas.techoMensual;
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -49,10 +41,6 @@ class HomeScreen extends StatelessWidget {
   /// Pasos de hoy. `null` cuando no hay permiso de HealthKit — que NO es
   /// lo mismo que cero pasos.
   static int? get pasos => Datos.i.historial.hoy.pasos;
-
-  /// Meta diaria de pasos. Es el piso a partir del cual se empiezan a
-  /// ganar puntos (7.000), no una meta personalizada.
-  static int get metaPasos => pisoPasos;
 
   /// PUNTOS acumulados del año. Nunca se gastan y nunca aparecen en
   /// Premios.
@@ -99,7 +87,7 @@ class HomeScreen extends StatelessWidget {
                       sliver: SliverToBoxAdapter(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                          children: desplegar([
                             // Home se agrupa en TRES bloques por horizonte de
                             // tiempo, y el orden es intencional: va de lo que el
                             // usuario puede cambiar hoy a lo que se acumula a lo
@@ -109,7 +97,9 @@ class HomeScreen extends StatelessWidget {
                             //   SEMANAL -> objetivos de la semana
                             //   ANUAL   -> cashback
                             //
-                            // El saludo y la racha quedan afuera de los tres.
+                            // El saludo queda afuera de los tres. La racha
+                            // se fue de Hoy (reunión del 2 de octubre de
+                            // 2026).
                             const SizedBox(height: AppSpacing.grupo),
                             // El saludo va adentro de la tarjeta de borde animado:
                             // le da algo de color a la parte de arriba de Home,
@@ -120,16 +110,14 @@ class HomeScreen extends StatelessWidget {
                                 child: _buildSaludo(context),
                               ),
                             ),
-                            // La racha queda afuera de la tarjeta pero pegada a
-                            // ella: es parte del saludo, no una sección propia.
-                            const SizedBox(height: AppSpacing.dentro),
-                            _buildRachaLinea(context),
 
                             const SizedBox(height: AppSpacing.seccion),
                             _BloqueHorizonte(
                               icono: Icons.wb_sunny_outlined,
+                              imagen: 'assets/img/icono_hoy.png',
                               titulo: 'Hoy',
                               explica: 'Tus pasos y los puntos del día',
+                              accion: BotonComoSumar(pasos: pasos ?? 0),
                               primero: true,
                               child: _buildSeccionHoy(context),
                             ),
@@ -138,19 +126,21 @@ class HomeScreen extends StatelessWidget {
                               icono: Icons.flag_outlined,
                               titulo: 'Esta semana',
                               explica: 'Dos objetivos que te dan monedas',
+                              // La marca que compró la semana, si hay.
+                              accion: MarcaDeLaSemana(semana: _semana.enCurso),
                               child: _buildObjetivosSemanaSection(context),
                             ),
 
                             _BloqueHorizonte(
                               icono: Icons.account_balance_wallet_outlined,
                               titulo: 'Este año',
-                              explica: 'Tus puntos definen tu cashback',
+                              explica: 'Tus puntos hasta que renueve tu póliza',
                               accion: _verMiPlan(context),
                               child: _buildCashbackSection(context),
                             ),
 
                             const SizedBox(height: AppSpacing.grupo),
-                          ],
+                          ]),
                         ),
                       ),
                     ),
@@ -178,8 +168,9 @@ class HomeScreen extends StatelessWidget {
         // un elemento aparte.
         const SizedBox(height: AppSpacing.dentro),
         _buildTiempoRestante(context),
-        const SizedBox(height: AppSpacing.entre),
-        StepperEtapas(pasos: pasos ?? 0),
+        // Las tres cajas de etapas se fueron (reunión del 2 de octubre de
+        // 2026): lo que decían vive detrás de "¿Cómo sumo?", arriba a la
+        // derecha del título del bloque.
         const SizedBox(height: AppSpacing.entre),
         DesglosePuntosHoy(dia: Datos.i.historial.hoy),
       ],
@@ -236,54 +227,6 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  /// Línea de racha activa bajo el saludo. Si al usuario le falta
-  /// exactamente 1 semana para el próximo hito de monedas, se agrega un
-  /// texto destacado en color de acento; si no, queda la línea simple.
-  Widget _buildRachaLinea(BuildContext context) {
-    final hito = proximoHito(rachaSemanas);
-    final aUnaSemana = hito != null && hito.semanas - rachaSemanas == 1;
-
-    // Alineada a la derecha: el saludo tira a la izquierda, así que la
-    // racha equilibra la línea desde el otro lado.
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        if (aUnaSemana) ...[
-          Flexible(
-            child: Text(
-              '¡1 semana más para +${hito.monedas} monedas!',
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.accent,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-        ],
-        const Icon(
-          Icons.local_fire_department,
-          color: AppColors.accentSecondary,
-          size: 16,
-        ),
-        const SizedBox(width: 4),
-        // Flexible: con la letra del sistema en grande, "Racha de N
-        // semanas" no entra en el ancho que le queda al lado del aviso.
-        Flexible(
-          child: Text(
-            'Racha de $rachaSemanas semanas',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-          ),
-        ),
-      ],
     );
   }
 
@@ -369,9 +312,8 @@ class HomeScreen extends StatelessWidget {
         // para contestar una pregunta que se hace una vez por mes. Hoy
         // es la pantalla que se abre a diario, y a diario lo que hace
         // falta saber del cashback son tres cosas: cuántos puntos
-        // llevás, en qué nivel caen y cuánto falta para el que sigue. La
-        // escalera se abre cuando se pregunta por ella, tocando el
-        // medallón del nivel en Mi Plan.
+        // llevas, en qué nivel caen y cuánto falta para el que sigue. La
+        // escalera vive en Mi Plan, adentro de la tarjeta del cashback.
         //
         // Sin superficie además: el héroe de Hoy es el anillo de pasos y
         // CLAUDE.md pide una sola cosa levantada por pantalla. Esta
@@ -383,7 +325,7 @@ class HomeScreen extends StatelessWidget {
             // app para ver, así que es el más grande de la sección. El
             // cashback sale del nivel, y el nivel sale de acá.
             Text(
-              'PUNTOS ACUMULADOS ${Datos.i.resumen.anio}',
+              'PUNTOS DE TU AÑO DE PÓLIZA',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -433,16 +375,15 @@ class HomeScreen extends StatelessWidget {
 
   /// Sección "Objetivos de la semana": el sistema de MONEDAS, aparte del
   /// de puntos/cashback de arriba. Las monedas se gastan en Premios y
-  /// caducan a los 90 días; los puntos nunca se gastan.
+  /// vencen al cerrar la temporada; los puntos nunca se gastan.
   ///
   /// Son 2 objetivos, los dos de la MISMA semana. Se evalúan una sola
   /// vez, el domingo 23:59 (hora de Guatemala).
   Widget _buildObjetivosSemanaSection(BuildContext context) {
     final semana = _semana;
 
-    // Sin el saldo de monedas (decisión de Daniel, 24 de septiembre de
-    // 2026): vive en la pantalla del camino, que es donde se ve qué
-    // paga cada semana. Acá competía con el "+10" de la semana.
+    // El pase de la temporada: el encabezado con el saldo, la tira de
+    // semanas y la semana en curso (reunión del 2 de octubre de 2026).
     return SemanasObjetivos(objetivos: semana);
   }
 
@@ -705,9 +646,9 @@ class _MontoRevelado extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             porcentaje == null
-                ? 'Proyección para el cierre del año'
+                ? 'Proyección para el cierre de tu año de póliza'
                 : 'Es el ${_HomeFormato.pct(porcentaje!)}% de tu prima anual, '
-                      'proyectado al cierre del año',
+                      'proyectado al cierre de tu año de póliza',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: AppColors.textSecondary,
               height: 1.35,
@@ -797,11 +738,17 @@ class _BloqueHorizonte extends StatelessWidget {
     required this.titulo,
     required this.explica,
     required this.child,
+    this.imagen,
     this.accion,
     this.primero = false,
   });
 
   final IconData icono;
+
+  /// Un ícono dibujado que reemplaza al disco con [icono] (el de Hoy,
+  /// pedido de Daniel, 2 de octubre de 2026). Si el archivo no está, se
+  /// ve el disco de siempre.
+  final String? imagen;
   final String titulo;
 
   /// Qué hay en el bloque, en una línea: es lo que le dice al usuario
@@ -813,6 +760,16 @@ class _BloqueHorizonte extends StatelessWidget {
 
   /// El primero no lleva raya arriba: arriba está el saludo.
   final bool primero;
+
+  Widget get _disco => Container(
+    width: 38,
+    height: 38,
+    decoration: const BoxDecoration(
+      color: AppColors.azulBruma,
+      shape: BoxShape.circle,
+    ),
+    child: Icon(icono, size: 20, color: AppColors.accent),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -828,15 +785,15 @@ class _BloqueHorizonte extends StatelessWidget {
           children: [
             // El ícono en un disco de azul pálido: en negro suelto se
             // perdía entre tanto blanco.
-            Container(
-              width: 38,
-              height: 38,
-              decoration: const BoxDecoration(
-                color: AppColors.azulBruma,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icono, size: 20, color: AppColors.accent),
-            ),
+            if (imagen case final ruta?)
+              Image.asset(
+                ruta,
+                width: 38,
+                height: 38,
+                errorBuilder: (_, _, _) => _disco,
+              )
+            else
+              _disco,
             const SizedBox(width: 12),
             Expanded(
               child: Column(

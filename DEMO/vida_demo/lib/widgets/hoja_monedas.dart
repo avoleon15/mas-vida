@@ -2,22 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
-import '../rachas_recompensas.dart';
 import '../theme.dart';
 import 'moneda_animada.dart';
 
 // ============================================================
 // HISTORIAL DE MONEDAS.
 //
-// Se abre tocando el chip de monedas del encabezado de "Objetivos de la
-// semana". Junta en un solo lugar de dónde salieron:
-//
-//   1. Los objetivos cumplidos, semana por semana.
-//   2. Las recompensas por constancia (los 5 hitos de racha).
-//
-// Las recompensas por constancia vivían sueltas en Progreso, donde no se
-// entendía con qué se relacionaban. Acá quedan al lado de lo que las
-// paga.
+// Se abre tocando el chip de monedas de "Esta semana" en Hoy. Junta el
+// saldo y de dónde salió: los objetivos cumplidos, semana por semana.
+// (Las recompensas por constancia se fueron con el modelo viejo.)
 //
 // Regla dura: acá van MONEDAS, nunca puntos. Los puntos mueven el
 // cashback anual y no se mezclan con esto.
@@ -106,16 +99,14 @@ class _HojaMonedas extends StatelessWidget {
                     _HistorialSemanas(objetivos: semana),
                     const SizedBox(height: AppSpacing.seccion),
 
-                    const _Etiqueta('RECOMPENSAS POR CONSTANCIA'),
-                    const SizedBox(height: AppSpacing.dentro),
-                    const _Hitos(),
-                    const SizedBox(height: AppSpacing.entre),
                     Text(
-                      // Las monedas se gastan y caducan: decirlo acá evita
+                      // Las monedas se gastan y vencen: decirlo acá evita
                       // que alguien las junte creyendo que duran para
-                      // siempre.
-                      'Las monedas se gastan en Premios y caducan a los 90 '
-                      'días de ganadas.',
+                      // siempre. Vencen al cerrar la temporada (reunión
+                      // del 2 de octubre de 2026).
+                      'Las monedas se gastan en Premios y vencen al cerrar '
+                      'la temporada en que las ganas. No hay límite para '
+                      'juntarlas.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
                         height: 1.35,
@@ -307,72 +298,6 @@ class _FilaSemana extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ],
-    );
-  }
-}
-
-/// Los cinco hitos de racha. Se mudaron acá desde Progreso, donde estaban
-/// sueltos y no se entendía con qué se relacionaban.
-class _Hitos extends StatelessWidget {
-  const _Hitos();
-
-  @override
-  Widget build(BuildContext context) {
-    final racha = Datos.i.resumen.rachaSemanas;
-
-    return _Tarjeta(
-      children: [
-        for (var i = 0; i < hitosRacha.length; i++) ...[
-          _FilaHito(hito: hitosRacha[i], racha: racha),
-          if (i != hitosRacha.length - 1) const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-}
-
-class _FilaHito extends StatelessWidget {
-  const _FilaHito({required this.hito, required this.racha});
-
-  final HitoRacha hito;
-  final int racha;
-
-  @override
-  Widget build(BuildContext context) {
-    final alcanzado = racha >= hito.semanas;
-    final color = alcanzado
-        ? AppColors.accentSecondary
-        : AppColors.textSecondary;
-
-    return Row(
-      children: [
-        Icon(
-          alcanzado ? Icons.check_circle : Icons.radio_button_unchecked,
-          color: color,
-          size: 20,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            '${hito.semanas} semanas seguidas',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: alcanzado
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
-              fontWeight: alcanzado ? FontWeight.w600 : FontWeight.w500,
-            ),
-          ),
-        ),
-        MonedaAnimada(size: 19, apagado: !alcanzado),
-        const SizedBox(width: 4),
-        Text(
-          '+${hito.monedas}',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
         ),
       ],
     );

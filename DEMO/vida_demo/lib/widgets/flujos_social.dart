@@ -79,7 +79,6 @@ class _CrearGrupo extends StatefulWidget {
 
 class _CrearGrupoState extends State<_CrearGrupo> {
   final _nombre = TextEditingController();
-  bool _mostrarPuntos = false;
 
   @override
   void dispose() {
@@ -97,7 +96,9 @@ class _CrearGrupoState extends State<_CrearGrupo> {
       id: nombre.toLowerCase().replaceAll(' ', '_'),
       nombre: nombre,
       tipo: TipoGrupo.conocidos,
-      mostrarPuntos: _mostrarPuntos,
+      // Se ven los puntos de cada participante en todo ranking (2 de
+      // octubre de 2026): ya no se elige al crear.
+      mostrarPuntos: true,
       // Todo lo que arma el usuario corre por mes: es el default del
       // modelo y no hay pantalla que lo cambie.
       ciclo: CicloRanking.mes,
@@ -140,50 +141,6 @@ class _CrearGrupoState extends State<_CrearGrupo> {
         const _CuantoDura(),
         const SizedBox(height: AppSpacing.entre),
 
-        // La pregunta de privacidad, explícita.
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.entre),
-          decoration: BoxDecoration(
-            color: AppColors.fondoDePantalla,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Mostrar los puntos de cada quien',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  CupertinoSwitch(
-                    value: _mostrarPuntos,
-                    activeTrackColor: AppColors.accent,
-                    onChanged: (v) => setState(() => _mostrarPuntos = v),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _mostrarPuntos
-                    ? 'Todos van a ver cuántos puntos hace cada uno. '
-                          'Elígelo solo si se conocen entre sí.'
-                    : 'Solo se ve la posición en la tabla, no los puntos de '
-                          'nadie.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: AppSpacing.grupo),
         _BotonHoja(
           texto: 'Crear competencia',

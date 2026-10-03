@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../datos/fuente_datos.dart';
 import '../theme.dart';
+import '../widgets/despliegue.dart';
 import '../widgets/actividad_fisica.dart';
 import '../widgets/app_header.dart';
 import '../widgets/boton_principal.dart';
@@ -77,7 +78,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       sliver: SliverToBoxAdapter(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                          children: desplegar([
                             const SizedBox(height: 24),
                             _buildEncabezado(context),
                             const SizedBox(height: 20),
@@ -144,7 +145,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
                               puntosPorMes: Datos.i.resumen.actividadPorMes,
                             ),
                             const SizedBox(height: 16),
-                          ],
+                          ]),
                         ),
                       ),
                     ),

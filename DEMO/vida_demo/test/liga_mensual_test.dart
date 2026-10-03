@@ -115,13 +115,22 @@ void main() {
       // cambia el premio del podio por el cupón, esto se pone rojo.
       final liga = Datos.i.social.ligaLocal!;
       expect(liga.premiosMonedas.length, 3);
-      expect(liga.tienePatrocinio, isTrue);
+      expect(liga.patrocinio, isNotNull);
     });
 
-    testWidgets('la marca aparece en la tarjeta de la liga', (tester) async {
+    testWidgets('la marca va al lado del título de la liga', (tester) async {
       await _abrirLiga(tester);
       final marca = Datos.i.social.ligaLocal!.patrocinio!.marca;
-      expect(find.textContaining(marca.toUpperCase()), findsWidgets);
+      final pastilla = find.bySemanticsLabel('Patrocinada por $marca');
+      expect(pastilla, findsOneWidget);
+      // En el mismo renglón que el nombre de la liga.
+      final titulo = find.text(Datos.i.social.ligaLocal!.nombre);
+      expect(
+        (tester.getCenter(pastilla).dy - tester.getCenter(titulo).dy).abs(),
+        lessThan(12),
+      );
+      // Y sin la cinta de antes, que repetía quién patrocina.
+      expect(find.textContaining('se llevan además'), findsNothing);
     });
   });
 }

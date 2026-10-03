@@ -51,6 +51,11 @@ void main() {
     await montar(t);
     await t.tap(find.text('Mis cupones'));
     await t.pumpAndSettle();
+    // Los usados y vencidos viven en un desplegable cerrado (reunión del
+    // 2 de octubre de 2026): se abre para verlos todos.
+    await t.ensureVisible(find.byKey(llaveDesplegableHistorial));
+    await t.tap(find.byKey(llaveDesplegableHistorial));
+    await t.pumpAndSettle();
 
     for (final c in _cupones) {
       expect(find.byKey(llaveCupon(c.id)), findsOneWidget, reason: c.id);
@@ -69,8 +74,26 @@ void main() {
     }
   });
 
+  testWidgets('los usados y vencidos arrancan guardados', (t) async {
+    await montar(t, vista: VistaPremios.cupones);
+    expect(find.text('USADOS Y VENCIDOS'), findsOneWidget);
+    for (final c in _cupones.where((c) => !c.activo)) {
+      expect(find.byKey(llaveCupon(c.id)), findsNothing, reason: c.id);
+    }
+    // El renglón dice cuántos hay sin abrirlo.
+    expect(
+      find.bySemanticsLabel(
+        'Usados y vencidos, ${_cupones.where((c) => !c.activo).length}',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('los usados y vencidos van abajo, aparte', (t) async {
     await montar(t, vista: VistaPremios.cupones);
+    await t.ensureVisible(find.byKey(llaveDesplegableHistorial));
+    await t.tap(find.byKey(llaveDesplegableHistorial));
+    await t.pumpAndSettle();
     expect(find.text('USADOS Y VENCIDOS'), findsOneWidget);
     final titulo = t.getTopLeft(find.text('USADOS Y VENCIDOS')).dy;
     for (final c in _cupones) {

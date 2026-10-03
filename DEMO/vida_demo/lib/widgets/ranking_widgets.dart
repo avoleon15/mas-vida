@@ -432,10 +432,9 @@ class FilaRanking extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Los puntos de los DEMÁS solo se ven si el grupo lo decidió al
-    // crearse, y nunca en una liga de desconocidos: mostrarlos ahí sería
-    // darle el nivel de actividad de alguien a gente que no eligió como
-    // contacto.
+    // Los puntos de los DEMÁS: en La Liga siempre (2 de octubre de 2026);
+    // en Tus Ligas, si quien la creó lo eligió. Los pasos de nadie se
+    // muestran nunca.
     final verPuntos = grupo.mostrarPuntos || persona.esUsuario;
     // En una liga con premio, el podio se marca.
     final enPodio =
@@ -533,7 +532,7 @@ class _Posicion extends StatelessWidget {
   }
 }
 
-/// Tarjeta de resumen: dónde vas en un grupo y cómo venís.
+/// Tarjeta de resumen: dónde vas en un grupo y cómo vienes.
 class ResumenGrupo extends StatelessWidget {
   const ResumenGrupo({
     super.key,

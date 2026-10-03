@@ -157,7 +157,7 @@ class _CampoVidaState extends State<CampoVida> {
 /// El botón principal del ingreso: píldora azul a todo el ancho.
 ///
 /// Lleva un degradado apenas perceptible y una sombra difusa, la misma
-/// receta del botón del camino en Hoy: es lo que lo hace leerse como la
+/// receta del botón de las semanas en Hoy: es lo que lo hace leerse como la
 /// acción de la pantalla sin tener que gritar. Apagado, se vuelve plano
 /// y gris — un botón que no se puede tocar no tiene por qué tener
 /// volumen.

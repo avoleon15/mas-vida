@@ -104,7 +104,7 @@ const List<SeccionTerminos> seccionesTerminos = [
         'posición en la tabla. Nunca ven tus datos de Salud.',
   ]),
   SeccionTerminos('Puntos y niveles', [
-    'Tus puntos nunca se gastan: definen tu nivel del año, del 0 al 4, y '
+    'Tus puntos nunca se gastan: definen tu nivel del año de póliza, del 0 al 4, y '
         'con él el porcentaje de cashback.',
     'Hay un máximo de puntos por día y un máximo por año.',
     'Aceptamos datos que lleguen tarde hasta 14 días después. Revisamos los '
@@ -117,11 +117,12 @@ const List<SeccionTerminos> seccionesTerminos = [
     'Necesitas una póliza vinculada y verificada para recibirlo.',
   ]),
   SeccionTerminos('Monedas y premios', [
-    'Ganas monedas cuando cumples los dos objetivos de la semana y cuando '
+    'Ganas monedas con cada objetivo de la semana que cumples y cuando '
         'quedas entre los 3 primeros de La Liga. Se canjean por premios en '
         'la tienda.',
-    'Cada moneda dura 90 días desde que la ganas. Puedes juntar hasta 100: '
-        'lo que pase de 100 se pierde.',
+    'El año se divide en 4 temporadas de 13 semanas. Las monedas que '
+        'ganas en una temporada vencen cuando esa temporada cierra. No hay '
+        'límite para juntarlas.',
     'Un cupón canjeado dura 60 días desde que lo canjeas.',
     'Sin póliza verificada ganas monedas igual, pero no las puedes canjear.',
   ]),

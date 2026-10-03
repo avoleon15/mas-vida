@@ -12,7 +12,8 @@ import 'recuperar_contrasena_screen.dart';
 import 'registro_screen.dart';
 
 // ============================================================
-// EL INGRESO: CORREO Y CONTRASEÑA.
+// EL INGRESO: CORREO Y CONTRASEÑA, O APPLE Y GOOGLE (que todavía no
+// entran, ver [_AccesoConProveedores]).
 //
 // Es la puerta de la app para quien no tiene sesión guardada. Desde acá
 // se crea la cuenta, se recupera la contraseña y —mientras dure la etapa
@@ -200,6 +201,8 @@ class _AccesoScreenState extends State<AccesoScreen> {
                           ),
                           const SizedBox(height: 28),
                           _formulario(),
+                          const SizedBox(height: 22),
+                          const _AccesoConProveedores(),
                           const SizedBox(height: 18),
                           Center(
                             child: Wrap(
@@ -396,6 +399,177 @@ class _AccesoDePrueba extends StatelessWidget {
       ],
     );
   }
+}
+
+// ============================================================
+// Entrar con Apple o con Google.
+// ============================================================
+
+/// Llaves de los dos botones, para los tests.
+const Key llaveEntrarConApple = ValueKey('acceso-apple');
+const Key llaveEntrarConGoogle = ValueKey('acceso-google');
+
+/// "Continuar con Apple" y "Continuar con Google" (reunión del 2 de
+/// octubre de 2026).
+///
+/// TODAVÍA NO ENTRAN: se ven para que el diseño quede completo, y al
+/// tocarlos avisan que vienen pronto. Para que funcionen hace falta
+/// configuración que no vive en el código —los client id de Google
+/// Cloud, la capacidad "Sign in with Apple" en el App ID de Assures— y
+/// un endpoint en el servidor que verifique el token del proveedor. El
+/// token NUNCA se puede dar por bueno en el teléfono.
+///
+/// Van los dos o ninguno: Apple exige su botón en cualquier app de iOS
+/// que ofrezca entrar con Google (guía 4.8 de la App Store). Y el de
+/// Apple va primero y en negro, como lo pide su guía de estilo.
+class _AccesoConProveedores extends StatelessWidget {
+  const _AccesoConProveedores();
+
+  void _avisarQueVienePronto(BuildContext context, String proveedor) {
+    HapticFeedback.selectionClick();
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Muy pronto'),
+        content: Text(
+          'Entrar con $proveedor todavía no está disponible. Por ahora usa '
+          'tu correo.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    Widget raya() =>
+        Expanded(child: Container(height: 0.5, color: AppColors.separador));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            raya(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'o continúa con',
+                style: tema.bodySmall?.copyWith(color: AppColors.textSecondary),
+              ),
+            ),
+            raya(),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _BotonProveedor(
+          key: llaveEntrarConApple,
+          texto: 'Continuar con Apple',
+          logo: const Icon(Icons.apple, size: 22, color: Colors.white),
+          fondo: Colors.black,
+          tinta: Colors.white,
+          onPressed: () => _avisarQueVienePronto(context, 'Apple'),
+        ),
+        const SizedBox(height: 10),
+        _BotonProveedor(
+          key: llaveEntrarConGoogle,
+          texto: 'Continuar con Google',
+          logo: const _LetraGoogle(),
+          fondo: AppColors.card,
+          tinta: AppColors.textPrimary,
+          borde: AppColors.cardBorder,
+          onPressed: () => _avisarQueVienePronto(context, 'Google'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Un botón de proveedor: píldora con el logo a la izquierda y el texto
+/// centrado. Mismo alto que "Entrar" para que se lean como hermanos.
+class _BotonProveedor extends StatelessWidget {
+  const _BotonProveedor({
+    super.key,
+    required this.texto,
+    required this.logo,
+    required this.fondo,
+    required this.tinta,
+    required this.onPressed,
+    this.borde,
+  });
+
+  final String texto;
+  final Widget logo;
+  final Color fondo;
+  final Color tinta;
+  final Color? borde;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: texto,
+      excludeSemantics: true,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: onPressed,
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: fondo,
+            borderRadius: BorderRadius.circular(AppRadios.pildora),
+            border: borde == null ? null : Border.all(color: borde!),
+          ),
+          child: Row(
+            children: [
+              SizedBox(width: 24, child: Center(child: logo)),
+              Expanded(
+                child: Text(
+                  texto,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: tinta,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              // El mismo ancho que el logo, del otro lado: así el texto
+              // queda centrado en el botón y no corrido a la derecha.
+              const SizedBox(width: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La "G" de Google, en su azul. Es un marcador hasta tener el logo
+/// oficial como asset, que es el que pide su guía de marca.
+class _LetraGoogle extends StatelessWidget {
+  const _LetraGoogle();
+
+  @override
+  Widget build(BuildContext context) => Text(
+    'G',
+    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+      color: const Color(0xFF4285F4),
+      fontWeight: FontWeight.w800,
+      height: 1,
+    ),
+  );
 }
 
 /// "Al usar +Vida aceptas los Términos y condiciones", con el enlace a

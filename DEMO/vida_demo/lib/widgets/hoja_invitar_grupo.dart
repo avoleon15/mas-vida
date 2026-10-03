@@ -238,10 +238,8 @@ class _HojaInvitarState extends State<_HojaInvitar> {
               Text(
                 // Que quede claro qué está pasando: invitar no es lo
                 // mismo que mostrarle tus datos a alguien.
-                grupo.mostrarPuntos
-                    ? 'En esta competencia todos ven los puntos de cada quien.'
-                    : 'En esta competencia solo se ve la posición, no los '
-                          'puntos.',
+                'En esta competencia todos ven los puntos de cada quien, '
+                'nunca los pasos.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

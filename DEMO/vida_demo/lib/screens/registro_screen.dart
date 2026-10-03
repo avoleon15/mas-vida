@@ -1190,7 +1190,7 @@ class _PasoTerminos extends StatelessWidget {
           icono: _icono(CupertinoIcons.chart_bar_alt_fill),
           titulo: 'Tus puntos son tu nivel',
           detalle:
-              'Nunca se gastan. Definen tu nivel del año y tu '
+              'Nunca se gastan. Definen tu nivel del año de póliza y tu '
               'porcentaje de cashback.',
         ),
         const _Separador(),
@@ -1198,10 +1198,10 @@ class _PasoTerminos extends StatelessWidget {
           // El ícono de las monedas es el único naranja que significa
           // algo solo (CLAUDE.md).
           icono: MonedaAnimada(size: 20),
-          titulo: 'Tus monedas duran 90 días',
+          titulo: 'Tus monedas duran una temporada',
           detalle:
-              'Se canjean por premios. Puedes juntar hasta 100; lo que '
-              'pase de ahí se pierde.',
+              'Se canjean por premios. El año tiene 4 temporadas y lo que '
+              'ganas en una vence cuando esa temporada cierra.',
         ),
         const _Separador(),
         _Renglon(

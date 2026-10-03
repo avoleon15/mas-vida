@@ -30,7 +30,7 @@ void main() {
     // identidad, no de layout.
     while (tester.takeException() != null) {}
 
-    expect(find.textContaining('PUNTOS ACUMULADOS'), findsOneWidget);
+    expect(find.textContaining('PUNTOS DE TU AÑO DE PÓLIZA'), findsOneWidget);
     expect(find.text('Ver mi cashback'), findsOneWidget);
     // El mock está en el nivel 3, y el 4 no se alcanza en el piloto: en
     // vez de "te faltan X para el nivel 4" dice que ya llegó al tope.

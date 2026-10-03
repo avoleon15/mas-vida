@@ -24,7 +24,6 @@ void main() {
             fuentes: const [],
             sesion: null,
             marcadoParaRevision: false,
-            reversion: null,
             enCurso: false,
             ritmo: null,
           ),
@@ -107,9 +106,14 @@ void main() {
     expect(h.diasDeLasSemanasDelMes.last.fecha.day, 26);
   });
 
-  test('el mock real también da cuatro semanas de agosto', () async {
+  test('el viernes 2 de octubre el mes todavía no tiene lunes', () async {
+    // El hoy del mock. Octubre arranca un jueves: el jueves 1 y el viernes
+    // 2 son de la semana del lunes 28 de septiembre, así que el mes no
+    // tiene una semana propia y se muestra la semana en curso.
     TestWidgetsFlutterBinding.ensureInitialized();
     await Datos.cargar();
-    expect(Datos.i.historial.semanasDelMes.length, 4);
+    final h = Datos.i.historial;
+    expect(h.hoy.fecha, DateTime(2026, 10, 2));
+    expect(h.semanasDelMes, [h.semanaEnCurso]);
   });
 }

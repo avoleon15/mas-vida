@@ -17,3 +17,44 @@ const Duration desfaseDeGuatemala = Duration(hours: 6);
 /// usuarios. Alguien de viaje no tiene que ver otra fecha de cierre.
 DateTime enHoraDeGuatemala(DateTime fecha) =>
     fecha.toUtc().subtract(desfaseDeGuatemala);
+
+/// Los meses, en minúscula como se escriben en una fecha.
+const List<String> mesesDelAnio = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/// Los días de la semana, empezando en lunes como `DateTime.weekday`.
+const List<String> diasDeLaSemana = [
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+  'domingo',
+];
+
+/// "4 de octubre", leído en hora de Guatemala.
+String diaYMes(DateTime fecha) {
+  final f = enHoraDeGuatemala(fecha);
+  return '${f.day} de ${mesesDelAnio[f.month - 1]}';
+}
+
+/// "domingo 4 de octubre", leído en hora de Guatemala. Con el mes
+/// siempre: "el lunes 28" no dice de qué mes, y una semana puede
+/// empezar en uno y terminar en otro.
+String fechaConDia(DateTime fecha) {
+  final f = enHoraDeGuatemala(fecha);
+  return '${diasDeLaSemana[f.weekday - 1]} ${diaYMes(fecha)}';
+}

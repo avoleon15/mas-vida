@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vida_demo/datos/fuente_datos.dart';
+import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/theme.dart';
 
 // ============================================================
@@ -31,4 +33,31 @@ Future<void> montarPantalla(WidgetTester tester, Widget pantalla) async {
       ),
     ),
   );
+}
+
+/// Deja el historial del mock como si hoy fuera el sábado 26 de
+/// septiembre de 2026: un mes con varias semanas ya vividas.
+///
+/// Hace falta para probar las gráficas de "Mes". El hoy real del mock es
+/// el viernes 2 de octubre, y octubre todavía no tiene ningún lunes: la
+/// vista de Mes muestra solo la semana en curso, que es lo correcto ese
+/// día pero no deja ver cómo se dibuja un mes. Se llama después de
+/// `Datos.cargar()`.
+///
+/// Devuelve con qué volver al mock completo, para los tests que solo lo
+/// necesitan un rato: `addTearDown(usarMesConVariasSemanas())`.
+void Function() usarMesConVariasSemanas() {
+  final d = Datos.i;
+  final hasta = DateTime(2026, 9, 26);
+  Datos.i = Datos(
+    perfil: d.perfil,
+    historial: Historial(
+      zonaHoraria: d.historial.zonaHoraria,
+      dias: d.historial.dias.where((x) => !x.fecha.isAfter(hasta)).toList(),
+    ),
+    resumen: d.resumen,
+    catalogo: d.catalogo,
+    social: d.social,
+  );
+  return () => Datos.i = d;
 }

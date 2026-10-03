@@ -1,9 +1,10 @@
 import 'package:flutter/services.dart';
 
-/// Puente hacia el MethodChannel nativo de HealthKit (ver contrato-v3_1.md
-/// y AppDelegate.swift). Expone únicamente los 2 métodos del contrato —
-/// todo lo demás (dashboard, niveles, retos) es HTTP directo contra la API
-/// de Luis, sin pasar por acá.
+/// Puente hacia el MethodChannel nativo (ver contrato-tecnico.md,
+/// "MethodChannel", y AppDelegate.swift). Expone los 3 métodos del
+/// contrato y ni uno más: `solicitarPermisos`, `sincronizar` y
+/// `actualizarSesion`. Todo lo demás (dashboard, niveles, objetivos) es
+/// HTTP directo contra la API de Luis, sin pasar por acá.
 class HealthKitBridge {
   static const MethodChannel _canal = MethodChannel(
     'com.assures.masvida/healthkit',
@@ -41,6 +42,50 @@ class HealthKitBridge {
       detalle: respuesta?['detalle'] as String?,
     );
   }
+
+  /// Le entrega a Swift el token de la sesión, o `null` cuando se cierra.
+  /// Swift lo guarda en su propio Keychain y lo usa para firmar el `sync`.
+  ///
+  /// Se llama al entrar o registrarse (con el token), al cerrar sesión
+  /// (con null) y cada vez que abre la app (con lo que haya): así la copia
+  /// de Swift no se desincroniza ni después de reinstalar. Es idempotente.
+  ///
+  /// Nunca falla hacia afuera: donde no hay lado nativo (Web, los tests)
+  /// el canal no existe y se devuelve [EstadoSesionNativa.noDisponible].
+  /// El token nunca se escribe en un log ni en un error.
+  Future<EstadoSesionNativa> actualizarSesion(String? token) async {
+    try {
+      final respuesta = await _canal.invokeMapMethod<String, dynamic>(
+        'actualizarSesion',
+        {'token': token},
+      );
+      return switch (respuesta?['estado']) {
+        'ok' => EstadoSesionNativa.ok,
+        'error_almacenamiento' => EstadoSesionNativa.errorAlmacenamiento,
+        _ => EstadoSesionNativa.desconocido,
+      };
+    } on MissingPluginException {
+      return EstadoSesionNativa.noDisponible;
+    } on PlatformException {
+      return EstadoSesionNativa.errorAlmacenamiento;
+    }
+  }
+}
+
+/// Cómo le fue a Swift guardando (o borrando) el token.
+enum EstadoSesionNativa {
+  /// Guardado, o borrado si vino null.
+  ok,
+
+  /// Swift no pudo escribir en el Keychain: el `sync` no va a poder
+  /// firmar hasta el próximo intento (el próximo arranque lo reintenta).
+  errorAlmacenamiento,
+
+  /// No hay lado nativo: Web o un test.
+  noDisponible,
+
+  /// Llegó un estado que esta versión de la app no conoce.
+  desconocido,
 }
 
 enum EstadoPermisos {
@@ -77,7 +122,7 @@ enum EstadoPermisos {
 /// reloj" mucho más seguido que "negó el permiso".
 ///
 /// Por eso el texto para el usuario tiene que ser condicional, no acusatorio:
-/// "No vemos datos de ritmo cardíaco. Si usás un reloj, revisá que +Vida tenga
+/// "No vemos datos de ritmo cardíaco. Si usas un reloj, revisa que +Vida tenga
 /// permiso en Ajustes › Salud." Decirle a todo el que no tiene reloj que
 /// arregle un permiso sería ruido para casi todos.
 class TiposVisibles {
