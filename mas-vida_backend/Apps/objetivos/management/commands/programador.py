@@ -1,12 +1,13 @@
-"""Deja corriendo las dos corridas del lunes (hora de Guatemala).
+"""Deja corriendo las dos corridas del martes (hora de Guatemala).
 
   python manage.py programador            # se queda corriendo
   python manage.py programador --una-vez  # solo la puesta al día de arranque
 
 Al arrancar se pone al día con las semanas pendientes (por si estuvo apagado el
-lunes) y después espera:
-  - lunes 00:00 -> cierre: fija el resultado de la semana y paga las monedas
-  - lunes 12:00 -> corrección: actualiza los acumulados, no paga ni reabre
+martes) y después espera:
+  - martes 00:00 -> cierre: fija el resultado de la semana y paga las monedas
+    (el lunes queda para los datos atrasados del domingo)
+  - martes 12:00 -> corrección: actualiza los acumulados, no paga ni reabre
 
 Pensado para correr como un servicio aparte (ver compose.yaml).
 """
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Corre el cierre semanal (lunes 00:00) y su corrección (lunes 12:00)."
+    help = "Corre el cierre semanal (martes 00:00) y su corrección (martes 12:00)."
 
     def add_arguments(self, parser):
         parser.add_argument(
