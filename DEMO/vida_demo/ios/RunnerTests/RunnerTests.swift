@@ -442,6 +442,101 @@ final class ApiErrorReintentableTests: XCTestCase {
   }
 }
 
+/// El `422` de la ventana de 14 días se distingue de cualquier otro rechazo:
+/// solo con ESE motivo se puede descartar el día y seguir con los demás.
+final class ApiClientVentanaTests: XCTestCase {
+
+  private var cliente: ApiClient!
+
+  override func setUp() {
+    super.setUp()
+    ProtocoloEspia.reiniciar()
+    let almacen = AlmacenEnMemoria()
+    almacen.token = "abc123-secreto"
+    let configuracion = URLSessionConfiguration.ephemeral
+    configuracion.protocolClasses = [ProtocoloEspia.self]
+    cliente = ApiClient(
+      baseURL: URL(string: "http://servidor.prueba")!,
+      session: URLSession(configuration: configuracion),
+      almacen: almacen
+    )
+  }
+
+  /// Responde `status` con `cuerpo` y devuelve el error que lanzó el envío.
+  private func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
+    ProtocoloEspia.status = status
+    ProtocoloEspia.respuesta = Data(cuerpo.utf8)
+    do {
+      _ = try await cliente.enviarSincronizacion(payloadDePrueba())
+      return nil
+    } catch {
+      return error
+    }
+  }
+
+  func testEl422DeLaVentanaSeReconoce_ConSuFecha() async {
+    // Tal cual lo arma Apps/activities/views.py.
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    guard case .fueraDeVentana(let fecha)? = error as? ApiError else {
+      return XCTFail("Debió ser fueraDeVentana, fue: \(String(describing: error))")
+    }
+    XCTAssertEqual(fecha, "2026-09-01")
+  }
+
+  func testEl422DeLaVentanaNoSeReintenta() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    XCTAssertEqual((error as? ApiError)?.esReintentable, false,
+                   "Un día fuera de la ventana mañana estará más fuera: reintentarlo es inútil")
+  }
+
+  func testSinFechaEnElCuerpo_IgualSeReconoce() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana"}"#)
+
+    guard case .fueraDeVentana(let fecha)? = error as? ApiError else {
+      return XCTFail("Debió ser fueraDeVentana, fue: \(String(describing: error))")
+    }
+    XCTAssertNil(fecha)
+    XCTAssertFalse((error?.localizedDescription ?? "").isEmpty)
+  }
+
+  func testOtro422_SigueSiendoUnErrorDelServidor() async {
+    for cuerpo in [
+      #"{"error":"otra_cosa","fecha":"2026-09-01"}"#,   // otro motivo
+      #"{"fecha":["Formato inválido."]}"#,               // error de validación
+      #"<html>Unprocessable</html>"#,                    // no es JSON
+      "",                                                // sin cuerpo
+    ] {
+      let error = await errorAl(responder: 422, cuerpo)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con cuerpo \(cuerpo) debió ser servidor(422), fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, 422)
+    }
+  }
+
+  func testElMismoCuerpoConOtroCodigo_NoEsDeVentana() async {
+    for status in [400, 403, 500] {
+      let error = await errorAl(responder: status, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(status) debió ser servidor, fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, status)
+    }
+  }
+
+  func testElMensajeDiceElDia_YNoTraeElToken() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    let mensaje = error?.localizedDescription ?? ""
+    XCTAssertTrue(mensaje.contains("2026-09-01"))
+    XCTAssertFalse(mensaje.contains("abc123-secreto"))
+  }
+}
+
 /// `actualizarSesion`: qué hace Swift con lo que entrega Flutter.
 final class SesionAplicarTests: XCTestCase {
 

@@ -26,11 +26,19 @@ enum ApiError: LocalizedError {
     /// No hay token guardado: no hay a nombre de quién enviar. No se hace ni
     /// la petición. No es un error permanente: el día queda pendiente.
     case sinSesion
+    /// `422` con `{"error": "fuera_de_ventana"}`: el día tiene más de 14 días
+    /// y el servidor ya no lo acepta (ver "Ventana de aceptación de datos
+    /// rezagados" en el contrato). Es permanente, pero solo para ESE día: a
+    /// diferencia de los demás errores permanentes, no dice nada malo del
+    /// payload ni de la cuenta. `fecha` es la que devolvió el servidor.
+    case fueraDeVentana(fecha: String?)
 
     var errorDescription: String? {
         switch self {
         case .sinSesion:
             return "No hay una sesión iniciada: el día queda pendiente hasta que la haya."
+        case .fueraDeVentana(let fecha):
+            return "El servidor ya no acepta el día \(fecha ?? "enviado"): tiene más de 14 días."
         case .urlInvalida:
             return "La URL del backend no es válida."
         case .respuestaInvalida:
@@ -46,15 +54,16 @@ enum ApiError: LocalizedError {
     ///
     /// Sí: sin sesión, `401` (el token falta o ya no vale; se arregla al volver
     /// a iniciar sesión), `408`, `429` y `5xx`. No: URL mal configurada,
-    /// respuesta ilegible y cualquier otro `4xx` (el payload o la cuenta
-    /// están mal y reintentar no lo arregla).
+    /// respuesta ilegible, el `422` de la ventana (el día ya es demasiado
+    /// viejo, y mañana lo será más) y cualquier otro `4xx` (el payload o la
+    /// cuenta están mal y reintentar no lo arregla).
     ///
     /// Que `401` sea reintentable es lo que evita perder días de datos: un
     /// error permanente saca el día de la cola y corta el procesamiento de los
     /// demás.
     var esReintentable: Bool {
         switch self {
-        case .urlInvalida, .respuestaInvalida, .respuestaIlegible:
+        case .urlInvalida, .respuestaInvalida, .respuestaIlegible, .fueraDeVentana:
             return false
         case .sinSesion:
             return true
@@ -240,6 +249,9 @@ final class ApiClient {
         }
 
         guard (200...299).contains(http.statusCode) else {
+            if let rechazo = Self.rechazoPorVentana(codigo: http.statusCode, cuerpo: datos) {
+                throw rechazo
+            }
             throw ApiError.servidor(codigo: http.statusCode, cuerpo: String(data: datos, encoding: .utf8))
         }
 
@@ -252,5 +264,21 @@ final class ApiClient {
         } catch {
             throw ApiError.respuestaIlegible
         }
+    }
+
+    /// Cuerpo del `422` de la ventana: `{"error": "fuera_de_ventana", "fecha": "…"}`.
+    private struct CuerpoRechazo: Decodable {
+        let error: String
+        let fecha: String?
+    }
+
+    /// `fueraDeVentana` solo si es un `422` Y trae ese motivo. Cualquier otro
+    /// `422` (o un cuerpo que no se entiende) sigue siendo `servidor(422)`:
+    /// un permanente genérico, que no se puede tratar como "solo este día".
+    static func rechazoPorVentana(codigo: Int, cuerpo: Data) -> ApiError? {
+        guard codigo == 422,
+              let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo),
+              rechazo.error == "fuera_de_ventana" else { return nil }
+        return .fueraDeVentana(fecha: rechazo.fecha)
     }
 }
