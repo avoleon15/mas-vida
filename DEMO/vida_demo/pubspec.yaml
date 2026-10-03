@@ -66,6 +66,17 @@ dependencies:
   # Es el paquete oficial del equipo de Dart. Licencia BSD.
   http: ^1.6.0
 
+  # Guarda la sesión (el token) en el llavero de iOS y no en
+  # SharedPreferences: el token abre la cuenta entera. Lo usa
+  # lib/datos/sesion.dart. Licencia BSD.
+  flutter_secure_storage: ^11.2.0
+
+  # Los textos del sistema en español: la rueda de fechas del registro
+  # ("septiembre", no "September") y el menú de copiar y pegar. Viene
+  # con Flutter.
+  flutter_localizations:
+    sdk: flutter
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

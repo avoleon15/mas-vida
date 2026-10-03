@@ -293,12 +293,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
     );
   }
 
-  /// Cerrar sesión, simulado.
+  /// Cerrar sesión: borra el token del llavero y vuelve al arranque, que
+  /// al no encontrar sesión muestra el ingreso.
   ///
-  /// TODO: no hay login todavía. Cuando exista, acá va: borrar el token,
-  /// limpiar lo guardado en el teléfono (ver `AlmacenSocial`) y mandar a
-  /// la pantalla de ingreso. Por ahora confirma y devuelve al arranque
-  /// de la app, que es lo que se ve al cerrar sesión de verdad.
+  /// TODO: cuando haya cuentas de verdad, limpiar también lo guardado en
+  /// el teléfono a nombre de este usuario (ver `AlmacenSocial`), o el
+  /// siguiente que entre en este iPhone vería sus grupos.
   void _cerrarSesion(BuildContext context) {
     showCupertinoDialog<void>(
       context: context,
@@ -318,12 +318,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
-            onPressed: () {
+            onPressed: () async {
               HapticFeedback.mediumImpact();
+              final navegador = Navigator.of(context);
               Navigator.of(dialogo).pop();
-              Navigator.of(
-                context,
-              ).pushNamedAndRemoveUntil('/home', (ruta) => false);
+              await servicioSesion.cerrarSesion();
+              navegador.pushNamedAndRemoveUntil('/', (ruta) => false);
             },
             child: const Text('Cerrar sesión'),
           ),
