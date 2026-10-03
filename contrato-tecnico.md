@@ -500,7 +500,8 @@ por eso se aplican antes: el resultado no depende del motor.
 
 Si el servidor no tiene ninguna versión de reglas vigente responde `500`, y
 Swift reintenta los `5xx`. **Una base migrada ya la trae:** la migración
-`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026), así que un
+`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026) y la `0008` la
+versión 2 (desde el 2 oct 2026), así que un
 despliegue limpio con `migrate` no tiene este problema. Solo ocurriría si
 alguien borra la versión. Cada fila del ledger queda sellada con la versión
 vigente en la fecha del día que puntúa.
@@ -646,8 +647,24 @@ vieja de trimestres.
   season se reinician como las demás.
 - Los **cupones ya canjeados** no cambian: caducan a los 60 días del canje.
 
-**[PENDIENTE] (Luis):** `services/monedas.py` aplica hoy el tope de 100 y la
-caducidad de 90 días, y nada reinicia el saldo al cambiar de season.
+**Hecho en el código (2 oct):** `services/monedas.py`.
+
+- Cada ganancia **caduca el domingo en que cierra la season en que se ganó**, y
+  ese día todavía se puede usar. El vencimiento se calcula **siempre de la
+  season de la fecha de la ganancia**, no de lo que haya quedado guardado en
+  `fecha_expiracion`: así las filas anteriores (guardadas con 90 días) también
+  siguen la regla nueva.
+- **El reinicio no necesita un proceso aparte.** Antes de leer o mover el saldo
+  se asientan las monedas vencidas con una fila `expiracion` negativa (el ledger
+  no se edita). Por eso el orden del lunes en que cambia la season sale solo:
+  como la semana que cerró se paga con la fecha de ese lunes, primero se
+  reinicia y después entra lo nuevo.
+- Las monedas se acreditan **sin tope**.
+- El servicio calcula cuántos días faltan para el cierre y si ya toca el aviso
+  (desde 7 días antes, inclusive el último domingo). La app puede mostrarlo con la
+  `fecha_cierre` de `retos/estado`.
+- **[PENDIENTE]** el endpoint de saldo, que es lo que la app lee para mostrar las
+  monedas y el aviso, va con el paquete de premios y canje.
 
 ### Ciclos y cortes
 
@@ -724,8 +741,7 @@ hay objetivo máximo que registrar mientras no haya progresión).
   (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces. Lo
   dispara el servicio `programador` (ver "Cierre semanal programado").
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
-  **gastarlas**. Hoy el código aplica el tope de 100 y la caducidad de 90 días;
-  **[PENDIENTE] (2 oct):** sin tope y con reinicio al cerrar la season (ver
+  **gastarlas**. Sin tope, y caducan al cerrar la season (hecho el 2 oct; ver
   "Monedas y seasons").
 - **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
   vinculada") **sí** cuentan para el progreso de la semana en curso. Las
@@ -1419,8 +1435,8 @@ verificación" son el mismo momento.
     por rango de edad y lista de semanas de la season para la vista "battle
     pass".
   - ~~Seasons por semanas ISO~~ — **hecho** (2 oct): ver "Seasons".
-  - Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
-    cambia (primero reiniciar, después pagar).
+  - ~~Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
+    cambia~~ — **hecho** (2 oct): ver "Monedas y seasons".
   - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
     devuelven los puntos de cada participante pero nunca sus pasos.
   - Póliza: no rechazar por la fecha de renovación (solo cancelada o
@@ -1664,6 +1680,11 @@ verificación" son el mismo momento.
   la versión 1 sola, con cualquier `migrate`; no hace falta comando ni fixture.
   Cuando cambie una regla de puntaje o de monedas, se agrega una versión nueva
   con su `vigente_desde` (por ejemplo con otra migración de datos igual a esa).
+  **La versión 2** (migración `poincs/0008`, vigente desde el **2 oct 2026**)
+  marca las reglas de la reunión de ese día, empezando por las monedas sin tope
+  que caducan con la season. Cada fila de los ledgers queda sellada con la versión
+  vigente en su fecha: lo anterior al 2 oct es versión 1 y lo posterior, versión 2.
+  La versión es solo una etiqueta de auditoría: los cálculos los hace el código.
 - **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
   fila por día ya no se lee. No hay datos reales en ese formato; una base de
   pruebas vieja se vuelve a sincronizar.
