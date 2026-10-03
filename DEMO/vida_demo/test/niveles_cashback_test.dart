@@ -9,19 +9,25 @@ import 'package:vida_demo/reglas_puntos.dart';
 /// septiembre de 2026), por encima del techo de actividad de 12.000: en
 /// el piloto el nivel 4 no se alcanza. Es una consecuencia aceptada.
 void main() {
-  group('nivelParaPuntos', () {
-    test('los bordes de cada nivel caen donde deben', () {
-      expect(nivelParaPuntos(0), 0);
-      expect(nivelParaPuntos(2499), 0);
-      expect(nivelParaPuntos(2500), 1);
-      expect(nivelParaPuntos(4999), 1);
-      expect(nivelParaPuntos(5000), 2);
-      expect(nivelParaPuntos(9999), 2);
-      expect(nivelParaPuntos(10000), 3);
-      expect(nivelParaPuntos(12000), 3);
-      expect(nivelParaPuntos(14999), 3);
-      expect(nivelParaPuntos(15000), 4);
-      expect(nivelParaPuntos(99999), 4);
+  /// El nivel de un acumulado, leído de la tabla: el más alto cuyo piso
+  /// se alcanza. La app no lo calcula (lo manda el servidor); acá sirve
+  /// para fijar que la tabla no deja huecos.
+  int nivelDe(int puntos) =>
+      niveles.lastWhere((n) => puntos >= n.puntosMinimos!).numero;
+
+  group('los bordes de la tabla', () {
+    test('cada nivel arranca donde debe', () {
+      expect(nivelDe(0), 0);
+      expect(nivelDe(2499), 0);
+      expect(nivelDe(2500), 1);
+      expect(nivelDe(4999), 1);
+      expect(nivelDe(5000), 2);
+      expect(nivelDe(9999), 2);
+      expect(nivelDe(10000), 3);
+      expect(nivelDe(12000), 3);
+      expect(nivelDe(14999), 3);
+      expect(nivelDe(15000), 4);
+      expect(nivelDe(99999), 4);
     });
   });
 
@@ -45,7 +51,7 @@ void main() {
     test('nadie cae fuera de la tabla por arriba del ultimo techo', () {
       // El 15.000 del nivel 4 es el tope para dibujar la escalera, no un
       // limite: nivelParaPuntos no deja a nadie sin nivel por arriba.
-      expect(nivelParaPuntos(niveles.last.puntosMaximos! + 5000), 4);
+      expect(nivelDe(niveles.last.puntosMaximos! + 5000), 4);
     });
 
     test('el nivel 4 se lee "15,000+", no "15,000 – 15,000"', () {
@@ -57,7 +63,7 @@ void main() {
       // ni bajando el piso. Si este test falla, alguien volvio a tocar
       // una de las dos cifras.
       expect(nivelPorNumero(4)!.puntosMinimos!, greaterThan(techoAnual));
-      expect(nivelParaPuntos(techoAnual), 3);
+      expect(nivelDe(techoAnual), 3);
       expect(nivelAlcanzable(nivelPorNumero(4)!), isFalse);
       expect(nivelAlcanzable(nivelPorNumero(3)!), isTrue);
     });

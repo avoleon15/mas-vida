@@ -17,11 +17,13 @@ void main() {
   List<SemanaObjetivos> semanas() => Datos.i.resumen.objetivosSemana.semanas;
 
   group('La regla son dos checks, y nada más', () {
-    test('cada semana trae dos objetivos: pasos y entrenamiento', () {
+    test('cada semana trae dos objetivos: pasos y cantidad de workouts', () {
+      // Contrato, demo 1: el segundo objetivo es CUÁNTOS workouts, no los
+      // minutos de entrenamiento.
       for (final w in semanas()) {
         expect(w.objetivos.map((o) => o.id), [
           'pasos_semana',
-          'minutos_entrenamiento',
+          'workouts_semana',
         ], reason: 'semana ${w.numero}');
       }
     });
@@ -83,11 +85,16 @@ void main() {
       expect(s.monedasGanadas, suma);
     });
 
-    test('el monto sale del servidor, no del número de semana', () {
-      // Una semana no paga "numero × algo": trae su propio monto. Si el
-      // mock pagara lo mismo en todas, este test no probaría nada.
-      final montos = semanas().map((w) => w.monedas).toSet();
-      expect(montos.length, greaterThan(1));
+    test('lo que paga la semana es la suma de lo que paga cada objetivo', () {
+      // El monto de cada objetivo lo manda el servidor (hoy 5 + 5,
+      // provisional): la app no lo calcula, solo lo suma.
+      for (final w in semanas()) {
+        expect(
+          w.monedas,
+          w.objetivos.fold(0, (a, o) => a + o.monedas),
+          reason: 'semana ${w.numero}',
+        );
+      }
     });
   });
 }

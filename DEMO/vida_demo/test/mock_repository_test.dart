@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vida_demo/hora_guatemala.dart';
 import 'package:vida_demo/datos/fuente_datos.dart';
 import 'package:vida_demo/datos/modelos.dart';
 import 'package:vida_demo/reglas_puntos.dart';
@@ -34,20 +35,12 @@ void main() {
       }
     });
 
-    test('los puntos de cada día coinciden con el motor de reglas', () {
+    test('los puntos por pasos de cada día siguen la tabla', () {
       for (final d in Datos.i.historial.dias) {
-        if (d.sinPermiso) continue;
-        final esperado = calcularDia(
-          pasos: d.pasos!,
-          edad: Datos.i.perfil.edad,
-          minutosSesion: d.sesion?.duracionMin ?? 0,
-          porcentajeFcm: d.sesion?.porcentajeFcm ?? 0,
-          sesionContinua: d.sesion?.continua ?? true,
-          manual: d.esManual,
-        );
+        if (d.sinPermiso || d.esManual) continue;
         expect(
-          d.puntosDia,
-          esperado.puntosAcreditados,
+          d.puntosPasos,
+          puntosPorPasos(d.pasos!),
           reason: 'Descuadre el ${d.fecha}',
         );
       }
@@ -63,7 +56,8 @@ void main() {
 
     test('el acumulado anual deja al usuario en un nivel real', () {
       final resumen = Datos.i.resumen;
-      expect(nivelParaPuntos(resumen.puntosAno), resumen.nivel);
+      final nivel = nivelPorNumero(resumen.nivel)!;
+      expect(resumen.puntosAno, greaterThanOrEqualTo(nivel.puntosMinimos!));
       expect(nivelPorNumero(resumen.nivel)!.definido, isTrue);
     });
 
@@ -135,16 +129,17 @@ void main() {
         isTrue,
         reason: 'atípico marcado que sigue acreditando',
       );
-      expect(hay((d) => d.reversion != null), isTrue, reason: 'reversión');
       expect(
-        hay((d) => d.huboPrecedencia),
+        hay((d) => d.fuentes.length > 1),
         isTrue,
         reason: 'precedencia entre fuentes',
       );
     });
 
     test('la precedencia toma la fuente con más pasos, nunca la suma', () {
-      for (final d in Datos.i.historial.dias.where((d) => d.huboPrecedencia)) {
+      for (final d in Datos.i.historial.dias.where(
+        (d) => d.fuentes.length > 1,
+      )) {
         final maximo = d.fuentes
             .map((f) => f.pasos)
             .reduce((a, b) => a > b ? a : b);
@@ -166,14 +161,21 @@ void main() {
           .reduce((a, b) => a < b ? a : b);
 
       expect(proximo.diasParaCaducar, minimo);
-      // Y que el aviso se prenda solo cuando de verdad falta poco.
-      expect(proximo.cercaDeCaducar, proximo.diasParaCaducar <= 15);
     });
 
-    test('el saldo de monedas respeta el tope de 100', () {
-      // Regla dura: si una ganancia pasa de 100, el excedente se pierde.
-      // El mock llegó a decir 150.
-      expect(Datos.i.resumen.monedas.saldo, lessThanOrEqualTo(100));
+    test('las monedas vencen al cerrar la temporada', () {
+      // Reunión del 2 de octubre de 2026: ya no hay tope de 100 ni plazo
+      // de 90 días. Todo lo que se gana en una temporada vence el día que
+      // esa temporada cierra.
+      final cierre = enHoraDeGuatemala(
+        Datos.i.resumen.objetivosSemana.temporada!.cierra,
+      );
+      final dia =
+          '${cierre.year}-${cierre.month.toString().padLeft(2, '0')}-'
+          '${cierre.day.toString().padLeft(2, '0')}';
+      for (final lote in Datos.i.resumen.monedas.lotes) {
+        expect(lote.caducan, dia);
+      }
     });
 
     test('los lotes de monedas suman el saldo', () {
@@ -187,11 +189,6 @@ void main() {
       final pct = nivelPorNumero(Datos.i.resumen.nivel)!.porcentajeCashback!;
       final prima = 18000; // Q18,000 de la póliza mock
       expect(Datos.i.resumen.cashback.proyectadoQ, (prima * pct / 100).round());
-    });
-
-    test('ningún premio expone su costo en quetzales', () {
-      // El valor de una moneda en quetzales todavía no existe.
-      expect(Datos.i.resumen.monedas.valorEnQuetzales, isNull);
     });
   });
 

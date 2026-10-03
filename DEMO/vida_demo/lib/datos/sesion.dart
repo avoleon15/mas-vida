@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'healthkit_bridge.dart';
 
 import 'cliente_api.dart';
 
@@ -141,22 +144,35 @@ class ErrorSesion implements Exception {
 /// Si el llavero falla (una plataforma sin soporte, un test sin mock),
 /// se comporta como si no hubiera sesión: es preferible pedir el ingreso
 /// otra vez que trabar el arranque.
+///
+/// HAY DOS COPIAS DEL TOKEN y se mueven siempre juntas: la de Flutter
+/// (para sus llamadas HTTP) y la de Swift (para firmar el `sync`), que se
+/// le entrega con `actualizarSesion` (contrato, "MethodChannel"). Guardar
+/// le pasa el token a Swift, borrar le pasa null, y leer —que es lo que
+/// pasa al abrir la app— le vuelve a mandar lo que haya.
 class AlmacenSesion {
-  AlmacenSesion({FlutterSecureStorage? llavero})
-    : _llavero = llavero ?? const FlutterSecureStorage();
+  AlmacenSesion({FlutterSecureStorage? llavero, HealthKitBridge? puente})
+    : _llavero = llavero ?? const FlutterSecureStorage(),
+      _puente = puente ?? HealthKitBridge();
 
   static const _clave = 'sesion';
 
   final FlutterSecureStorage _llavero;
+  final HealthKitBridge _puente;
 
   Future<Sesion?> leer() async {
+    Sesion? sesion;
     try {
       final texto = await _llavero.read(key: _clave);
-      if (texto == null) return null;
-      return Sesion.desdeJson(jsonDecode(texto) as Map<String, dynamic>);
+      if (texto != null) {
+        sesion = Sesion.desdeJson(jsonDecode(texto) as Map<String, dynamic>);
+      }
     } catch (_) {
-      return null;
+      sesion = null;
     }
+    // Al abrir la app: Swift recibe el token de ahora, o null.
+    _avisarASwift(sesion?.token);
+    return sesion;
   }
 
   Future<void> guardar(Sesion sesion) async {
@@ -165,13 +181,22 @@ class AlmacenSesion {
     } catch (_) {
       // Sin llavero la sesión dura lo que dure la app abierta.
     }
+    _avisarASwift(sesion.token);
   }
 
   Future<void> borrar() async {
     try {
       await _llavero.delete(key: _clave);
     } catch (_) {}
+    // Al cerrar sesión se borran LAS DOS copias.
+    _avisarASwift(null);
   }
+
+  /// Sin esperar la respuesta: entrar o salir no puede quedar colgado de
+  /// Swift. Si el Keychain falla, el próximo arranque lo vuelve a mandar
+  /// (la llamada es idempotente).
+  void _avisarASwift(String? token) =>
+      unawaited(_puente.actualizarSesion(token));
 }
 
 /// Entrar, crear cuenta, recuperar la contraseña y salir.

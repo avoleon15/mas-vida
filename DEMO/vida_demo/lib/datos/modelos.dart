@@ -103,26 +103,6 @@ class SesionIntensidad {
       );
 }
 
-/// Una reversión de puntos ya acreditados. Se permite hasta 2 semanas
-/// después de la acreditación y el saldo nunca puede quedar negativo.
-class Reversion {
-  const Reversion({
-    required this.puntosRevertidos,
-    required this.fechaReversion,
-    required this.motivo,
-  });
-
-  final int puntosRevertidos;
-  final String fechaReversion;
-  final String motivo;
-
-  factory Reversion.desdeJson(Map<String, dynamic> j) => Reversion(
-    puntosRevertidos: j['puntos_revertidos'] as int,
-    fechaReversion: j['fecha_reversion'] as String,
-    motivo: j['motivo'] as String,
-  );
-}
-
 /// Ritmo cardíaco del día, tal como lo entrega HealthKit.
 ///
 /// Son bpm CRUDOS. No se convierten a % de FCmáx acá: eso lo hace el
@@ -160,7 +140,6 @@ class DiaActividad {
     required this.fuentes,
     required this.sesion,
     required this.marcadoParaRevision,
-    required this.reversion,
     required this.enCurso,
     required this.ritmo,
   });
@@ -188,7 +167,6 @@ class DiaActividad {
   /// automático, y sigue mostrándose en pantalla.
   final bool marcadoParaRevision;
 
-  final Reversion? reversion;
   final bool enCurso;
 
   /// Null cuando ese día no hubo lecturas de ritmo cardíaco.
@@ -196,10 +174,6 @@ class DiaActividad {
 
   bool get sinPermiso => origen == OrigenDatos.sinPermiso;
   bool get esManual => origen == OrigenDatos.manual;
-
-  /// True cuando hay más de una fuente reportando pasos distintos ese
-  /// día y hubo que aplicar precedencia.
-  bool get huboPrecedencia => fuentes.length > 1;
 
   FuenteDatos? get fuentePrevalece {
     for (final f in fuentes) {
@@ -224,9 +198,6 @@ class DiaActividad {
         ? null
         : SesionIntensidad.desdeJson(j['sesion'] as Map<String, dynamic>),
     marcadoParaRevision: j['marcado_para_revision'] as bool,
-    reversion: j['reversion'] == null
-        ? null
-        : Reversion.desdeJson(j['reversion'] as Map<String, dynamic>),
     enCurso: j['dia_en_curso'] as bool? ?? false,
     ritmo: j['ritmo_cardiaco'] == null
         ? null
@@ -335,12 +306,13 @@ class Historial {
   );
 }
 
-/// Un lote de monedas con su fecha de caducidad. Las monedas caducan a
-/// los 90 días de acuñadas.
+/// Un lote de monedas con su fecha de caducidad. Las monedas caducan al
+/// CERRAR LA TEMPORADA en que se ganaron (reunión del 2 de octubre de
+/// 2026; antes eran 90 días desde que se acuñaban).
 ///
 /// Quién calcula la fecha: el backend. Acá solo se lee `caducan`, nunca
-/// se suman los 90 días en el teléfono — si el plazo cambia otra vez, la
-/// app no tiene que enterarse.
+/// se calcula el cierre de la temporada en el teléfono — si el plazo
+/// cambia otra vez, la app no tiene que enterarse.
 class LoteMonedas {
   const LoteMonedas({
     required this.cantidad,
@@ -352,10 +324,6 @@ class LoteMonedas {
   final String caducan;
   final int diasParaCaducar;
 
-  /// Umbral de aviso al usuario. Es una decisión de presentación, no una
-  /// regla de negocio.
-  bool get cercaDeCaducar => diasParaCaducar <= 15;
-
   factory LoteMonedas.desdeJson(Map<String, dynamic> j) => LoteMonedas(
     cantidad: j['cantidad'] as int,
     caducan: j['caducan'] as String,
@@ -366,27 +334,11 @@ class LoteMonedas {
 /// Saldo de MONEDAS. Nunca se mezcla con puntos: las monedas se gastan,
 /// los puntos no; las monedas viven en Premios, los puntos en Mi Plan.
 class SaldoMonedas {
-  const SaldoMonedas({
-    required this.saldo,
-    required this.ganadasEsteMes,
-    required this.techoMensual,
-    required this.lotes,
-  });
+  const SaldoMonedas({required this.saldo, required this.lotes});
 
   final int saldo;
-  final int ganadasEsteMes;
 
-  /// Tope de monedas al mes, o null mientras no esté definido.
-  ///
-  /// [PENDIENTE] Queda null hasta que se acuerde uno coherente con lo que
-  /// paga cada semana: un número inventado acá terminaría en la
-  /// presentación como si fuera real.
-  final int? techoMensual;
   final List<LoteMonedas> lotes;
-
-  /// TODO: falta cuánto vale una moneda en quetzales. Depende de las
-  /// alianzas comerciales y no debe mostrarse hasta que exista.
-  Object? get valorEnQuetzales => null;
 
   LoteMonedas? get proximoLoteACaducar {
     if (lotes.isEmpty) return null;
@@ -397,8 +349,6 @@ class SaldoMonedas {
 
   factory SaldoMonedas.desdeJson(Map<String, dynamic> j) => SaldoMonedas(
     saldo: j['saldo'] as int,
-    ganadasEsteMes: j['ganadas_este_mes'] as int,
-    techoMensual: j['techo_mensual'] as int?,
     lotes: (j['lotes'] as List)
         .map((l) => LoteMonedas.desdeJson(l as Map<String, dynamic>))
         .toList(),
@@ -407,9 +357,10 @@ class SaldoMonedas {
 
 /// UN objetivo de la semana.
 ///
-/// Son DOS por semana: pasos y minutos de entrenamiento. Un objetivo NO
-/// paga nada por sí solo: lo que paga MONEDAS es cumplir los dos de la
-/// semana (ver [SemanaObjetivos.cumplida]).
+/// Son DOS por semana: pasos y minutos de entrenamiento. CADA UNO PAGA
+/// SUS PROPIAS MONEDAS al cumplirse (reunión del 2 de octubre de 2026;
+/// antes solo pagaba cumplir los dos juntos). La semana se marca
+/// completada solo cuando están los dos (ver [SemanaObjetivos.cumplida]).
 class ObjetivoSemanal {
   const ObjetivoSemanal({
     required this.id,
@@ -418,6 +369,7 @@ class ObjetivoSemanal {
     required this.meta,
     required this.unidad,
     required this.completo,
+    required this.monedas,
   });
 
   /// Identificador estable. Es lo que viaja en el JSON, nunca el nombre
@@ -437,6 +389,12 @@ class ObjetivoSemanal {
 
   final bool completo;
 
+  /// MONEDAS que paga este objetivo si se cumple.
+  ///
+  /// Las decide el SERVIDOR, semana por semana y objetivo por objetivo:
+  /// la app no tiene ninguna regla para calcularlas y no inventa una.
+  final int monedas;
+
   factory ObjetivoSemanal.desdeJson(Map<String, dynamic> j) => ObjetivoSemanal(
     id: j['id'] as String,
     nombre: j['nombre'] as String,
@@ -444,6 +402,7 @@ class ObjetivoSemanal {
     meta: j['meta'] as int?,
     unidad: j['unidad'] as String,
     completo: j['completo'] as bool,
+    monedas: j['monedas'] as int? ?? 0,
   );
 }
 
@@ -463,15 +422,14 @@ enum EstadoSemana {
 ///
 /// Los dos son de la MISMA semana y se evalúan de una sola vez, el
 /// domingo 23:59 (hora de Guatemala). Al cerrar, todos pasan a la semana
-/// siguiente del programa, la hayan cumplido o no: el calendario avanza
-/// solo.
+/// siguiente de la temporada, la hayan cumplido o no: el calendario
+/// avanza solo.
 class SemanaObjetivos {
   const SemanaObjetivos({
     required this.numero,
     required this.cierra,
     required this.estado,
     required this.objetivos,
-    required this.monedas,
     this.patrocinio,
   });
 
@@ -484,38 +442,37 @@ class SemanaObjetivos {
   final EstadoSemana estado;
   final List<ObjetivoSemanal> objetivos;
 
-  /// MONEDAS que paga esta semana si se cumplen los dos objetivos.
-  ///
-  /// Las decide el SERVIDOR, semana por semana: la app no tiene ninguna
-  /// regla para calcularlas y no inventa una.
-  final int monedas;
+  /// MONEDAS que puede pagar la semana entera: la suma de lo que paga
+  /// cada objetivo. Cada uno se cobra por separado.
+  int get monedas => objetivos.fold(0, (suma, o) => suma + o.monedas);
 
   /// La marca aliada que compró ESTA semana, si alguna la compró.
   ///
   /// NO todas las semanas tienen: solo las que una alianza pagó por
-  /// destacar. Null es el caso normal y el camino tiene que verse igual
-  /// de terminado sin logo — nada puede cambiar de tamaño ni de lugar
+  /// destacar. Null es el caso normal y la semana tiene que verse igual
+  /// de terminada sin logo — nada puede cambiar de tamaño ni de lugar
   /// según si la semana está vendida.
   ///
-  /// Cumplir una semana patrocinada paga el cupón de esa marca ADEMÁS de
-  /// las [monedas]: el patrocinio suma un premio, no cambia la mecánica.
+  /// Completar una semana patrocinada (los dos objetivos) paga el cupón
+  /// de esa marca ADEMÁS de las [monedas]: el patrocinio suma un premio,
+  /// no cambia la mecánica.
   final Patrocinio? patrocinio;
-
-  /// Si esta semana la compró una marca.
-  bool get tienePatrocinio => patrocinio != null;
 
   /// Cuántos objetivos van cumplidos.
   int get cumplidos => objetivos.where((o) => o.completo).length;
 
-  /// Si están los dos. Es la regla entera de lo que paga: no hay crédito
-  /// parcial ni sobrante que se arrastre a la semana siguiente.
-  bool get cumplida => cumplidos == objetivos.length;
+  /// Si están los dos: es lo único que marca la semana como COMPLETADA.
+  /// Las monedas no dependen de esto, cada objetivo paga las suyas.
+  bool get cumplida => objetivos.isNotEmpty && cumplidos == objetivos.length;
 
-  /// Lo que la semana YA PAGÓ: sus monedas si cerró cumplida, cero en
-  /// cualquier otro caso. Una semana en curso con los dos cumplidos
-  /// todavía no pagó — se evalúa el domingo 23:59.
-  int get monedasGanadas =>
-      estado == EstadoSemana.cerrada && cumplida ? monedas : 0;
+  /// Lo que la semana YA PAGÓ: las monedas de cada objetivo cumplido, si
+  /// la semana cerró. Una semana en curso todavía no pagó nada — se
+  /// evalúa el domingo 23:59.
+  int get monedasGanadas => estado == EstadoSemana.cerrada
+      ? objetivos
+            .where((o) => o.completo)
+            .fold(0, (suma, o) => suma + o.monedas)
+      : 0;
 
   factory SemanaObjetivos.desdeJson(Map<String, dynamic> j) => SemanaObjetivos(
     numero: j['numero'] as int,
@@ -528,21 +485,54 @@ class SemanaObjetivos {
     objetivos: (j['objetivos'] as List)
         .map((o) => ObjetivoSemanal.desdeJson(o as Map<String, dynamic>))
         .toList(),
-    monedas: j['monedas'] as int,
     patrocinio: j['patrocinio'] == null
         ? null
         : Patrocinio.desdeJson(j['patrocinio'] as Map<String, dynamic>),
   );
 }
 
-/// Bloque de "Objetivos de la semana" de Home: las semanas del programa,
-/// cada una con sus dos objetivos.
-class ObjetivosSemana {
-  const ObjetivosSemana({required this.semanas});
+/// Una temporada del año.
+///
+/// El año se divide en 4 temporadas de 13 semanas (reunión del 2 de
+/// octubre de 2026). Las monedas que se ganan en una temporada vencen
+/// cuando esa temporada cierra: hay que gastarlas antes.
+///
+/// Las fechas las manda el SERVIDOR. El teléfono nunca calcula en qué
+/// temporada va: con el reloj del sistema se podría adelantar el cierre.
+class Temporada {
+  const Temporada({
+    required this.numero,
+    required this.inicia,
+    required this.cierra,
+  });
 
-  /// Las semanas del programa. La app NO asume cuántas son: renderiza
-  /// las que vengan.
+  /// 1 a 4.
+  final int numero;
+
+  /// Lunes 00:00 en que arranca.
+  final DateTime inicia;
+
+  /// Domingo 23:59 en que cierra y vencen sus monedas.
+  final DateTime cierra;
+
+  factory Temporada.desdeJson(Map<String, dynamic> j) => Temporada(
+    numero: j['numero'] as int,
+    inicia: DateTime.parse(j['inicia'] as String),
+    cierra: DateTime.parse(j['cierra'] as String),
+  );
+}
+
+/// Bloque de "Esta semana" de Home: las semanas de la temporada, cada
+/// una con sus dos objetivos.
+class ObjetivosSemana {
+  const ObjetivosSemana({required this.semanas, this.temporada});
+
+  /// Las semanas de la temporada (13). La app NO asume cuántas son:
+  /// renderiza las que vengan.
   final List<SemanaObjetivos> semanas;
+
+  /// La temporada en curso. Null si el servidor todavía no la manda.
+  final Temporada? temporada;
 
   /// MONEDAS acuñadas en el programa con los objetivos.
   ///
@@ -560,39 +550,12 @@ class ObjetivosSemana {
   }
 
   factory ObjetivosSemana.desdeJson(Map<String, dynamic> j) => ObjetivosSemana(
+    temporada: j['temporada'] == null
+        ? null
+        : Temporada.desdeJson(j['temporada'] as Map<String, dynamic>),
     semanas: (j['semanas'] as List)
         .map((s) => SemanaObjetivos.desdeJson(s as Map<String, dynamic>))
         .toList(),
-  );
-}
-
-/// Reparto del tiempo de entrenamiento en zonas de ritmo cardíaco, en %
-/// del total.
-///
-/// TODO: faltan los umbrales de % de FCM que separan una zona de otra.
-/// No están en el contrato ni en el Excel — dependen de la misma matriz
-/// de intensidad que define Luis en L7.
-class ZonasRitmo {
-  const ZonasRitmo({
-    required this.ligero,
-    required this.moderado,
-    required this.intenso,
-    required this.tendenciaIntensa,
-  });
-
-  final int ligero;
-  final int moderado;
-  final int intenso;
-
-  /// Variación de la zona intensa respecto al período anterior, en puntos
-  /// porcentuales.
-  final int tendenciaIntensa;
-
-  factory ZonasRitmo.desdeJson(Map<String, dynamic> j) => ZonasRitmo(
-    ligero: j['ligero'] as int,
-    moderado: j['moderado'] as int,
-    intenso: j['intenso'] as int,
-    tendenciaIntensa: j['tendencia_intensa'] as int,
   );
 }
 
@@ -602,11 +565,6 @@ class Cashback {
 
   final double porcentaje;
   final int proyectadoQ;
-
-  /// TODO: falta la fórmula de devengo a mitad de año. Solo está fijado
-  /// que el cashback se devuelve como dinero DESPUÉS del pago de la
-  /// prima — nunca como descuento directo (Superintendencia de Bancos).
-  int? get devengadoQ => null;
 
   factory Cashback.desdeJson(Map<String, dynamic> j) => Cashback(
     porcentaje: (j['porcentaje'] as num).toDouble(),
@@ -620,7 +578,6 @@ class ResumenAnual {
     required this.anio,
     required this.puntosAno,
     required this.techoAnual,
-    required this.topeAnualAplicado,
     required this.nivel,
     required this.cashback,
     required this.puntosSemana,
@@ -632,16 +589,12 @@ class ResumenAnual {
     required this.objetivosSemana,
     required this.actividadPorMes,
     required this.mesActualIndice,
-    required this.zonasSemana,
-    required this.zonasMes,
-    required this.zonasAnio,
     required this.monedasGanadasAnio,
   });
 
   final int anio;
   final int puntosAno;
   final int techoAnual;
-  final bool topeAnualAplicado;
 
   /// Nivel numérico 0–4 del esquema propio. El contrato prohíbe el
   /// naming Bronze/Silver/Gold/Platinum.
@@ -662,28 +615,18 @@ class ResumenAnual {
   /// Índice (0 = enero) del mes en curso.
   final int mesActualIndice;
 
-  final ZonasRitmo zonasSemana;
-  final ZonasRitmo zonasMes;
-  final ZonasRitmo zonasAnio;
   final int monedasGanadasAnio;
 
   factory ResumenAnual.desdeJson(Map<String, dynamic> j) {
     final sem = j['semana_actual'] as Map<String, dynamic>;
     final anual = j['actividad_anual'] as Map<String, dynamic>;
-    final ritmo = j['ritmo_cardiaco'] as Map<String, dynamic>;
     return ResumenAnual(
       actividadPorMes: (anual['por_mes'] as List).cast<int>(),
       mesActualIndice: anual['mes_actual_indice'] as int,
-      zonasSemana: ZonasRitmo.desdeJson(
-        ritmo['semana'] as Map<String, dynamic>,
-      ),
-      zonasMes: ZonasRitmo.desdeJson(ritmo['mes'] as Map<String, dynamic>),
-      zonasAnio: ZonasRitmo.desdeJson(ritmo['anio'] as Map<String, dynamic>),
       monedasGanadasAnio: j['monedas_ganadas_anio'] as int,
       anio: j['anio'] as int,
       puntosAno: j['puntos_ano'] as int,
       techoAnual: j['techo_anual'] as int,
-      topeAnualAplicado: j['tope_anual_aplicado'] as bool,
       nivel: j['nivel'] as int,
       cashback: Cashback.desdeJson(j['cashback'] as Map<String, dynamic>),
       puntosSemana: sem['puntos'] as int,
@@ -714,7 +657,7 @@ class Poliza {
     required this.formaPago,
     required this.redCobertura,
     required this.estado,
-    this.primaAnualQ,
+    this.fechaNacimiento,
   });
 
   final String numero;
@@ -730,17 +673,11 @@ class Poliza {
   final String redCobertura;
   final String estado;
 
-  /// La prima anual como NÚMERO, para poder hacer cuentas con ella.
-  ///
-  /// [primaAnual] es el texto que se muestra ("Q18,000") y no se puede
-  /// multiplicar. Este campo existe para una sola cuenta: cuánto pagaría
-  /// el nivel siguiente, que Mi Plan muestra en su tarjeta de proyección.
-  ///
-  /// Nullable a propósito: si la aseguradora no manda el número, la
-  /// pantalla dice cuántos puntos faltan y se calla el monto, en vez de
-  /// derivarlo dividiendo el cashback por el porcentaje (que reventaría
-  /// en el nivel 0, donde el porcentaje es 0).
-  final int? primaAnualQ;
+  /// La fecha de nacimiento que CONFIRMA la aseguradora ("14 mar 1981").
+  /// Es la que manda para la edad —la FCmáx, el bono 60+ y la meta de
+  /// pasos— una vez que la póliza está verificada. Null si todavía no
+  /// llegó.
+  final String? fechaNacimiento;
 
   factory Poliza.desdeJson(Map<String, dynamic> j) => Poliza(
     numero: j['numero'] as String,
@@ -752,10 +689,10 @@ class Poliza {
     vigencia: j['vigencia'] as String,
     fechaRenovacion: j['fecha_renovacion'] as String,
     primaAnual: j['prima_anual'] as String,
-    primaAnualQ: j['prima_anual_q'] as int?,
     formaPago: j['forma_pago'] as String,
     redCobertura: j['red_cobertura'] as String,
     estado: j['estado'] as String,
+    fechaNacimiento: j['fecha_nacimiento'] as String?,
   );
 }
 
@@ -1098,11 +1035,10 @@ class Patrocinio {
     required this.marca,
     required this.logo,
     required this.cupon,
-    List<String> fotos = const [],
+    this.fotos = const [],
     this.fondo,
     this.acento,
-    // ignore: prefer_initializing_formals
-  }) : _fotos = fotos;
+  });
 
   /// El id del comercio, el MISMO que usa el catálogo de Premios.
   ///
@@ -1118,24 +1054,17 @@ class Patrocinio {
   /// resuelve la imagen.
   final String logo;
 
-  /// Las fotos que rota el cintillo de la semana en curso.
+  /// Las fotos del premio, las que rota el carrusel de la semana.
   ///
-  /// Vienen de los datos y NO se arman en el widget: el día que el
-  /// endpoint traiga tres fotos de verdad, no hay que tocar pantalla
-  /// ninguna.
+  /// Vienen de los datos y NO se arman en el widget. Si no llega ninguna,
+  /// el carrusel usa [logo] sola y se queda quieto.
   ///
-  /// Si el backend no manda ninguna, queda [logo] sola y el cintillo se
-  /// muestra quieto — que es lo correcto: con una sola foto no hay nada
-  /// que rotar.
-  ///
-  /// [PENDIENTE: Diego consigue 3 fotos por aliado. Hasta entonces el
-  /// mock repite la única que hay en el catálogo de Premios, así que el
-  /// cintillo rota entre tres fotos iguales y el movimiento no se nota.]
-  List<String> get fotos => _fotos.isEmpty ? [logo] : _fotos;
-  final List<String> _fotos;
+  /// [PENDIENTE: Diego consigue las fotos de cada premio. Hasta entonces
+  /// el mock repite la del catálogo de Premios.]
+  final List<String> fotos;
 
-  /// Qué se lleva quien cumpla: el texto del cupón de ESTA marca, que
-  /// reemplaza al premio genérico del catálogo.
+  /// Qué se lleva quien cumpla: el texto del cupón de ESTA marca. Se
+  /// suma a las monedas, nunca las reemplaza.
   final String cupon;
 
   /// Color DETRÁS de la foto, en hex "#RRGGBB". Es el mismo campo que ya
@@ -1162,7 +1091,7 @@ class Patrocinio {
     marca: j['marca'] as String,
     logo: j['logo'] as String,
     cupon: j['cupon'] as String,
-    fotos: ((j['fotos'] as List?) ?? const []).cast<String>().toList(),
+    fotos: ((j['fotos'] as List?) ?? const []).cast<String>(),
     fondo: j['fondo'] as String?,
     acento: j['acento'] as String?,
   );
@@ -1172,7 +1101,7 @@ class Patrocinio {
     'marca': marca,
     'logo': logo,
     'cupon': cupon,
-    if (_fotos.isNotEmpty) 'fotos': _fotos,
+    if (fotos.isNotEmpty) 'fotos': fotos,
     if (fondo != null) 'fondo': fondo,
     if (acento != null) 'acento': acento,
   };
@@ -1190,12 +1119,9 @@ class Patrocinio {
 /// mecánica y vive en [SemanaObjetivos]. Si algún día se tocan, se tocan
 /// ahí, no acá.
 enum CicloRanking {
-  mes('mensual', 'este mes');
+  mes('este mes');
 
-  const CicloRanking(this.adjetivo, this.cuando);
-
-  /// Cómo se llama el ciclo: "mensual".
-  final String adjetivo;
+  const CicloRanking(this.cuando);
 
   /// Cómo se dice el período en curso dentro de una frase: "este mes".
   final String cuando;
@@ -1223,6 +1149,11 @@ class RankingPersona {
   /// SIEMPRE se usan para ordenar. Si se MUESTRAN o no lo decide el
   /// grupo (ver [GrupoRanking.mostrarPuntos]): entre conocidos se pueden
   /// ver, con desconocidos nunca.
+  ///
+  /// EL ORDEN LO MANDA EL SERVIDOR y la app no lo toca: por puntos y, si
+  /// dos empatan, gana quien caminó más pasos en el mes (reunión del 2 de
+  /// octubre de 2026). Los pasos de los demás nunca llegan al teléfono:
+  /// el usuario solo ve que alguien con sus mismos puntos va arriba.
   final int puntosPeriodo;
 
   final Tendencia tendencia;
@@ -1302,12 +1233,12 @@ class GrupoRanking {
 
   /// Si se ven los puntos de cada quien o solo la posición.
   ///
-  /// Lo elige quien crea el grupo. En un grupo de [TipoGrupo.desconocidos]
-  /// se ignora y siempre va en false: mostrarle a un extraño cuántos
-  /// puntos hace alguien es dar su nivel de actividad a alguien que no
-  /// eligió como contacto.
-  bool get mostrarPuntos =>
-      tipo == TipoGrupo.desconocidos ? false : _mostrarPuntos;
+  /// SIEMPRE true: en todo ranking —La Liga y Tus Ligas— se ven los
+  /// puntos de cada participante (reunión del 2 de octubre de 2026). Lo
+  /// que nunca se muestra son los pasos de nadie: el servidor los usa
+  /// solo para desempatar. El campo `mostrar_puntos` de un JSON viejo se
+  /// lee pero ya no manda.
+  bool get mostrarPuntos => true;
   final bool _mostrarPuntos;
 
   final List<RankingPersona> miembros;
@@ -1318,13 +1249,11 @@ class GrupoRanking {
   /// competencias que arma el usuario, un mes desde que se crean.
   final CicloRanking ciclo;
 
-  /// Solo en La Liga: la franja de edad del grupo, dicha como la manda
-  /// el backend ("30 a 39 años"). La Liga sortea cada mes a gente de la
-  /// misma franja de 10 años; la calcula el servidor con la fecha de
-  /// nacimiento, nunca el teléfono.
-  ///
-  /// Reemplaza a la zona y al nivel de actividad de antes: La Liga ya no
-  /// se arma por zona (CLAUDE.md, modelo viejo).
+  /// Del modelo viejo: La Liga se sorteaba por franja de edad de 10 años.
+  /// Desde el 2 de octubre de 2026 es UN SOLO GRUPO con todos los
+  /// usuarios con póliza verificada, así que el servidor ya no la manda y
+  /// la app no la muestra. Se sigue leyendo para no romper con un JSON
+  /// viejo.
   final String? franjaEdad;
 
   /// Cuándo arrancó el ciclo en curso. Con [cierra] arma el rango que se
@@ -1351,9 +1280,6 @@ class GrupoRanking {
   /// Null es el caso normal, no un error: un ciclo sin marca vendida se
   /// juega igual y la pantalla no puede cambiar de forma por eso.
   final Patrocinio? patrocinio;
-
-  /// Si este ciclo lo patrocina una marca.
-  bool get tienePatrocinio => patrocinio != null;
 
   /// Si el usuario lo creó o se unió a él desde la app, en vez de venir
   /// del mock. Solo estos se guardan en el teléfono: los del mock ya

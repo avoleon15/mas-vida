@@ -1,7 +1,7 @@
 {
-  "_comentario": "Mock del resumen anual. Los campos puntos_ano, tope_anual_aplicado y nivel conservan el nombre exacto del JSON #2 del contrato v1. El acumulado anual NO es la suma de los 35 días del historial: el historial es solo la ventana reciente que muestra la app.",
+  "_comentario": "Mock del resumen del ANO DE POLIZA (no del ano calendario: la poliza del mock va del 1 ene al 31 dic 2026, asi que aca coinciden). puntos_ano, tope_anual_aplicado y nivel conservan el nombre exacto del JSON #2. El acumulado NO es la suma de los 35 dias del historial: el historial es solo la ventana reciente.",
   "anio": 2026,
-  "puntos_ano": 11240,
+  "puntos_ano": 10700,
   "techo_anual": 12000,
   "tope_anual_aplicado": false,
   "nivel": 3,
@@ -14,35 +14,35 @@
     "_todo_devengado": "TODO: falta la fórmula de devengo del cashback a mitad de año. El contrato y CLAUDE.md solo fijan que se devuelve como dinero DESPUÉS del pago de la prima, no cómo se acumula mes a mes."
   },
   "semana_actual": {
-    "_comentario": "Coincide con la suma real de dias.json para la semana del 24 al 30 de agosto. La semana va de lunes 00:00 a domingo 23:59 en hora de Guatemala.",
-    "inicio": "2026-08-24",
-    "fin": "2026-08-30",
-    "puntos": 200,
+    "_comentario": "Coincide con la suma real de dias.json para la semana del lunes 28 sep al domingo 4 oct (va hasta el viernes 2, el hoy del mock). Lunes 00:00 a domingo 23:59, hora de Guatemala.",
+    "inicio": "2026-09-28",
+    "fin": "2026-10-04",
+    "puntos": 225,
     "puntos_semana_anterior": 425
   },
   "mes_actual": {
-    "_comentario": "Coincide con la suma real de dias.json para agosto.",
-    "inicio": "2026-08-01",
-    "fin": "2026-08-31",
-    "puntos": 1350
+    "_comentario": "Coincide con la suma real de dias.json para octubre (jueves 1 y viernes 2).",
+    "inicio": "2026-10-01",
+    "fin": "2026-10-31",
+    "puntos": 25
   },
   "actividad_anual": {
-    "_comentario": "Puntos por mes del año en curso. Enero a julio quedan fuera de la ventana de 35 días del historial; agosto (1350) sí coincide con dias.json. Septiembre en adelante todavía no ocurrió. La suma da los 11.240 de puntos_ano.",
+    "_comentario": "Puntos por mes del ANO DE POLIZA en curso (1 ene a 31 dic 2026: la poliza del mock renueva el 1 ene 2027). Septiembre y octubre coinciden con dias.json; enero a agosto quedan fuera de la ventana de 35 dias. La suma da puntos_ano.",
     "por_mes": [
-      1400,
-      1350,
-      1500,
-      1450,
-      1400,
-      1400,
-      1390,
-      1350,
-      0,
-      0,
+      1100,
+      1150,
+      1200,
+      1150,
+      1100,
+      1150,
+      1200,
+      1150,
+      1475,
+      25,
       0,
       0
     ],
-    "mes_actual_indice": 7
+    "mes_actual_indice": 9
   },
   "racha_semanas": 12,
   "racha_historial": [
@@ -79,344 +79,427 @@
   },
   "monedas_ganadas_anio": 165,
   "objetivos_semana": {
-    "_comentario": "OBJETIVOS SEMANALES. Son 2 por semana, los dos de la MISMA semana (lunes 00:00 a domingo 23:59, hora de Guatemala): pasos y minutos de entrenamiento. Se evaluan una sola vez el domingo. Cumplir LOS DOS paga las monedas de esa semana; cumplir uno solo no paga nada ni se arrastra. Al cerrar, todos pasan a la semana siguiente del programa, la hayan cumplido o no.",
-    "_nota_monedas": "monedas es lo que paga CADA semana si se cumplen los dos objetivos. Lo decide el servidor semana por semana; la app no tiene regla para calcularlo. Los montos de aca son de ejemplo.",
-    "_todo_metas": "TODO: la tabla de metas por semana NO esta definida (la define Luis). Las metas de abajo son ILUSTRATIVAS y viven solo aca, en el mock. La UI muestra la meta que manda el servidor; cuando no viene ninguna, no inventa un numero.",
-    "_nota_patrocinio": "Solo ALGUNAS semanas traen patrocinio (aca la 1, la 3, la 6 y la 8). La 3 es la EN CURSO a proposito: es la que sale en el titulo de la pantalla y en la card animada de arriba, asi que sin ella ese bloque no se puede ver en la demo. Que la mayoria no tenga marca es el caso normal y el camino tiene que verse igual de terminado sin ella. Cumplir una semana patrocinada paga el cupon de esa marca ADEMAS de las MONEDAS de la semana. logo y fondo se copian del catalogo de Premios; acento va aparte porque el fondo de Montanos es negro. PLACEHOLDER: Montanos y Ookii son de ejemplo, Diego las sustituye. Cuando exista el endpoint de Luis esto llega de la API.",
-    "_nota_semanas": "La app no asume cuantas semanas tiene el programa: renderiza las que vengan. Las semanas 4 a 10 estan en futura y con todo en cero a proposito: no hay historial real para ellas y no se inventa progreso.",
+    "_comentario": "OBJETIVOS SEMANALES. Son 2 por semana (lunes 00:00 a domingo 23:59, hora de Guatemala): pasos de la semana y CANTIDAD DE WORKOUTS (contrato, demo 1). CADA objetivo paga sus propias monedas al cumplirse; la semana se marca COMPLETADA solo si se cumplen los dos. Al cerrar, todos pasan a la semana siguiente, la hayan cumplido o no.",
+    "_nota_metas": "Meta de pasos: tabla provisional del contrato (2 oct 2026) por edad. El usuario del mock tiene 45 anos -> 40 a 49 -> 45.000 pasos por semana, igual todas las semanas. Meta de workouts: igual para todos; 1 es la que usa hoy el backend, la definitiva la define Luis (L11). Montos provisionales: 5 por pasos + 5 por workouts. La app nunca calcula nada de esto: lo manda el servidor.",
+    "_nota_workouts": "Un workout cuenta si lo registra un reloj (necesita ritmo cardiaco), de cualquier duracion. Los escritos a mano no cuentan.",
+    "_nota_temporada": "Seasons de 13 semanas ISO (contrato, \"Seasons\"). 2026 tiene semana 53, asi que la season 4 va del lunes 28 sep 2026 al domingo 3 ene 2027: 14 semanas. El hoy de este mock es el viernes 2 oct 2026, semana 1. En la UI se dice \"temporada\". Las fechas las manda el servidor.",
+    "_nota_patrocinio": "Solo ALGUNAS semanas traen patrocinio (aca la 1, la 3 y la 5). La 1 es la EN CURSO a proposito, para que se vea en Hoy. Que la mayoria no tenga marca es el caso normal. Cumplir una semana patrocinada paga el cupon ADEMAS de las monedas. PLACEHOLDER: Montanos y Ookii son de ejemplo, Diego las sustituye.",
+    "temporada": {
+      "numero": 4,
+      "inicia": "2026-09-28T00:00:00-06:00",
+      "cierra": "2027-01-03T23:59:59-06:00"
+    },
     "semanas": [
       {
         "numero": 1,
-        "cierra": "2026-09-06T23:59:59-06:00",
-        "estado": "cerrada",
-        "patrocinio": {
-          "id": "ookii",
-          "marca": "Ookii",
-          "logo": "assets/img/premios/restaurantes/ookii.webp",
-          "fotos": [
-            "assets/img/premios/restaurantes/ookii.webp",
-            "assets/img/premios/restaurantes/ookii.webp",
-            "assets/img/premios/restaurantes/ookii.webp"
-          ],
-          "acento": "#2F7A6E",
-          "cupon": "2x1 en sushi de Ookii"
-        },
-        "monedas": 5,
-        "objetivos": [
-          {
-            "id": "pasos_semana",
-            "nombre": "Pasos de la semana",
-            "unidad": "pasos",
-            "progreso": 42100,
-            "meta": 30000,
-            "completo": true
-          },
-          {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
-            "progreso": 95,
-            "meta": 60,
-            "completo": true
-          }
-        ]
-      },
-      {
-        "numero": 2,
-        "cierra": "2026-09-13T23:59:59-06:00",
-        "estado": "cerrada",
-        "monedas": 10,
-        "objetivos": [
-          {
-            "id": "pasos_semana",
-            "nombre": "Pasos de la semana",
-            "unidad": "pasos",
-            "progreso": 38900,
-            "meta": 35000,
-            "completo": true
-          },
-          {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
-            "progreso": 88,
-            "meta": 75,
-            "completo": true
-          }
-        ]
-      },
-      {
-        "numero": 3,
-        "cierra": "2026-09-20T23:59:59-06:00",
+        "cierra": "2026-10-04T23:59:59-06:00",
         "estado": "en_curso",
         "patrocinio": {
           "id": "montanos",
           "marca": "Montanos",
           "logo": "assets/img/premios/restaurantes/montanos.webp",
+          "fondo": "#000000",
+          "acento": "#8C5A3C",
+          "cupon": "2x1 en Puyazo 8 oz",
           "fotos": [
             "assets/img/premios/restaurantes/montanos.webp",
             "assets/img/premios/restaurantes/montanos.webp",
             "assets/img/premios/restaurantes/montanos.webp"
-          ],
-          "fondo": "#000000",
-          "acento": "#8C5A3C",
-          "cupon": "Entrada gratis en Montanos"
+          ]
         },
-        "monedas": 10,
         "objetivos": [
           {
             "id": "pasos_semana",
             "nombre": "Pasos de la semana",
             "unidad": "pasos",
             "progreso": 41200,
-            "meta": 40000,
-            "completo": true
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
           },
           {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
-            "progreso": 48,
-            "meta": 90,
-            "completo": false
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 2,
+            "meta": 1,
+            "completo": true,
+            "monedas": 5
           }
         ]
       },
       {
-        "numero": 4,
-        "cierra": "2026-09-27T23:59:59-06:00",
-        "estado": "futura",
-        "monedas": 10,
-        "objetivos": [
-          {
-            "id": "pasos_semana",
-            "nombre": "Pasos de la semana",
-            "unidad": "pasos",
-            "progreso": 0,
-            "meta": 40000,
-            "completo": false
-          },
-          {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
-            "progreso": 0,
-            "meta": 90,
-            "completo": false
-          }
-        ]
-      },
-      {
-        "numero": 5,
-        "cierra": "2026-10-04T23:59:59-06:00",
-        "estado": "futura",
-        "monedas": 15,
-        "objetivos": [
-          {
-            "id": "pasos_semana",
-            "nombre": "Pasos de la semana",
-            "unidad": "pasos",
-            "progreso": 0,
-            "meta": 40000,
-            "completo": false
-          },
-          {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
-            "progreso": 0,
-            "meta": 90,
-            "completo": false
-          }
-        ]
-      },
-      {
-        "numero": 6,
+        "numero": 2,
         "cierra": "2026-10-11T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 3,
+        "cierra": "2026-10-18T23:59:59-06:00",
         "estado": "futura",
         "patrocinio": {
           "id": "ookii",
           "marca": "Ookii",
           "logo": "assets/img/premios/restaurantes/ookii.webp",
+          "acento": "#2F7A6E",
+          "cupon": "Postre gratis en Ookii",
           "fotos": [
             "assets/img/premios/restaurantes/ookii.webp",
             "assets/img/premios/restaurantes/ookii.webp",
             "assets/img/premios/restaurantes/ookii.webp"
-          ],
-          "acento": "#2F7A6E",
-          "cupon": "Postre gratis en Ookii"
+          ]
         },
-        "monedas": 15,
         "objetivos": [
           {
             "id": "pasos_semana",
             "nombre": "Pasos de la semana",
             "unidad": "pasos",
             "progreso": 0,
-            "meta": 40000,
-            "completo": false
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
           },
           {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
             "progreso": 0,
-            "meta": 90,
-            "completo": false
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
           }
         ]
       },
       {
-        "numero": 7,
-        "cierra": "2026-10-18T23:59:59-06:00",
-        "estado": "futura",
-        "monedas": 15,
-        "objetivos": [
-          {
-            "id": "pasos_semana",
-            "nombre": "Pasos de la semana",
-            "unidad": "pasos",
-            "progreso": 0,
-            "meta": 40000,
-            "completo": false
-          },
-          {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
-            "progreso": 0,
-            "meta": 90,
-            "completo": false
-          }
-        ]
-      },
-      {
-        "numero": 8,
+        "numero": 4,
         "cierra": "2026-10-25T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 5,
+        "cierra": "2026-11-01T23:59:59-06:00",
         "estado": "futura",
         "patrocinio": {
           "id": "montanos",
           "marca": "Montanos",
           "logo": "assets/img/premios/restaurantes/montanos.webp",
+          "fondo": "#000000",
+          "acento": "#8C5A3C",
+          "cupon": "Postre gratis en Montanos",
           "fotos": [
             "assets/img/premios/restaurantes/montanos.webp",
             "assets/img/premios/restaurantes/montanos.webp",
             "assets/img/premios/restaurantes/montanos.webp"
-          ],
-          "fondo": "#000000",
-          "acento": "#8C5A3C",
-          "cupon": "Postre gratis en Montanos"
+          ]
         },
-        "monedas": 20,
         "objetivos": [
           {
             "id": "pasos_semana",
             "nombre": "Pasos de la semana",
             "unidad": "pasos",
             "progreso": 0,
-            "meta": 40000,
-            "completo": false
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
           },
           {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
             "progreso": 0,
-            "meta": 90,
-            "completo": false
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 6,
+        "cierra": "2026-11-08T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 7,
+        "cierra": "2026-11-15T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 8,
+        "cierra": "2026-11-22T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
           }
         ]
       },
       {
         "numero": 9,
-        "cierra": "2026-11-01T23:59:59-06:00",
+        "cierra": "2026-11-29T23:59:59-06:00",
         "estado": "futura",
-        "monedas": 20,
         "objetivos": [
           {
             "id": "pasos_semana",
             "nombre": "Pasos de la semana",
             "unidad": "pasos",
             "progreso": 0,
-            "meta": 40000,
-            "completo": false
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
           },
           {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
             "progreso": 0,
-            "meta": 90,
-            "completo": false
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
           }
         ]
       },
       {
         "numero": 10,
-        "cierra": "2026-11-08T23:59:59-06:00",
+        "cierra": "2026-12-06T23:59:59-06:00",
         "estado": "futura",
-        "monedas": 20,
         "objetivos": [
           {
             "id": "pasos_semana",
             "nombre": "Pasos de la semana",
             "unidad": "pasos",
             "progreso": 0,
-            "meta": 40000,
-            "completo": false
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
           },
           {
-            "id": "minutos_entrenamiento",
-            "nombre": "Minutos de entrenamiento",
-            "unidad": "minutos",
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
             "progreso": 0,
-            "meta": 90,
-            "completo": false
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 11,
+        "cierra": "2026-12-13T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 12,
+        "cierra": "2026-12-20T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 13,
+        "cierra": "2026-12-27T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
+          }
+        ]
+      },
+      {
+        "numero": 14,
+        "cierra": "2027-01-03T23:59:59-06:00",
+        "estado": "futura",
+        "objetivos": [
+          {
+            "id": "pasos_semana",
+            "nombre": "Pasos de la semana",
+            "unidad": "pasos",
+            "progreso": 0,
+            "meta": 45000,
+            "completo": false,
+            "monedas": 5
+          },
+          {
+            "id": "workouts_semana",
+            "nombre": "Entrenamientos de la semana",
+            "unidad": "entrenamientos",
+            "progreso": 0,
+            "meta": 1,
+            "completo": false,
+            "monedas": 5
           }
         ]
       }
-    ],
-    "_nota_fotos": "PENDIENTE: Diego consigue 3 fotos por aliado. Hasta entonces cada patrocinio repite TRES VECES la unica foto que hay en el catalogo de Premios, asi que el cintillo de la semana en curso rota entre tres fotos iguales y el movimiento no se nota. La lista vive aca y NO se arma en el widget: cuando lleguen las fotos reales solo cambia este JSON (y despues, el endpoint de Luis)."
+    ]
   },
   "monedas": {
-    "saldo": 34,
-    "ganadas_este_mes": 21,
+    "saldo": 16,
+    "ganadas_este_mes": 6,
     "_nota_valor": "TODO: falta cuánto vale una moneda en quetzales. Depende de las alianzas comerciales y no debe mostrarse en ninguna pantalla hasta que exista.",
-    "_nota_caducidad": "Las monedas caducan a los 90 DIAS de acunadas (revision de UI del 9 de septiembre de 2026; antes eran 6 meses). En cada lote 'caducan' es 'acunadas' + 90 dias y 'dias_para_caducar' se cuenta contra el 8 de septiembre de 2026, que es el hoy de este mock. Si se edita un lote hay que rehacer las dos cosas o la pantalla dice un plazo que no cuadra con la fecha.",
+    "_nota_caducidad": "Las monedas caducan al CERRAR LA SEASON (contrato, \"Monedas y seasons\"): el saldo vuelve a 0. El lunes 28 sep, al empezar la season 4, primero se reinicio el saldo y DESPUES se pago la semana 13 de la season 3 (5 + 5), asi que esas cuentan en esta season. Todo caduca el domingo 3 ene 2027. dias_para_caducar se cuenta contra el viernes 2 oct 2026, el hoy del mock. Sin tope.",
     "lotes": [
       {
-        "cantidad": 3,
-        "acunadas": "2026-07-01",
-        "caducan": "2026-09-29",
-        "dias_para_caducar": 21
-      },
-      {
         "cantidad": 10,
-        "acunadas": "2026-08-01",
-        "caducan": "2026-10-30",
-        "dias_para_caducar": 52
+        "acunadas": "2026-09-28",
+        "caducan": "2027-01-03",
+        "dias_para_caducar": 93
       },
       {
         "cantidad": 6,
-        "acunadas": "2026-09-01",
-        "caducan": "2026-11-30",
-        "dias_para_caducar": 83
-      },
-      {
-        "cantidad": 5,
-        "acunadas": "2026-09-06",
-        "caducan": "2026-12-05",
-        "dias_para_caducar": 88
-      },
-      {
-        "cantidad": 10,
-        "acunadas": "2026-09-13",
-        "caducan": "2026-12-12",
-        "dias_para_caducar": 95
+        "acunadas": "2026-10-01",
+        "caducan": "2027-01-03",
+        "dias_para_caducar": 93
       }
     ],
-    "_nota_saldo": "El saldo es la suma de los lotes. Los dos ultimos son las monedas de las semanas 1 y 2 de ESTE programa (5 y 10, el campo monedas de cada una) y tienen que cuadrar con las semanas: si se editan las semanas hay que rehacerlos o la hoja de monedas deja de cuadrar con el historial. Los tres primeros son premios de La Liga (3.er lugar de junio, 1.o de julio y 2.o de agosto: 3, 10 y 6 monedas, que se acunan el dia 1 del mes siguiente) y no salen de estas 10 semanas. Antes el saldo era 150, por encima del TOPE DE 100 monedas acumuladas, y los lotes viejos de 60 y 65 no podian salir de ningun lado: el saldo de la billetera arrastra lo viejo y descuenta lo gastado en Premios, que es justo lo que ganadas_este_mes no hace.",
-    "_todo_techo": "PENDIENTE: techo_mensual estaba en 8, y eso no alcanzaba ni para lo que pagan cuatro semanas del programa. Se saca hasta que se defina uno coherente; no se inventa un numero aca.",
-    "_nota_para_probar": "El saldo esta alto A PROPOSITO: los premios cuestan de 15 a 75 monedas y con 15 no se podia canjear casi nada, asi que no habia forma de probar la compra ni la pantalla de canje exitoso. El lote que caduca el 20 de septiembre esta a 12 dias para poder ver tambien el aviso de proximo a caducar, que se prende a los 15."
+    "_nota_saldo": "El saldo es la suma de los lotes: 10 de la semana 13 de la season 3 (pagada el lunes 28 sep, despues del reinicio) y 6 de La Liga de septiembre (2.o lugar; cerro el miercoles 30 y se acuno el jueves 1 oct).",
+    "_todo_techo": "PENDIENTE: techo_mensual estaba en 8, y eso no alcanzaba ni para lo que pagan cuatro semanas del programa. Se saca hasta que se defina uno coherente; no se inventa un numero aca."
   }
 }

@@ -1,11 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vida_demo/reglas_puntos.dart';
 
-// Tests del motor de reglas contra el contrato v1 congelado.
-//
-// Este motor NO es la fuente de verdad en producción (los puntos los
-// calcula el backend), pero sirve para verificar el motor de Luis contra
-// las mismas reglas.
+// Las tablas que la app dibuja (tramos de pasos y niveles), contra el
+// contrato v1. Los puntos los calcula el servidor: acá solo se fija que
+// lo que se le MUESTRA al usuario diga las mismas reglas.
 
 void main() {
   group('Puntos por pasos', () {
@@ -38,109 +36,6 @@ void main() {
     });
   });
 
-  group('FCM', () {
-    test('es 219 − edad, no 220', () {
-      expect(frecuenciaCardiacaMaxima(45), 174);
-      expect(frecuenciaCardiacaMaxima(62), 157);
-    });
-  });
-
-  group('Puntos por intensidad', () {
-    test('una sesión de menos de 30 min no cuenta', () {
-      expect(
-        puntosPorIntensidad(minutos: 28, porcentajeFcm: 71, continua: true),
-        0,
-      );
-    });
-
-    test('una sesión no continua no cuenta aunque sume los minutos', () {
-      expect(
-        puntosPorIntensidad(minutos: 42, porcentajeFcm: 74, continua: false),
-        0,
-      );
-    });
-
-    test('42 min al 74% de FCM acredita 100 pts (ancla del contrato)', () {
-      expect(
-        puntosPorIntensidad(minutos: 42, porcentajeFcm: 74, continua: true),
-        100,
-      );
-    });
-
-    test('una celda sin definir devuelve null, nunca un número inventado', () {
-      expect(
-        puntosPorIntensidad(minutos: 60, porcentajeFcm: 80, continua: true),
-        isNull,
-      );
-    });
-  });
-
-  group('Bonus 60+', () {
-    test('no aplica por debajo de 60 años', () {
-      expect(aplicarBonus60Mas(100, 45), 100);
-      expect(aplicarBonus60Mas(100, 59), 100);
-    });
-
-    test('multiplica ×1.25 desde los 60', () {
-      expect(aplicarBonus60Mas(100, 60), 125);
-      expect(aplicarBonus60Mas(100, 62), 125);
-    });
-
-    test('nunca se aplica a los puntos de pasos', () {
-      // El bonus vive en la vía de intensidad: un día solo de pasos da lo
-      // mismo a los 45 que a los 62.
-      final joven = calcularDia(pasos: 23000, edad: 45);
-      final mayor = calcularDia(pasos: 23000, edad: 62);
-      expect(joven.puntosAcreditados, mayor.puntosAcreditados);
-    });
-  });
-
-  group('Total del día y techo diario', () {
-    test('suma las dos vías el mismo día', () {
-      final dia = calcularDia(
-        pasos: 9100,
-        edad: 45,
-        minutosSesion: 42,
-        porcentajeFcm: 74,
-      );
-      expect(dia.puntosPasos, 25);
-      expect(dia.puntosIntensidad, 100);
-      expect(dia.puntosAcreditados, 125);
-    });
-
-    test('los datos manuales no acreditan ningún punto', () {
-      final dia = calcularDia(pasos: 11200, edad: 45, manual: true);
-      expect(dia.puntosPasos, 0);
-      expect(dia.puntosAcreditados, 0);
-    });
-
-    test('llegar exactamente a 200 no marca el tope como aplicado', () {
-      final dia = calcularDia(
-        pasos: 17800,
-        edad: 45,
-        minutosSesion: 42,
-        porcentajeFcm: 74,
-      );
-      expect(dia.puntosBrutos, 200);
-      expect(dia.puntosAcreditados, 200);
-      expect(dia.topeAplicado, isFalse);
-    });
-
-    test('pasar de 200 acredita 200 y marca la bandera', () {
-      // Se fuerza con el bonus 60+, la única vía que hoy permite pasar de
-      // 200 con los números definidos: 100 de pasos + 125 de intensidad.
-      final dia = calcularDia(
-        pasos: 23000,
-        edad: 62,
-        minutosSesion: 42,
-        porcentajeFcm: 74,
-      );
-      expect(dia.puntosBrutos, 225);
-      expect(dia.puntosAcreditados, techoDiario);
-      expect(dia.topeAplicado, isTrue);
-    });
-  });
-
   group('Niveles', () {
     // La tabla completa y sus bordes viven en niveles_cashback_test.dart.
     test('los cinco niveles están definidos', () {
@@ -162,19 +57,10 @@ void main() {
       expect(n.porcentajeCashback, 20);
     });
 
-    test('mapea el acumulado al nivel que corresponda', () {
-      expect(nivelParaPuntos(0), 0);
-      expect(nivelParaPuntos(2500), 1);
-      expect(nivelParaPuntos(9999), 2);
-      expect(nivelParaPuntos(11240), 3);
-      expect(nivelParaPuntos(12000), 3);
-      expect(nivelParaPuntos(15000), 4);
-    });
-
     test('el techo de actividad deja al usuario en el nivel 3', () {
       // Con el chequeo fuera de v1, 12.000 es lo máximo del año: nivel 3,
       // 10% de cashback. El nivel 4 queda fuera de alcance en el piloto.
-      expect(nivelParaPuntos(techoAnual), 3);
+      expect(nivelPorNumero(3)!.puntosMinimos, lessThanOrEqualTo(techoAnual));
       expect(nivelPorNumero(4)!.puntosMinimos, greaterThan(techoAnual));
     });
   });
