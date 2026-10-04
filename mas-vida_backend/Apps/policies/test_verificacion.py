@@ -605,8 +605,9 @@ class ProximaRenovacionTests(SimpleTestCase):
     def test_si_no_paso_es_la_misma(self):
         self.assertEqual(polizas.proxima_renovacion(D(2027, 1, 14), hoy=D(2026, 10, 3)), D(2027, 1, 14))
 
-    def test_el_dia_de_la_renovacion_todavia_es_la_proxima(self):
-        self.assertEqual(polizas.proxima_renovacion(D(2027, 1, 14), hoy=D(2027, 1, 14)), D(2027, 1, 14))
+    def test_el_dia_de_la_renovacion_ya_es_la_del_anio_siguiente(self):
+        # Coincide con anio_de: ese día ya es el primero del año de póliza nuevo.
+        self.assertEqual(polizas.proxima_renovacion(D(2027, 1, 14), hoy=D(2027, 1, 14)), D(2028, 1, 14))
 
     def test_si_ya_paso_es_un_anio_despues(self):
         self.assertEqual(polizas.proxima_renovacion(D(2026, 2, 28), hoy=D(2026, 10, 3)), D(2027, 2, 28))

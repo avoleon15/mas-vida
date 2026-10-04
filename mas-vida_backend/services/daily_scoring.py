@@ -46,7 +46,12 @@ from services.hearth_rate import (
 from services.niveles import TOPE_ANUAL, nivel_para
 from services.reglas import SinVersionRegla, version_regla_vigente  # noqa: F401  (SinVersionRegla lo captura la vista)
 from services.points import apply_daily_points_limit, calculate_daily_step_points
-from services.polizas import TIPOS_DEL_DIA, fecha_corte_sin_retroactivo
+from services.polizas import (
+    TIPOS_DEL_DIA,
+    anio_de,
+    fecha_corte_sin_retroactivo,
+    puntos_del_anio,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -194,10 +199,11 @@ def asentar(usuario, dia: ResultadoDia) -> ResultadoAnual:
     version = version_regla_vigente(dia.fecha)
     del_dia = Ledger.objects.filter(usuario=usuario, fecha=dia.fecha)
 
-    # Techo anual: se mira lo acreditado en el resto del año, sin este día.
+    # Techo anual: se mira lo acreditado en el resto del año (de póliza) de
+    # este día, sin este día.
     otros_dias = (
         Ledger.objects
-        .filter(usuario=usuario, fecha__year=dia.fecha.year)
+        .filter(usuario=usuario, fecha__range=anio_de(usuario, dia.fecha))
         .exclude(fecha=dia.fecha)
         .exclude(tipo=Ledger.TipoLedger.CHEQUEO_MEDICO)
     )
@@ -242,9 +248,9 @@ def asentar(usuario, dia: ResultadoDia) -> ResultadoAnual:
             puntos=a_acreditar - ya_acreditado, **columnas,
         )
 
-    puntos_ano = _suma(
-        Ledger.objects.filter(usuario=usuario, fecha__year=dia.fecha.year)
-    )
+    # Lo que se reporta es el año en curso: un dato atrasado del año anterior
+    # no debe mostrar el total ni el nivel de aquel año.
+    puntos_ano = puntos_del_anio(usuario, timezone.localdate())
     return ResultadoAnual(
         acreditado_dia=a_acreditar,
         puntos_ano=puntos_ano,

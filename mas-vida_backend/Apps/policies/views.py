@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import polizas
+from services import cashback as servicio_cashback, polizas
 from services.policy_verification import VERIFICADA, verificar_con_datos
 from .models import PolizaVinculada
 from .serializers import VincularPolizaSerializer
@@ -67,6 +67,16 @@ def estado_poliza(request):
     except Usuario.DoesNotExist:
         return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
     return Response(_estado(polizas.poliza_de(usuario)))
+
+
+@api_view(["GET"])
+def cashback(request):
+    """Cashback en quetzales del año de póliza en curso (para Mi Plan)."""
+    try:
+        usuario = request.user.usuario
+    except Usuario.DoesNotExist:
+        return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
+    return Response(servicio_cashback.resumen(usuario))
 
 
 @api_view(["POST"])
