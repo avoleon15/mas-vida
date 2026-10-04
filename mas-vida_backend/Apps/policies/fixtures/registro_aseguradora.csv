@@ -1,0 +1,7 @@
+numero_poliza,aseguradora,nombre,apellido,fecha_nacimiento,plan,prima_anual_gtq,deducible_gtq,coaseguro_pct,red,vigencia_inicio,vigencia_fin,estado
+POL-100001,Seguros Demo GT,Ana,Morales,1994-03-12,Plan Plus,15000.00,5000,10,Red Preferente,2026-01-15,2027-01-14,vigente
+POL-100002,Seguros Demo GT,Carlos,Pérez,1985-07-25,Plan Básico,9360.00,8000,20,Red Estándar,2026-03-01,2027-02-28,vigente
+POL-100003,Seguros Demo GT,Lucía,Ramírez,1962-11-02,Plan Élite,25800.00,3000,10,Red Premium,2026-06-10,2027-06-09,vigente
+POL-100004,Seguros Demo GT,Diego,Castillo,1990-05-30,Plan Plus,15000.00,5000,10,Red Preferente,2025-03-01,2026-02-28,vigente
+POL-100005,Seguros Demo GT,Sofía,Méndez,1998-09-18,Plan Básico,9360.00,8000,20,Red Estándar,2026-02-01,2027-01-31,cancelada
+POL-100006,Seguros Demo GT,Mario,Herrera,1979-01-08,Plan Élite,25800.00,3000,10,Red Premium,2026-04-20,2027-04-19,suspendida

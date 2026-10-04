@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+  
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /app
+    
+    
+
+  # Cierre semanal del objetivo (lunes 00:00) y su corrección (lunes 12:00),
+  # en hora de Guatemala. Se pone al día al arrancar con las semanas que hayan
+  # quedado sin cerrar. Ver `python manage.py programador`.
+  programador:
+    build: .
+    # web corre las migraciones al arrancar: se espera a que terminen para no
+    # encontrar tablas que todavía no existen.
+    command: >
+      sh -c "until python manage.py migrate --check > /dev/null 2>&1;
+             do echo 'Esperando las migraciones...'; sleep 3; done &&
+             exec python manage.py programador"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /app
+    # Python como PID 1 ignora la señal de "docker stop"; con init se detiene limpio.
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

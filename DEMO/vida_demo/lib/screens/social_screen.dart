@@ -1,150 +1,75 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../datos/fuente_datos.dart';
+import '../datos/modelos.dart';
+import '../hora_guatemala.dart';
 import '../theme.dart';
+import '../widgets/despliegue.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/chip_monedas.dart' show BotonInfo;
+import '../widgets/flujos_social.dart';
+import '../widgets/hoja_invitar_grupo.dart';
+import '../widgets/moneda_animada.dart';
+import '../widgets/ranking_widgets.dart';
+import '../widgets/refresco_vida.dart';
+import 'ranking_grupo_screen.dart'
+    show MarcaDeLaLiga, RankingGrupoScreen, mostrarReglasLiga;
 
 // ============================================================
-// Datos de ejemplo. Todo hardcodeado por ahora (sin backend) y
-// organizado en constantes simples, para que sea fácil de
-// reemplazar después con datos reales.
+// SOCIAL (rediseño de Daniel, 25 de septiembre de 2026).
+//
+// Una sola pantalla, sin pestañas y sin amigos:
+//
+//   1. LA LIGA, arriba y como la única pieza levantada: es lo único de
+//      Social que paga, y la arma la app sin que el usuario haga nada.
+//      Cuánto le queda, tu puesto en grande y lo que paga. Tocarla abre
+//      la tabla completa.
+//   2. MIS COMPETENCIAS, debajo y plana: las que armaste con tu gente.
+//      Se crean o se entra con un CÓDIGO que se comparte por WhatsApp o
+//      cualquier app. No hay solicitudes ni amigos.
+//
+// Antes eran dos pestañas —"Mis competencias" y "Liga local"— que nunca
+// se veían juntas, y la que da premio quedaba en la segunda.
 // ============================================================
 
-const String nombreUsuario = 'Diego';
-
-// ---- Duelos ----
-// Variable simple para probar a mano los dos estados de la sección.
-bool hayDueloActivo = true;
-
-const String duelloRivalHandle = '@mery_run';
-const String duelloTiempoRestante = '2 días restantes';
-const double duelloSuperacionPropia = 18; // % sobre el propio promedio
-const double duelloSuperacionRival = 12;
-// Escala de referencia para las barras de superación (no hay un tope
-// natural como en una barra de progreso normal, así que usamos este
-// techo solo para que las barras se vean proporcionadas entre sí).
-const double _escalaSuperacion = 30;
-
-class _DueloHistorial {
-  const _DueloHistorial(this.rival, this.ganado);
-
-  final String rival;
-  final bool ganado;
-}
-
-const List<_DueloHistorial> _historialDuelos = [
-  _DueloHistorial('@mery_run', true),
-  _DueloHistorial('@juan_fit', false),
-  _DueloHistorial('@carlos_gt', true),
-  _DueloHistorial('@ana_runner', true),
-  _DueloHistorial('@luis_gym', false),
+const List<String> _meses = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
 ];
 
-// ---- Conexiones ----
-class _Conexion {
-  const _Conexion({
-    required this.nombre,
-    required this.handle,
-    required this.rachaSemanas,
-    required this.categoriaAnual,
-    required this.monedasTotales,
-  });
-
-  final String nombre;
-  final String handle;
-  final int rachaSemanas;
-  final String categoriaAnual;
-  final int monedasTotales;
+/// Cuántos días le quedan a [grupo], contados en hora de Guatemala.
+/// Null si no trae fecha de cierre.
+int? diasParaCerrar(GrupoRanking grupo, {DateTime? ahora}) {
+  final cierra = grupo.cierra;
+  if (cierra == null) return null;
+  final c = enHoraDeGuatemala(cierra);
+  final h = enHoraDeGuatemala(ahora ?? DateTime.now());
+  return DateTime(
+    c.year,
+    c.month,
+    c.day,
+  ).difference(DateTime(h.year, h.month, h.day)).inDays;
 }
 
-const List<_Conexion> _conexiones = [
-  _Conexion(
-    nombre: 'Juan Perez',
-    handle: '@juan_fit',
-    rachaSemanas: 12,
-    categoriaAnual: 'Gold',
-    monedasTotales: 9,
-  ),
-  _Conexion(
-    nombre: 'Maria Rodriguez',
-    handle: '@mery_run',
-    rachaSemanas: 8,
-    categoriaAnual: 'Silver',
-    monedasTotales: 5,
-  ),
-];
-
-// ---- Ranking ----
-enum _Tendencia { subida, bajada, igual }
-
-class _RankingPersona {
-  const _RankingPersona({
-    required this.nombre,
-    required this.puntosSemana,
-    required this.tendencia,
-    this.esUsuario = false,
-  });
-
-  final String nombre;
-  // Los puntos son privados: solo se usan para ordenar la lista, nunca
-  // se muestran en pantalla. El ranking visible es solo posición.
-  final int puntosSemana;
-  final _Tendencia tendencia;
-  final bool esUsuario;
-}
-
-const List<String> _gruposRanking = ['Oficina', 'Familia'];
-
-const Map<String, List<_RankingPersona>> _rankingPorGrupo = {
-  'Oficina': [
-    _RankingPersona(
-      nombre: 'Ana Martinez',
-      puntosSemana: 890,
-      tendencia: _Tendencia.subida,
-    ),
-    _RankingPersona(
-      nombre: 'David S.',
-      puntosSemana: 820,
-      tendencia: _Tendencia.igual,
-    ),
-    _RankingPersona(
-      nombre: nombreUsuario,
-      puntosSemana: 670,
-      tendencia: _Tendencia.subida,
-      esUsuario: true,
-    ),
-    _RankingPersona(
-      nombre: 'Juan Perez',
-      puntosSemana: 540,
-      tendencia: _Tendencia.bajada,
-    ),
-    _RankingPersona(
-      nombre: 'Maria Rodriguez',
-      puntosSemana: 410,
-      tendencia: _Tendencia.subida,
-    ),
-  ],
-  'Familia': [
-    _RankingPersona(
-      nombre: 'Mamá',
-      puntosSemana: 950,
-      tendencia: _Tendencia.subida,
-    ),
-    _RankingPersona(
-      nombre: nombreUsuario,
-      puntosSemana: 780,
-      tendencia: _Tendencia.igual,
-      esUsuario: true,
-    ),
-    _RankingPersona(
-      nombre: 'Hermano',
-      puntosSemana: 600,
-      tendencia: _Tendencia.bajada,
-    ),
-  ],
+/// "Quedan 5 días", "Cierra hoy", "Cerró".
+String cuandoCierra(int dias) => switch (dias) {
+  < 0 => 'Cerró',
+  0 => 'Cierra hoy',
+  1 => 'Queda 1 día',
+  _ => 'Quedan $dias días',
 };
-
-/// Las dos pestañas internas de Social. Por default abre en Amigos.
-enum _TabSocial { amigos, ranking }
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -154,8 +79,7 @@ class SocialScreen extends StatefulWidget {
 }
 
 class _SocialScreenState extends State<SocialScreen> {
-  _TabSocial _tab = _TabSocial.amigos;
-  String _grupoSeleccionado = _gruposRanking.first;
+  String _busqueda = '';
 
   @override
   Widget build(BuildContext context) {
@@ -163,29 +87,43 @@ class _SocialScreenState extends State<SocialScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-              child: const AppHeader(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: AppHeader(),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
-                    _SelectorTab(
-                      seleccionado: _tab,
-                      onChanged: (tab) => setState(() => _tab = tab),
-                    ),
-                    const SizedBox(height: 20),
-                    if (_tab == _TabSocial.amigos)
-                      ..._buildAmigos(context)
-                    else
-                      ..._buildRanking(context),
-                    const SizedBox(height: 16),
-                  ],
-                ),
+              child: ValueListenableBuilder<int>(
+                valueListenable: datosRecargados,
+                builder: (context, _, _) {
+                  final liga = Datos.i.social.ligaLocal;
+                  return CustomScrollView(
+                    physics: fisicaConRefresco,
+                    slivers: [
+                      const RefrescoVida(),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                        sliver: SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: desplegar([
+                              Text('SOCIAL', style: AppTheme.sectionTitle),
+                              const SizedBox(height: 20),
+                              if (liga == null)
+                                const _SinLiga()
+                              else
+                                TarjetaLiga(
+                                  liga: liga,
+                                  onTap: () => _abrir(liga),
+                                ),
+                              const SizedBox(height: AppSpacing.seccion),
+                              ..._misCompetencias(context),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             const BottomNavBar(currentIndex: 2),
@@ -195,345 +133,407 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  // ============================================================
-  // Pestaña Amigos
-  // ============================================================
+  // ---- Mis competencias ----
 
-  List<Widget> _buildAmigos(BuildContext context) {
+  List<Widget> _misCompetencias(BuildContext context) {
+    final grupos = Datos.i.social.deConocidos;
+    final filtro = _busqueda.trim().toLowerCase();
+    final visibles = filtro.isEmpty
+        ? grupos
+        : grupos.where((g) => g.nombre.toLowerCase().contains(filtro)).toList();
+
     return [
-      _buildDuelosSection(context),
-      const SizedBox(height: 16),
-      _buildHistorialDuelos(context),
-      const SizedBox(height: 28),
-      _buildConexionesSection(context),
+      const EtiquetaSeccion('MIS COMPETENCIAS'),
+      const SizedBox(height: 4),
+      Text(
+        'Con tu gente, por código. Duran un mes.',
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 8),
+      // El buscador aparece recién cuando hay suficientes como para
+      // necesitarlo. Con tres, solo ocupa lugar.
+      if (grupos.length >= 5) ...[
+        const SizedBox(height: 8),
+        CupertinoSearchTextField(
+          placeholder: 'Buscar competencia',
+          onChanged: (t) => setState(() => _busqueda = t),
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (grupos.isNotEmpty && visibles.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+            child: Text(
+              'Ninguna competencia se llama así.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            ),
+          ),
+        ),
+      for (final g in visibles) ...[
+        _FilaGrupo(grupo: g, onTap: () => _abrir(g)),
+        Container(height: 0.5, color: AppColors.separador),
+      ],
+      _FilaCrearOUnirse(onPressed: _menuGrupos, primera: grupos.isEmpty),
     ];
   }
 
-  Widget _buildDuelosSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.bolt, color: AppColors.textPrimary),
-            const SizedBox(width: 8),
-            Text(
-              'Duelos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            OutlinedButton(
-              // TODO: crear lib/screens/nuevo_duelo_screen.dart, registrar
-              // la ruta '/nuevo-duelo' en main.dart y navegar con
-              // Navigator.of(context).pushNamed('/nuevo-duelo').
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+  void _abrir(GrupoRanking grupo) {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => RankingGrupoScreen(grupo: grupo),
+      ),
+    );
+  }
+
+  /// Crear o unirse, en un action sheet de iOS.
+  Future<void> _menuGrupos() async {
+    HapticFeedback.selectionClick();
+
+    final accion = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('Mis competencias'),
+        message: const Text(
+          'Arma una con tu gente y compárteles el código, o entra a una '
+          'con el código que te pasaron.',
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(ctx).pop('crear'),
+            child: const Text('Crear una competencia'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(ctx).pop('unirse'),
+            child: const Text('Unirme con un código'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancelar'),
+        ),
+      ),
+    );
+
+    if (accion == null || !mounted) return;
+
+    switch (accion) {
+      case 'crear':
+        final creada = await mostrarCrearGrupo(context);
+        if (creada == null || !mounted) return;
+        // Se limpia la búsqueda: con un filtro puesto, la recién creada
+        // podría no aparecer y parecería que no se creó.
+        setState(() => _busqueda = '');
+        // Lo que sigue a crear es invitar: la hoja con el código se abre
+        // sola, lista para mandarlo por WhatsApp.
+        mostrarInvitarAlGrupo(context, creada, recienCreada: true);
+      case 'unirse':
+        await mostrarUnirseGrupo(context);
+    }
+  }
+}
+
+// ============================================================
+// LA LIGA
+// ============================================================
+
+/// Llave de la tarjeta de La Liga, para los tests.
+const Key llaveTarjetaLiga = ValueKey('tarjeta-liga');
+
+/// La Liga en Social: la única pieza levantada de la pantalla.
+class TarjetaLiga extends StatelessWidget {
+  const TarjetaLiga({super.key, required this.liga, required this.onTap});
+
+  final GrupoRanking liga;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final puesto = liga.posicionUsuario;
+    final yo = liga.usuario;
+    final total = liga.miembros.length;
+    final podio = liga.premiosMonedas.length;
+    final dias = diasParaCerrar(liga);
+    final mes = liga.arranca == null
+        ? null
+        : _meses[enHoraDeGuatemala(liga.arranca!).month - 1];
+
+    return Semantics(
+      key: llaveTarjetaLiga,
+      button: true,
+      label:
+          'La Liga${mes == null ? '' : ' de $mes'}. '
+          '${yo == null ? 'Todavía no estás en la tabla' : 'Vas en el puesto $puesto de $total'}. '
+          'Toca para ver la tabla.',
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(AppRadios.tarjeta),
+            boxShadow: AppSombras.tarjeta,
+          ),
+          // Qué es y cuánto le queda, quién la patrocina, tu puesto y lo
+          // que paga. Los puntos de cada quien viven en la tabla.
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  const Icon(Icons.add, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Nuevo duelo',
-                    style: Theme.of(context).textTheme.bodySmall,
+                  Flexible(
+                    child: Text(
+                      mes == null
+                          ? 'LA LIGA'
+                          : 'LA LIGA · ${mes.toUpperCase()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.subsectionTitle,
+                    ),
+                  ),
+                  // LA MARCA, AL LADO DEL TÍTULO (pedido de Daniel, 2 de
+                  // octubre de 2026). Sin marca no se dibuja nada: un
+                  // ciclo sin patrocinio es el caso normal.
+                  if (liga.patrocinio case final p?) ...[
+                    const SizedBox(width: 10),
+                    Flexible(child: MarcaDeLaLiga(patrocinio: p)),
+                  ],
+                  const Spacer(),
+                  // Las reglas a un toque: cómo se ordena la tabla y qué
+                  // pasa con un empate (reunión del 2 de octubre de 2026).
+                  // Adentro de la tarjeta gana el botón de adentro: tocar
+                  // la (i) abre las reglas, no la tabla.
+                  Transform.translate(
+                    offset: const Offset(8, 0),
+                    child: BotonInfo(
+                      semantica: 'Reglas de La Liga',
+                      onPressed: () => mostrarReglasLiga(context, liga),
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        hayDueloActivo
-            ? _buildDueloActivoCard(context)
-            : _buildSinDuelo(context),
-      ],
-    );
-  }
-
-  /// Duelo en curso: superación relativa sobre el propio promedio (no
-  /// puntos crudos comparados directo entre dos personas distintas).
-  Widget _buildDueloActivoCard(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Duelo vs $duelloRivalHandle',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
+              const SizedBox(height: 14),
+              if (yo == null)
+                Text(
+                  'Todavía no estás en la tabla de este mes.',
+                  style: tema.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              else
+                // El puesto, en grande: es lo que se viene a ver.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // "11.º" es más ancho que "4.º": se achica antes de
+                    // empujar el resto fuera de la tarjeta.
+                    Flexible(
+                      child: FittedBox(
+                        alignment: Alignment.bottomLeft,
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$puesto.º',
+                          style: AppTheme.display(56).copyWith(
+                            color: AppColors.textPrimary,
+                            height: 0.95,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'de $total',
+                          style: tema.titleSmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ChipTendencia(tendencia: yo.tendencia),
+                    ),
+                  ],
                 ),
-              ),
-              const Spacer(),
-              Text(
-                duelloTiempoRestante,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              const SizedBox(height: 16),
+              Container(height: 0.5, color: AppColors.separador),
+              const SizedBox(height: 12),
+              // Lo que paga, en un renglón, y el chevron de la tabla.
+              Row(
+                children: [
+                  // Los premios se achican juntos si no caben (letra de
+                  // iOS grande).
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < podio; i++) ...[
+                            _Premio(
+                              puesto: i + 1,
+                              monedas: liga.premiosMonedas[i],
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Cuánto le queda, al pie: arriba el renglón es del
+                  // título y de la marca.
+                  if (dias != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      cuandoCierra(dias),
+                      style: tema.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  const Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 16,
+                    color: AppColors.azulMedio,
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          _buildBarraSuperacion(
-            context,
-            label: 'Tú',
-            porcentaje: duelloSuperacionPropia,
-            destacado: true,
-          ),
-          const SizedBox(height: 12),
-          _buildBarraSuperacion(
-            context,
-            label: duelloRivalHandle,
-            porcentaje: duelloSuperacionRival,
-            destacado: false,
-          ),
-        ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildBarraSuperacion(
-    BuildContext context, {
-    required String label,
-    required double porcentaje,
-    required bool destacado,
-  }) {
-    final pronombre = destacado ? 'tu' : 'su';
-    return Column(
+/// "1.º 🪙10": lo que paga un puesto del podio, suelto y sin caja.
+class _Premio extends StatelessWidget {
+  const _Premio({required this.puesto, required this.monedas});
+
+  final int puesto;
+  final int monedas;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        '$puesto.º',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(width: 4),
+      const MonedaAnimada(size: 16),
+      const SizedBox(width: 2),
+      Text(
+        '$monedas',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    ],
+  );
+}
+
+/// Sin La Liga todavía: la app la arma sola, así que no hay nada que
+/// tocar, solo esperar.
+class _SinLiga extends StatelessWidget {
+  const _SinLiga();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: AppColors.azulNiebla,
+      borderRadius: BorderRadius.circular(AppRadios.tarjeta),
+    ),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('LA LIGA', style: AppTheme.subsectionTitle),
+        const SizedBox(height: 8),
         Text(
-          '$label: +${_formatPercent(porcentaje)}% sobre $pronombre promedio',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: (porcentaje / _escalaSuperacion).clamp(0.05, 1.0),
-            minHeight: 8,
-            backgroundColor: AppColors.cardBorder,
-            valueColor: AlwaysStoppedAnimation(
-              destacado ? AppColors.accentSecondary : AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Estado sin duelos activos: invitación simple a retar a un amigo.
-  Widget _buildSinDuelo(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: AppColors.accent.withValues(alpha: 0.12),
-            child: const Icon(
-              Icons.sports_kabaddi,
-              color: AppColors.accent,
-              size: 24,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Sin duelos activos',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              // TODO: crear lib/screens/nuevo_duelo_screen.dart, registrar
-              // la ruta '/nuevo-duelo' en main.dart y navegar ahí.
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
-              child: const Text(
-                'Retar a un amigo',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Fila deslizable con los últimos duelos: gana (W, acento) o pierde
-  /// (L, gris) marcado sobre el avatar del rival.
-  Widget _buildHistorialDuelos(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'HISTORIAL DE DUELOS',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          'La Liga es de todos los asegurados con su póliza verificada. '
+          'Vincula la tuya y entras en la del próximo mes.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: AppColors.textSecondary,
-            letterSpacing: 1.5,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 60,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _historialDuelos.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (context, i) =>
-                _buildBurbujaDuelo(context, _historialDuelos[i]),
+            height: 1.4,
           ),
         ),
       ],
-    );
+    ),
+  );
+}
+
+// ============================================================
+// MIS COMPETENCIAS
+// ============================================================
+
+/// Una competencia en la lista: inicial, nombre, cuánta gente y cuánto
+/// le queda, y tu puesto. Sin caja: una lista es una lista.
+class _FilaGrupo extends StatelessWidget {
+  const _FilaGrupo({required this.grupo, required this.onTap});
+
+  final GrupoRanking grupo;
+  final VoidCallback onTap;
+
+  String get _subtitulo {
+    final n = grupo.miembros.length;
+    final base = '$n ${n == 1 ? "persona" : "personas"}';
+    final dias = diasParaCerrar(grupo);
+    return dias == null ? base : '$base · ${cuandoCierra(dias).toLowerCase()}';
   }
 
-  Widget _buildBurbujaDuelo(BuildContext context, _DueloHistorial duelo) {
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.cardBorder,
-            child: Icon(Icons.person, color: AppColors.textSecondary),
-          ),
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: duelo.ganado
-                    ? AppColors.accentSecondary
-                    : AppColors.card,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.background, width: 2),
-              ),
-              child: Text(
-                duelo.ganado ? 'W' : 'L',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: duelo.ganado ? Colors.black : AppColors.textSecondary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  @override
+  Widget build(BuildContext context) {
+    final posicion = grupo.posicionUsuario;
 
-  Widget _buildConexionesSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              'Amigos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            GestureDetector(
-              // TODO: crear lib/screens/agregar_amigo_screen.dart, registrar
-              // la ruta '/agregar-amigo' en main.dart y navegar ahí.
-              onTap: () {},
-              child: Text(
-                '+ Agregar',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        for (var i = 0; i < _conexiones.length; i++) ...[
-          _buildConexionRow(context, _conexiones[i]),
-          if (i != _conexiones.length - 1) const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildConexionRow(BuildContext context, _Conexion conexion) {
-    return GestureDetector(
-      onTap: () => _mostrarPerfilConexion(context, conexion),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
+    return CupertinoButton(
+      onPressed: onTap,
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            const CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.cardBorder,
-              child: Icon(Icons.person, color: AppColors.textSecondary),
-            ),
+            _AvatarGrupo(grupo: grupo),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    conexion.nombre,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    grupo.nombre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   Text(
-                    conexion.handle,
+                    _subtitulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -541,419 +541,23 @@ class _SocialScreenState extends State<SocialScreen> {
                 ],
               ),
             ),
-            _buildRachaBadge(context, conexion.rachaSemanas),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRachaBadge(BuildContext context, int semanas) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.accentSecondary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.local_fire_department,
-            color: AppColors.accentSecondary,
-            size: 14,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '$semanas sem',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.accentSecondary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Perfil reducido de la conexión: nunca muestra pasos ni actividad
-  /// cruda de otra persona, solo lo que ya comparte públicamente en la
-  /// app (racha, categoría, monedas).
-  void _mostrarPerfilConexion(BuildContext context, _Conexion conexion) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircleAvatar(
-                radius: 32,
-                backgroundColor: AppColors.cardBorder,
-                child: Icon(
-                  Icons.person,
-                  color: AppColors.textSecondary,
-                  size: 30,
+            if (posicion > 0) ...[
+              const SizedBox(width: 8),
+              Text(
+                '$posicion.º',
+                style: AppTheme.display(18).copyWith(
+                  color: posicion == 1
+                      ? AppColors.accent
+                      : AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                conexion.nombre,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                conexion.handle,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildStatPerfil(
-                    context,
-                    icon: Icons.local_fire_department,
-                    valor: '${conexion.rachaSemanas} sem',
-                    label: 'RACHA',
-                  ),
-                  _buildStatPerfil(
-                    context,
-                    icon: Icons.workspace_premium_outlined,
-                    valor: conexion.categoriaAnual,
-                    label: 'CATEGORÍA',
-                    colorValor: AppColors.colorForTier(conexion.categoriaAnual),
-                  ),
-                  _buildStatPerfil(
-                    context,
-                    icon: Icons.monetization_on,
-                    valor: '${conexion.monedasTotales}',
-                    label: 'MONEDAS',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      // TODO: implementar bloqueo real de la conexión.
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(
-                        'Bloquear',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: TextButton(
-                      // TODO: implementar eliminación real de la conexión.
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(
-                        'Eliminar conexión',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStatPerfil(
-    BuildContext context, {
-    required IconData icon,
-    required String valor,
-    required String label,
-    Color? colorValor,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: AppColors.textSecondary, size: 20),
-        const SizedBox(height: 6),
-        Text(
-          valor,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: colorValor ?? AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: AppColors.textSecondary,
-            letterSpacing: 1,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
-  // Pestaña Ranking
-  // ============================================================
-
-  List<Widget> _buildRanking(BuildContext context) {
-    final ranking = _rankingPorGrupo[_grupoSeleccionado]!;
-
-    return [
-      _buildChipsGrupos(context),
-      const SizedBox(height: 20),
-      Text(
-        _grupoSeleccionado,
-        style: AppTheme.sectionTitle.copyWith(fontSize: 24),
-      ),
-      const SizedBox(height: 16),
-      _buildPosicionPropia(context, ranking),
-      const SizedBox(height: 20),
-      _buildListaRanking(context, ranking),
-      const SizedBox(height: 24),
-      _buildBotonUnirseGrupo(context),
-    ];
-  }
-
-  Widget _buildChipsGrupos(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final grupo in _gruposRanking) ...[
-            _buildChip(
-              context,
-              label: grupo,
-              seleccionado: grupo == _grupoSeleccionado,
-              onTap: () => setState(() => _grupoSeleccionado = grupo),
+            const SizedBox(width: 6),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              size: 16,
+              color: AppColors.textSecondary,
             ),
-            const SizedBox(width: 10),
-          ],
-          _buildChip(
-            context,
-            label: 'Crear grupo',
-            seleccionado: false,
-            esCrear: true,
-            // TODO: crear una pantalla para armar un grupo nuevo y
-            // navegar ahí en vez de dejar este callback vacío.
-            onTap: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChip(
-    BuildContext context, {
-    required String label,
-    required bool seleccionado,
-    required VoidCallback onTap,
-    bool esCrear = false,
-  }) {
-    final colorTexto = seleccionado || esCrear
-        ? AppColors.accent
-        : AppColors.textSecondary;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: seleccionado
-              ? AppColors.accent.withValues(alpha: 0.15)
-              : AppColors.card,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: seleccionado ? AppColors.accent : AppColors.cardBorder,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (esCrear) ...[
-              const Icon(Icons.add, size: 14, color: AppColors.accent),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorTexto,
-                fontWeight: seleccionado ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPosicionPropia(
-    BuildContext context,
-    List<_RankingPersona> ranking,
-  ) {
-    final indice = ranking.indexWhere((p) => p.esUsuario);
-    final persona = ranking[indice];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.cardBorder,
-            child: Icon(Icons.person, color: AppColors.textPrimary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Posición #${indice + 1}',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          _buildTendenciaIcon(context, persona.tendencia),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildListaRanking(
-    BuildContext context,
-    List<_RankingPersona> ranking,
-  ) {
-    return Column(
-      children: [
-        for (var i = 0; i < ranking.length; i++) ...[
-          _buildRankingRow(context, i + 1, ranking[i]),
-          if (i != ranking.length - 1) const SizedBox(height: 10),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildRankingRow(
-    BuildContext context,
-    int posicion,
-    _RankingPersona persona,
-  ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: persona.esUsuario
-            ? AppColors.accent.withValues(alpha: 0.08)
-            : AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: persona.esUsuario
-              ? AppColors.accent.withValues(alpha: 0.3)
-              : AppColors.cardBorder,
-        ),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            child: _buildPosicionIndicador(context, posicion),
-          ),
-          const SizedBox(width: 10),
-          const CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.cardBorder,
-            child: Icon(Icons.person, color: AppColors.textSecondary, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              persona.esUsuario ? 'Tú' : persona.nombre,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: persona.esUsuario
-                    ? FontWeight.w700
-                    : FontWeight.w600,
-              ),
-            ),
-          ),
-          _buildTendenciaIcon(context, persona.tendencia),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPosicionIndicador(BuildContext context, int posicion) {
-    if (posicion <= 3) {
-      const colores = [
-        AppColors.tierGold,
-        AppColors.tierSilver,
-        AppColors.tierBronze,
-      ];
-      return Icon(Icons.emoji_events, color: colores[posicion - 1], size: 20);
-    }
-    return Center(
-      child: Text(
-        '$posicion',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTendenciaIcon(BuildContext context, _Tendencia tendencia) {
-    switch (tendencia) {
-      case _Tendencia.subida:
-        return const Icon(
-          Icons.arrow_upward,
-          color: AppColors.accentSecondary,
-          size: 16,
-        );
-      case _Tendencia.bajada:
-        return const Icon(
-          Icons.arrow_downward,
-          color: AppColors.textSecondary,
-          size: 16,
-        );
-      case _Tendencia.igual:
-        return const Icon(
-          Icons.remove,
-          color: AppColors.textSecondary,
-          size: 16,
-        );
-    }
-  }
-
-  Widget _buildBotonUnirseGrupo(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
-        // TODO: crear una pantalla para unirse/crear un grupo y navegar
-        // ahí en vez de dejar este callback vacío.
-        onPressed: () {},
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.group_add_outlined, size: 16),
-            SizedBox(width: 8),
-            Text('Unirme a un grupo'),
           ],
         ),
       ),
@@ -961,72 +565,106 @@ class _SocialScreenState extends State<SocialScreen> {
   }
 }
 
-/// Selector de pestaña tipo "segmented control": Amigos / Ranking. Mismo
-/// estilo que el selector de período de la pantalla Progress.
-class _SelectorTab extends StatelessWidget {
-  const _SelectorTab({required this.seleccionado, required this.onChanged});
+/// La inicial de la competencia en un círculo. El tono sale del nombre:
+/// la misma competencia siempre tiene el mismo, y todos son del azul de
+/// marca para que la lista no se vuelva un arcoíris.
+class _AvatarGrupo extends StatelessWidget {
+  const _AvatarGrupo({required this.grupo});
 
-  final _TabSocial seleccionado;
-  final ValueChanged<_TabSocial> onChanged;
+  final GrupoRanking grupo;
 
-  static const _opciones = [
-    (label: 'Amigos', valor: _TabSocial.amigos),
-    (label: 'Ranking', valor: _TabSocial.ranking),
+  static const _tonos = [
+    AppColors.nivel4,
+    AppColors.nivel3,
+    AppColors.nivel2,
+    AppColors.nivel1,
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Row(
-        children: [
-          for (final opcion in _opciones)
-            Expanded(
-              child: _buildTab(
-                context,
-                opcion.label,
-                opcion.valor == seleccionado,
-                () => onChanged(opcion.valor),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+    final semilla = grupo.nombre.codeUnits.fold<int>(0, (a, c) => a + c);
+    final color = _tonos[semilla % _tonos.length];
 
-  Widget _buildTab(
-    BuildContext context,
-    String label,
-    bool activo,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: activo ? AppColors.cardBorder : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: activo ? AppColors.textPrimary : AppColors.textSecondary,
-            fontWeight: activo ? FontWeight.w700 : FontWeight.w500,
-          ),
+    return Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        grupo.nombre.characters.first.toUpperCase(),
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
   }
 }
 
-String _formatPercent(double value) {
-  return value % 1 == 0 ? value.toInt().toString() : value.toString();
+/// Llave de "Crear o unirme", para los tests.
+const Key llaveCrearOUnirse = ValueKey('crear-o-unirse');
+
+/// Crear o unirse: un renglón más de la lista, con el signo más en un
+/// disco azul. Sin caja con borde: es parte de la lista, no un botón
+/// que compita con La Liga.
+class _FilaCrearOUnirse extends StatelessWidget {
+  const _FilaCrearOUnirse({required this.onPressed, required this.primera});
+
+  final VoidCallback onPressed;
+
+  /// Sin competencias todavía, el renglón explica qué es.
+  final bool primera;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    key: llaveCrearOUnirse,
+    onPressed: onPressed,
+    padding: EdgeInsets.zero,
+    minimumSize: Size.zero,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              color: AppColors.azulBruma,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              CupertinoIcons.add,
+              size: 20,
+              color: AppColors.accent,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Crear o unirme',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (primera)
+                  Text(
+                    'Arma una con tu gente y compárteles el código',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
