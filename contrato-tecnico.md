@@ -13,6 +13,13 @@ semanal programado".
 **Actualizado el 3 oct 2026** (La Liga): las monedas de La Liga van a **los 3
 primeros** del mes, no por percentil. Ver "La Liga y Tus Ligas".
 
+**Actualizado el 3 oct 2026** (La Liga y Tus Ligas, backend): endpoints del
+ranking (`GET`/`POST /api/v1/ligas`, `POST /api/v1/ligas/unirse`) y cierre
+mensual de La Liga el día 2 a las 00:00 (el día 1 es margen de gracia), que
+paga el podio. Montos del podio y
+empate total con valores **provisionales**. Ver "Endpoints de La Liga y Tus
+Ligas".
+
 **Actualizado el 3 oct 2026** (premios y canje, backend): endpoints de saldo de
 monedas, catálogo, canje y cupones. Canjear exige póliza verificada y descuenta
 las monedas y crea el cupón en una sola transacción. Ver "Premios, canje y
@@ -37,7 +44,7 @@ tipo "battle pass". Ver "Respuesta de `GET /api/v1/objetivos/estado`".
 Apple; el objetivo semanal paga monedas **por componente** y su meta de pasos
 depende de la **edad**; vista de semanas tipo "battle pass"; **seasons de 13
 semanas** que siguen las semanas ISO; **monedas sin tope** que se reinician al
-cerrar cada season; **La Liga compite por puntos**, con desempate por pasos;
+cerrar cada season; **La Liga compite por puntos**, con desempate por pasos y luego workouts;
 datos que entrega la aseguradora, póliza y **prima anuales**; puntos anuales,
 nivel y cashback **por año de póliza** (no por año calendario); cashback en
 quetzales. Lo que cambia en el código quedó marcado **[PENDIENTE]**. Ver
@@ -856,6 +863,11 @@ que ejecuta `python manage.py programador`:
   haya quedado pendiente, así que **un martes que falló se recupera solo** en la
   corrida siguiente.
 - **Martes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
+- **Día 2 de cada mes, 00:00** → cierre de La Liga del mes anterior (ver
+  "Endpoints de La Liga y Tus Ligas"). El día 1 entero es margen de gracia,
+  igual que el lunes para la semana. Si el día 2 es martes no hay corrida
+  aparte: la hace el cierre semanal de esa hora. Al arrancar, el programador
+  también cierra los meses que hayan quedado pendientes.
 - Siempre **hora de Guatemala**, sin importar en qué zona esté el servidor.
 - Si una corrida falla (por ejemplo la base de datos caída un momento) reintenta
   cada 5 minutos, hasta 12 veces, y nunca se cae por un error. Si el servidor
@@ -913,10 +925,13 @@ toca el contrato.
 - **Compite por puntos** (decidido 2 oct 2026): la suma de los puntos del mes,
   los mismos que dan el cashback, **tal cual** (con el tope diario de 200 y el
   bono 60+). Antes competía por pasos.
-- **Desempate:** a igualdad de puntos gana quien tenga **más pasos** en el mes
-  (suma de `pasos_totales_dia`). La app lo explica con un botón de información.
+- **Desempate** (3 oct 2026): a igualdad de puntos gana quien tenga **más pasos**
+  en el mes (suma de `pasos_totales_dia`); si también empatan en pasos, gana
+  quien tenga **más workouts** en el mes (suma de `workouts_cantidad`). La app
+  lo explica con un botón de información.
 - **Qué se muestra:** los **puntos** de cada participante sí; la **cantidad de
-  pasos** nunca, ni siquiera para explicar un desempate (decidido 2 oct 2026).
+  pasos y de workouts** nunca, ni siquiera para explicar un desempate (decidido
+  2 oct 2026; los workouts se suman el 3 oct).
 - **Patrocinio:** algunos meses La Liga tiene una marca. Es la misma Liga, no
   una aparte: la marca se muestra arriba, junto al nombre de la liga,
   destacada, y los 3 primeros ganan además un cupón de esa marca.
@@ -926,9 +941,15 @@ toca el contrato.
   calcula la posición **una sola vez, al cierre del mes**, con el desempate de
   arriba, y paga las monedas en ese momento.
   - **Cuántas monedas a cada puesto (1.º, 2.º, 3.º): [PENDIENTE] (Diego).**
-  - **Empate total** (mismos puntos y mismos pasos en el mes):
+    Mientras tanto el código paga **30, 20 y 10** (provisional, 3 oct),
+    editables en el admin (tabla `PremioPodioLiga`).
+  - **Empate total** (mismos puntos, pasos y workouts en el mes):
     **[PENDIENTE]**. Opciones: compartir el puesto y la misma cantidad de
-    monedas, o desempatar por quien llegó antes a esos puntos.
+    monedas, o desempatar por quien llegó antes a esos puntos. **Provisional en
+    el código (3 oct):** comparten el puesto y cada uno se lleva sus monedas; el
+    siguiente puesto se salta (1, 1, 3).
+  - Para ganar hay que tener **al menos 1 punto** en el mes: con 0 no se entra
+    al podio aunque haya menos de 3 participantes con puntos.
   - El ranking devuelve `premios_monedas`: una lista con las monedas del 1.º, el
     2.º y el 3.º (vacía si el grupo no premia, como Tus Ligas). Flutter ya la lee
     (`GrupoRanking.premiosMonedas`).
@@ -937,12 +958,91 @@ toca el contrato.
 
 **Tus Ligas:** grupos que crea o a los que se une el usuario. Ranking mensual
 **por puntos** entre miembros (decidido 2 oct 2026, igual que La Liga; antes era
-por pasos), con el mismo desempate por pasos, **sin premios y sin exigir póliza** (cambia el 23
+por pasos), con el mismo desempate (pasos y luego workouts), **sin premios y sin exigir póliza** (cambia el 23
 sep; antes exigían póliza).
 
 **Duelos 1 contra 1:** eliminados del demo 1 — no construir endpoints ni
-pantallas. Los endpoints de La Liga y de Tus Ligas: por definir con Luis y
-Daniel.
+pantallas.
+
+### Endpoints de La Liga y Tus Ligas (3 oct 2026)
+
+Con token; `403` si la cuenta no tiene perfil. **La forma sigue la de
+`social.json`** de la app (`GrupoRanking` y `RankingPersona`).
+
+**`GET /api/v1/ligas`** → La Liga (solo con póliza verificada) y después Tus
+Ligas del usuario, en el orden en que entró.
+
+```json
+{
+  "puede_entrar_a_la_liga": true,
+  "grupos": [
+    {
+      "id": "la-liga", "nombre": "La Liga", "tipo": "desconocidos",
+      "mostrar_puntos": true, "ciclo": "mes",
+      "miembros": [
+        { "nombre": "Ana M.", "puntos_periodo": 200, "posicion": 1, "tendencia": "subida", "es_usuario": false },
+        { "nombre": "Luis M.", "puntos_periodo": 150, "posicion": 2, "tendencia": "igual", "es_usuario": true }
+      ],
+      "liga": { "arranca": "2026-10-01", "cierra": "2026-10-31", "premios_monedas": [30, 20, 10], "patrocinio": null }
+    },
+    {
+      "id": "12", "nombre": "Oficina", "tipo": "conocidos",
+      "mostrar_puntos": true, "ciclo": "mes", "codigo": "K7QM2X", "creado_por_mi": true,
+      "miembros": [ "..." ],
+      "liga": { "arranca": "2026-10-01", "cierra": "2026-10-31", "premios_monedas": [], "patrocinio": null }
+    }
+  ]
+}
+```
+
+- `miembros` viene **ya ordenado** por el servidor: puntos del mes hasta hoy y,
+  a igualdad, pasos. **Nunca viajan los pasos.** `posicion` se repite en un
+  empate total.
+- `tendencia` compara la posición de hoy con la de ayer (`subida`, `bajada` o
+  `igual`; el día 1, todos `igual`).
+- **Nombre público:** con póliza verificada, el nombre y la inicial del apellido
+  que manda la aseguradora ("Ana M."); sin ella, "Usuario 4F2A" (del id
+  público). **Nunca el `username`**, que es la mitad del inicio de sesión.
+  **[PENDIENTE]:** decidir si cada quien elige un alias.
+- `puede_entrar_a_la_liga` es `false` sin póliza verificada: La Liga no viene
+  en `grupos` y la app muestra el CTA de vincular póliza.
+- Tus Ligas traen `premios_monedas` vacío (no premian) y `patrocinio` en `null`;
+  La Liga trae `patrocinio` en `null` hasta que exista el endpoint de patrocinios.
+
+**`POST /api/v1/ligas`** `{"nombre": "Oficina"}` → **201** con el grupo nuevo
+(misma forma). Quien lo crea queda adentro. El código tiene 6 caracteres, sin
+O/0 ni I/1. `400` `nombre_invalido` si el nombre está vacío o pasa de 60
+caracteres.
+
+**`POST /api/v1/ligas/unirse`** `{"codigo": "k7qm2x"}` → **200** con el grupo.
+No distingue mayúsculas e ignora espacios. Repetirlo no duplica. `404`
+`codigo_invalido` si ningún grupo tiene ese código. No exige póliza.
+
+**`POST /api/v1/ligas/<id>/salir`** (sin cuerpo) → **204**. Sale de un grupo de
+Tus Ligas; `<id>` es el `id` del grupo.
+
+- **De La Liga no se sale:** con `la-liga` responde `400` `la_liga_no_se_sale`
+  (la app no debe ofrecer el botón de salir en La Liga).
+- `404` `no_eres_miembro` si el grupo no existe o el usuario no está adentro
+  (también al salir dos veces).
+- Los demás miembros siguen. Quien creó el grupo también puede salir: el grupo
+  no pasa a nadie. Si sale el **último** miembro, el grupo se **borra** y su
+  código deja de valer.
+- Se puede volver a entrar con el código. Lo que se acumuló sale de los puntos
+  del mes, no de la membresía, así que no se pierde ni se reinicia nada.
+
+**Cierre de La Liga.** El **día 2 a las 00:00** (hora de Guatemala) el
+servicio `programador` cierra el mes anterior. **Margen de gracia (3 oct
+2026):** el día 1 entero queda para que lleguen los datos atrasados del último
+día del mes (lo caminado el 31 y sincronizado el 1 todavía cuenta para el
+podio), con el mismo `goals.DIAS_DE_GRACIA` que el cierre semanal del martes.
+Guarda la tabla final de todos los participantes (`DesgloseLigaMensual`, con
+puntos, pasos, workouts, posición y monedas) y paga el podio con monedas
+`liga_mensual` fechadas ese día 2 (cuentan en la season de ese día). Una sola
+vez por mes; un mes cerrado no se reabre. Participan los usuarios con póliza
+verificada **al momento del cierre**. El primer cierre es el **2 nov 2026**
+(octubre); los meses anteriores nunca se cierran. A mano:
+`python manage.py cerrar_liga [--mes AAAA-MM]`.
 
 ---
 
@@ -1521,7 +1621,7 @@ verificación" son el mismo momento.
   cualquier duración** (decidido 1 oct 2026).
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
   vinculada y verificada. Desde el 2 oct compite **por puntos** del mes (tal
-  cual, con tope y bono 60+), con desempate por pasos del mes. Al cierre del
+  cual, con tope y bono 60+), con desempate por pasos y luego workouts del mes. Al cierre del
   mes calcular una vez la posición de cada participante, guardarla y **pagar las
   monedas a los 3 primeros** (decidido 3 oct; ya no hay percentiles ni tramos).
   Las monedas de cada puesto, en configuración — por definir con Diego. Sin
@@ -1558,8 +1658,8 @@ verificación" son el mismo momento.
   - ~~Seasons por semanas ISO~~ — **hecho** (2 oct): ver "Seasons".
   - ~~Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
     cambia~~ — **hecho** (2 oct): ver "Monedas y seasons".
-  - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
-    devuelven los puntos de cada participante pero nunca sus pasos.
+  - La Liga y Tus Ligas por puntos, con desempate por pasos y luego workouts; en La Liga se
+    devuelven los puntos de cada participante pero nunca sus pasos ni sus workouts.
   - ~~Póliza: no rechazar por la fecha de renovación, y guardar y devolver
     nombre, apellido, plan, prima y fecha de renovación~~ — **hecho** (3 oct):
     ver "Datos que entrega la aseguradora".
@@ -1642,10 +1742,10 @@ verificación" son el mismo momento.
 - **La Liga:** un solo grupo, todos los usuarios con póliza verificada,
   **monedas a los 3 primeros** del mes (el servidor calcula la posición y manda
   `premios_monedas`; los textos de los términos ya dicen "los 3 primeros"). **Desde el 2
-  oct compite por puntos**, con desempate por pasos y un botón de información
+  oct compite por puntos**, con desempate por pasos y luego workouts, y un botón de información
   que lo explique; si el mes está patrocinado, la marca va arriba junto al
   nombre de la liga. **Tus Ligas también compite por puntos.** En La Liga se
-  muestran los puntos de cada participante, **nunca la cantidad de pasos**. Sin franjas
+  muestran los puntos de cada participante, **nunca la cantidad de pasos ni de workouts**. Sin franjas
   de edad ni sub-ligas. **Tus Ligas:** cualquiera se une (con o sin póliza),
   sin premios. **Duelos 1 contra 1: eliminar.**
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia
@@ -1915,9 +2015,11 @@ el cupón y el saldo que queda:
 - **Cuánto paga el objetivo semanal:** desde el 2 oct, 5 monedas por pasos +
   5 por workouts, de forma **provisional** (la reunión los dio de ejemplo). El
   código ya paga por componente (3 oct); los montos se editan en el admin.
-- **La Liga y Tus Ligas:** las tablas existen en el backend, pero no hay
-  cálculo ni endpoints todavía. (Premios y canje ya tienen endpoints: ver
-  "Premios, canje y cupones".)
+- **La Liga y Tus Ligas:** endpoints, salir de un grupo y cierre mensual hechos
+  (3 oct). Falta el cupo de miembros y el alias público (ver "Endpoints de La
+  Liga y Tus Ligas"). La tabla `TramoPremio` (premios por percentil) quedó
+  sin uso: decidir si se borra. El código de invitación se valida único al
+  crearlo, pero la columna todavía no tiene restricción `unique` en la base.
 - **Cupones que se ganan (semanas y podios patrocinados):** el modelo ya los
   admite (`origen` = `semana` o `liga`, con `ganado_en`), pero nadie los crea
   todavía: llegan con los patrocinios y con el cierre de La Liga.
@@ -1978,5 +2080,5 @@ el cupón y el saldo que queda:
   workout ya está decidido: cualquier entrenamiento con ritmo cardíaco, de
   cualquier duración.)
 - **Monedas de cada puesto de La Liga:** cuántas al 1.º, al 2.º y al 3.º
-  (Diego), y qué pasa con un empate total en puntos y pasos.
-- **Endpoints de La Liga y de Tus Ligas:** sin especificar.
+  (Diego), y qué pasa con un empate total en puntos y pasos. El código usa
+  30 / 20 / 10 y puesto compartido, provisionales.

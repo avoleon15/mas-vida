@@ -13,6 +13,27 @@ class LigaMensual(ModeloBase):
         null=True,
         blank=True
     )
+class PremioPodioLiga(ModeloBase):
+    """Monedas que gana cada puesto del podio de La Liga (1.º, 2.º y 3.º).
+
+    Decidido el 3 oct 2026: solo los 3 primeros ganan monedas. Los montos son
+    provisionales hasta que los defina Diego, y se editan en el admin.
+    """
+    puesto = models.PositiveSmallIntegerField(
+        unique=True,
+        validators=(MinValueValidator(1), MaxValueValidator(3)),
+    )
+    monedas = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["puesto"]
+
+    def __str__(self):
+        return f"Puesto {self.puesto}: {self.monedas} monedas"
+
+
+# Del modelo viejo (premios por percentil, reemplazados el 3 oct 2026 por el
+# podio de PremioPodioLiga). Queda sin uso hasta decidir si se borra.
 class TramoPremio(ModeloBase):
     orden = models.PositiveIntegerField(unique=True)
     percentil_hasta = models.DecimalField(
@@ -44,7 +65,13 @@ class DesgloseLigaMensual(UserIdBase):
         on_delete=models.PROTECT
     )
     pasos_acumulados_mes = models.PositiveIntegerField()
+    # Segundo desempate: a igualdad de puntos y pasos gana quien tenga más workouts.
+    workouts_acumulados_mes = models.PositiveIntegerField(default=0)
     posicion_final = models.PositiveIntegerField(null=True, blank=True)
+    # La Liga compite por puntos (2 oct 2026); los pasos solo desempatan.
+    puntos_mes = models.IntegerField(default=0)
+    # Monedas que se pagaron por el podio (0 fuera del podio).
+    monedas = models.PositiveIntegerField(default=0)
     percentil = models.DecimalField(
         null=True, 
         blank=True,

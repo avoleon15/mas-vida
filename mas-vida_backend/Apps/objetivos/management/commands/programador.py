@@ -1,4 +1,4 @@
-"""Deja corriendo las dos corridas del martes (hora de Guatemala).
+"""Deja corriendo las corridas del objetivo semanal y de La Liga (hora de Guatemala).
 
   python manage.py programador            # se queda corriendo
   python manage.py programador --una-vez  # solo la puesta al día de arranque
@@ -8,6 +8,8 @@ martes) y después espera:
   - martes 00:00 -> cierre: fija el resultado de la semana y paga las monedas
     (el lunes queda para los datos atrasados del domingo)
   - martes 12:00 -> corrección: actualiza los acumulados, no paga ni reabre
+  - día 2, 00:00 -> liga: cierra La Liga del mes anterior y paga el podio
+    (el día 1 queda para los datos atrasados del último día)
 
 Pensado para correr como un servicio aparte (ver compose.yaml).
 """
@@ -18,13 +20,13 @@ from django.core.management.base import BaseCommand
 from django.db import connections
 from django.utils import timezone
 
-from services import goals, programador
+from services import goals, ligas, programador
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Corre el cierre semanal (martes 00:00) y su corrección (martes 12:00)."
+    help = "Corre el cierre semanal (martes 00:00), su corrección (martes 12:00) y el cierre mensual de La Liga."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -42,6 +44,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"Puesta al día: semana {lunes}: {resumen}")
         else:
             self.stdout.write("Puesta al día: no hay semanas pendientes.")
+        for resumen in ligas.ponerse_al_dia(hoy):
+            self.stdout.write(f"Puesta al día: La Liga {resumen['mes']}: {resumen}")
 
         proxima, tipo = programador.proxima_ejecucion(timezone.now())
         self.stdout.write(self.style.SUCCESS(
