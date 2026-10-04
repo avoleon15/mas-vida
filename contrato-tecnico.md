@@ -1420,7 +1420,11 @@ verificación" son el mismo momento.
   Ver sección "Endpoint de resumen del dashboard" arriba para el shape
   completo.
 - **Ledger append-only:** cada acreditación es una fila nueva con la versión
-  de la regla que la generó — nunca `UPDATE` sobre una fila existente. Tipos:
+  de la regla que la generó — nunca `UPDATE` sobre una fila existente.
+  **Se hace cumplir en el código (3 oct):** en `Ledger` (puntos) y
+  `MonedaLedger` (monedas), editar una fila, `update()` y borrar (una fila o en
+  bloque) lanzan `FilaInmutable`. En el admin se pueden ver y **agregar** filas
+  (acreditaciones manuales del demo), nunca editarlas ni borrarlas. Tipos:
   `pasos` e `intensidad` (el primer cálculo del día), `ajuste_manual` (cada
   corrección por datos tardíos, positiva o negativa; el nombre se presta a
   confusión porque también lo usa el sistema), `retroactivo_denegado` y

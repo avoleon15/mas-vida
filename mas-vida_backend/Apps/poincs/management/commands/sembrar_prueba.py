@@ -3,7 +3,8 @@
 Uso:  python manage.py sembrar_prueba
 
 Solo para desarrollo local. Se puede correr las veces que haga falta: si
-el usuario o los puntos ya existen, los actualiza en vez de duplicarlos.
+el usuario o los puntos ya existen, no los duplica. Los puntos de un día ya
+sembrado se dejan como están (el ledger es append-only).
 """
 from datetime import date, timedelta
 
@@ -84,11 +85,13 @@ class Command(BaseCommand):
                 "tope_diario_aplicado": brutos > TOPE_DIARIO,
                 "version_regla": version,
             }
-            Ledger.objects.update_or_create(
+            # get_or_create y no update_or_create: el ledger es append-only.
+            # Si el día ya estaba sembrado se deja como está.
+            Ledger.objects.get_or_create(
                 usuario=usuario, fecha=fecha, tipo="pasos",
                 defaults={"puntos": pasos, **columnas},
             )
-            Ledger.objects.update_or_create(
+            Ledger.objects.get_or_create(
                 usuario=usuario, fecha=fecha, tipo="intensidad",
                 defaults={"puntos": min(brutos, TOPE_DIARIO) - pasos, **columnas},
             )
