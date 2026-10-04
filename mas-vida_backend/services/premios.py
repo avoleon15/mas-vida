@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from Apps.coins.models import Canje, Premio
+from Apps.coins.models import Canje, Patrocinio, Premio
 from services import monedas, polizas
 from services.tiempo import hoy as hoy_guatemala
 
@@ -91,6 +91,46 @@ def canjear(usuario, premio: Premio, ahora: datetime | None = None) -> Canje:
         except IntegrityError:
             # Solo se reintenta si lo que chocó fue el código; otro error sube.
             if not Canje.objects.filter(codigo=codigo).exists():
+                raise
+    raise RuntimeError("No se pudo generar un código de cupón único")
+
+
+def ganar_cupon(
+    usuario, patrocinio: Patrocinio, origen: str, ganado_en: str, ahora: datetime | None = None,
+) -> Canje | None:
+    """Crea el cupón que da un patrocinio (semana o podio de La Liga). No cuesta monedas.
+
+    Un patrocinio da un solo cupón por usuario: si ya lo tiene devuelve None, así
+    que correr el cierre dos veces no duplica. Quien llama decide si el usuario
+    tiene derecho (services.patrocinios).
+    """
+    ahora = ahora or timezone.now()
+    hoy = timezone.localtime(ahora).date()
+
+    for _ in range(5):
+        if Canje.objects.filter(usuario=usuario, patrocinio=patrocinio).exists():
+            return None
+        codigo = _codigo()
+        try:
+            with transaction.atomic():
+                return Canje.objects.create(
+                    usuario=usuario,
+                    premio=patrocinio.premio,
+                    costo_monedas=0,
+                    fecha_canje=ahora,
+                    fecha_expiracion_cupon=hoy + timedelta(days=DIAS_DE_UN_CUPON),
+                    estado=Canje.Estado.ACTIVO,
+                    codigo=codigo,
+                    origen=origen,
+                    ganado_en=ganado_en,
+                    beneficio=patrocinio.cupon,
+                    patrocinio=patrocinio,
+                )
+        except IntegrityError:
+            # Chocó el código (se reintenta) o ya existía este cupón (arriba).
+            if not Canje.objects.filter(codigo=codigo).exists() and not Canje.objects.filter(
+                usuario=usuario, patrocinio=patrocinio,
+            ).exists():
                 raise
     raise RuntimeError("No se pudo generar un código de cupón único")
 
