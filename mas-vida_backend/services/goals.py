@@ -34,7 +34,7 @@ from Apps.activities.models import ResumenDiario
 from Apps.coins.models import MonedaLedger
 from Apps.objetivos.models import CumplimientoSemanal, MetaPasosPorEdad, ObjetivoSemanal, Season
 from Apps.users.models import Usuario
-from services import monedas
+from services import monedas, patrocinios
 from services.daily_scoring import fecha_nacimiento_efectiva
 from services.hearth_rate import calculate_age
 from services.polizas import fecha_corte_sin_retroactivo
@@ -43,6 +43,7 @@ from services.tiempo import (
     fin_semana,
     inicio_semana,
     lunes_de_la_season,
+    numero_semana_en_season,
     numero_season,
     rango_season,
 )
@@ -238,10 +239,12 @@ def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
 
     usuarios = list(Usuario.objects.all())
     avance = _progreso_de_todos(usuarios, objetivo)
+    patrocinio = patrocinios.de_semana(lunes)
+    numero_en_la_season = numero_semana_en_season(lunes)
     # cumplidos = semanas COMPLETADAS (los dos componentes); los pagos cuentan aparte.
     resumen = {
         "evaluados": 0, "cumplidos": 0, "pagos_pasos": 0, "pagos_workouts": 0,
-        "monedas_pagadas": 0, "actualizados": 0,
+        "monedas_pagadas": 0, "actualizados": 0, "cupones": 0,
     }
 
     for usuario in usuarios:
@@ -294,6 +297,12 @@ def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
                 )
                 resumen[clave] += 1
                 resumen["monedas_pagadas"] += pago.acreditadas
+
+            # Semana patrocinada: el cupón de la marca es ADEMÁS de las monedas
+            # y pide completar la semana (los dos componentes).
+            if patrocinio is not None and progreso_usuario.completada:
+                cupon = patrocinios.premiar_semana(usuario, patrocinio, numero_en_la_season)
+                resumen["cupones"] += cupon is not None
 
     # El objetivo de la semana siguiente ya está fijado desde el lunes 00:00 (se
     # crea al pedirlo); esto solo asegura que exista.

@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import goals, monedas
+from services import goals, monedas, patrocinios
 from services.tiempo import hoy, numero_semana_en_season
 
 SIN_PERFIL = {"mensaje": "El usuario autenticado no tiene un perfil asociado."}
@@ -78,8 +78,8 @@ def objetivos_semanas(request):
     Estado de cada una: `completada`, `parcial` (un solo componente),
     `no_cumplida`, `en_curso`, `en_revision` (el lunes, la que terminó el domingo:
     sigue en su margen de gracia hasta el cierre del martes) o `futura`. En las futuras, `acumulados` y
-    `cumplido` van en null. `patrocinador` va en null hasta que exista el
-    endpoint de patrocinios.
+    `cumplido` van en null. `patrocinador` es la marca que compró esa
+    semana (la misma forma que `patrocinio` de La Liga) o null si no tiene.
     """
     try:
         usuario = request.user.usuario
@@ -88,6 +88,7 @@ def objetivos_semanas(request):
 
     fecha = hoy()
     semanas = goals.semanas_de_la_season(usuario, fecha)
+    vendidas = patrocinios.de_semanas([s.objetivo.fecha_inicio for s in semanas])
 
     return Response({
         "season": _season(fecha),
@@ -105,7 +106,7 @@ def objetivos_semanas(request):
                     semana.objetivo.meta_workouts, semana.objetivo.monedas_workouts,
                     semana.workouts, semana.cumplio_workouts,
                 ),
-                "patrocinador": None,
+                "patrocinador": patrocinios.como_json(vendidas.get(semana.objetivo.fecha_inicio)),
             }
             for semana in semanas
         ],
