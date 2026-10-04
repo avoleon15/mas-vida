@@ -52,7 +52,9 @@ def _estado(poliza):
             "prima_anual_gtq": (
                 f"{poliza.prima_anual_gtq:.2f}" if poliza.prima_anual_gtq is not None else None
             ),
-            "fecha_renovacion": _fecha(poliza.fecha_renovacion),
+            # La próxima: si la que dio la aseguradora ya pasó, la póliza se
+            # renovó y la siguiente es un año después.
+            "fecha_renovacion": _fecha(polizas.proxima_renovacion(poliza.fecha_renovacion)),
         },
     }
 

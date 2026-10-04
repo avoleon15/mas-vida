@@ -49,6 +49,33 @@ class FaltaFechaConfirmada(Exception):
     """No se puede verificar sin la fecha de nacimiento que dio la aseguradora."""
 
 
+def _mismo_dia_otro_anio(fecha: date, anio: int) -> date:
+    """La misma fecha en otro año; el 29 de febrero cae en el 28 si no es bisiesto."""
+    try:
+        return fecha.replace(year=anio)
+    except ValueError:
+        return fecha.replace(year=anio, day=28)
+
+
+def proxima_renovacion(fecha_renovacion: date | None, hoy: date | None = None) -> date | None:
+    """La próxima renovación anual a partir de la que dio la aseguradora.
+
+    La póliza se renueva cada año en la misma fecha y no vence (2 oct 2026): si
+    la fecha guardada ya pasó, la renovación siguiente es un año después, y así
+    hasta llegar a hoy o más adelante. El día de la renovación cuenta como
+    "próxima" (todavía no se renovó).
+    """
+    if fecha_renovacion is None:
+        return None
+    hoy = hoy or timezone.localdate()
+    anio = fecha_renovacion.year
+    renovacion = fecha_renovacion
+    while renovacion < hoy:
+        anio += 1
+        renovacion = _mismo_dia_otro_anio(fecha_renovacion, anio)
+    return renovacion
+
+
 def poliza_de(usuario) -> PolizaVinculada | None:
     return PolizaVinculada.objects.filter(usuario=usuario).first()
 

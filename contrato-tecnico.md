@@ -1258,8 +1258,10 @@ nunca se edita a mano.
 `plan`, `prima_anual_gtq` y `fecha_renovacion` son `null` hasta que la
 aseguradora confirma la póliza (y vuelven a `null` si se rechaza).
 `prima_anual_gtq` viaja como **texto con dos decimales** (es dinero: no debe
-pasar por un número de punto flotante). `fecha_renovacion` es la próxima
-renovación anual, no un vencimiento. `verificada` es el único valor que debe usarse
+pasar por un número de punto flotante). `fecha_renovacion` es la **próxima**
+renovación anual, no un vencimiento: se guarda la que dio la aseguradora y, si
+ya pasó, se responde la del año siguiente (y así hasta hoy o después; el 29 de
+febrero cae en el 28 los años que no son bisiestos). `verificada` es el único valor que debe usarse
 para habilitar canje, cashback y La Liga.
 
 ### Datos que entrega la aseguradora (decidido 2 oct 2026)

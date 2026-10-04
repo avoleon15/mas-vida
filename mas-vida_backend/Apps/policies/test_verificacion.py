@@ -23,6 +23,7 @@ from rest_framework.test import APITestCase
 from Apps.policies.models import PolizaVinculada, RegistroAseguradora
 from Apps.users.models import Usuario
 from services import policy_verification as pv
+from services import polizas
 
 CSV_EJEMPLO = Path(__file__).parent / "fixtures" / "registro_aseguradora.csv"
 HOY = datetime.date(2026, 9, 30)
@@ -129,8 +130,19 @@ class VincularPolizaTests(APITestCase):
             "apellido": "Morales",
             "plan": "Plan Plus",
             "prima_anual_gtq": "15000.00",
-            "fecha_renovacion": "2027-01-14",
+            # La próxima renovación desde hoy: 14 ene 2027, o la del año siguiente
+            # si esta prueba corre después de esa fecha.
+            "fecha_renovacion": polizas.proxima_renovacion(D(2027, 1, 14)).isoformat(),
         })
+
+    def test_el_estado_devuelve_la_proxima_renovacion_aunque_la_guardada_ya_paso(self):
+        usuario, token = self.nuevo_usuario()
+        self.vincular(token, "POL-100004", "1990-05-30")  # renovación guardada: 28 feb 2026
+        self.assertEqual(usuario.poliza.fecha_renovacion, D(2026, 2, 28))  # se guarda tal cual
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        devuelta = self.client.get("/api/v1/polizas/estado").json()["poliza"]["fecha_renovacion"]
+        self.assertEqual(devuelta, polizas.proxima_renovacion(D(2026, 2, 28)).isoformat())
+        self.assertGreaterEqual(D.fromisoformat(devuelta), datetime.date.today())
 
     def test_volver_a_vincular_tras_un_rechazo_no_arrastra_datos_viejos(self):
         usuario, token = self.nuevo_usuario()
@@ -587,3 +599,24 @@ class MigracionPolizaAnualTests(TestCase):
         r.refresh_from_db()
         self.assertEqual(str(r.prima_anual_gtq), "15000.00")
         self.assertEqual(r.estado, "vigente")
+
+
+class ProximaRenovacionTests(SimpleTestCase):
+    def test_si_no_paso_es_la_misma(self):
+        self.assertEqual(polizas.proxima_renovacion(D(2027, 1, 14), hoy=D(2026, 10, 3)), D(2027, 1, 14))
+
+    def test_el_dia_de_la_renovacion_todavia_es_la_proxima(self):
+        self.assertEqual(polizas.proxima_renovacion(D(2027, 1, 14), hoy=D(2027, 1, 14)), D(2027, 1, 14))
+
+    def test_si_ya_paso_es_un_anio_despues(self):
+        self.assertEqual(polizas.proxima_renovacion(D(2026, 2, 28), hoy=D(2026, 10, 3)), D(2027, 2, 28))
+
+    def test_si_pasaron_varios_anios_salta_los_que_hagan_falta(self):
+        self.assertEqual(polizas.proxima_renovacion(D(2023, 5, 1), hoy=D(2026, 10, 3)), D(2027, 5, 1))
+
+    def test_29_de_febrero_cae_en_28_si_el_anio_no_es_bisiesto(self):
+        self.assertEqual(polizas.proxima_renovacion(D(2024, 2, 29), hoy=D(2024, 3, 1)), D(2025, 2, 28))
+        self.assertEqual(polizas.proxima_renovacion(D(2024, 2, 29), hoy=D(2027, 6, 1)), D(2028, 2, 29))
+
+    def test_sin_fecha_devuelve_none(self):
+        self.assertIsNone(polizas.proxima_renovacion(None))
