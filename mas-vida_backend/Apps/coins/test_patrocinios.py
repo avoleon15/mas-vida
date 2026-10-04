@@ -267,6 +267,75 @@ class DestacadoTests(_ConToken, APITestCase):
         self.assertEqual(self._destacados()["Ookii"], False)
 
 
+class PatrociniosVigentesTests(_ConToken, APITestCase):
+    url = "/api/v1/patrocinios"
+
+    def setUp(self):
+        super().setUp()
+        self.premio = comercio("Ookii")
+        self.lunes = inicio_semana(hoy())
+
+    def test_pide_token(self):
+        self.client.credentials()
+        self.assertEqual(self.client.get(self.url).status_code, 401)
+
+    def test_sin_perfil_da_403(self):
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username="sinperfil", password="clave-segura-1")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_sin_patrocinios_las_tres_listas_vienen_vacias(self):
+        self.assertEqual(self.get(), {"semanas": [], "ligas": [], "destacados": []})
+
+    def test_trae_lo_vendido_por_tipo_con_la_forma_de_la_app(self):
+        vender_semana(self.lunes, self.premio, acento="#8C5A3C")
+        mes = hoy().replace(day=1)
+        fin = (mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        vender(LIGA, mes, fin, self.premio, cupon="2x1 en sushi")
+        vender(DESTACADO, hoy(), hoy() + timedelta(days=9), self.premio, cupon="")
+        datos = self.get()
+        self.assertEqual(datos["semanas"], [{
+            "fecha_inicio": self.lunes.isoformat(),
+            "fecha_fin": (self.lunes + timedelta(days=6)).isoformat(),
+            "patrocinador": patrocinios.como_json(Patrocinio.objects.get(tipo=SEMANA)),
+        }])
+        self.assertEqual(datos["semanas"][0]["patrocinador"]["acento"], "#8C5A3C")
+        self.assertEqual(datos["ligas"][0]["arranca"], mes.isoformat())
+        self.assertEqual(datos["ligas"][0]["cierra"], fin.isoformat())
+        self.assertEqual(datos["ligas"][0]["patrocinio"]["cupon"], "2x1 en sushi")
+        self.assertEqual(datos["destacados"], [{
+            "premio_id": str(self.premio.pk),
+            "desde": hoy().isoformat(),
+            "hasta": (hoy() + timedelta(days=9)).isoformat(),
+        }])
+
+    def test_incluye_lo_futuro_y_deja_fuera_lo_que_ya_termino(self):
+        vender_semana(self.lunes - timedelta(days=7), self.premio)                  # ya terminó
+        vender_semana(self.lunes + timedelta(days=14), comercio("Futura"))
+        vender(DESTACADO, hoy() - timedelta(days=9), hoy() - timedelta(days=1), self.premio)
+        datos = self.get()
+        self.assertEqual(
+            [s["fecha_inicio"] for s in datos["semanas"]],
+            [(self.lunes + timedelta(days=14)).isoformat()],
+        )
+        self.assertEqual(datos["destacados"], [])
+
+    def test_la_semana_en_curso_y_el_ultimo_dia_de_un_destacado_todavia_cuentan(self):
+        vender_semana(self.lunes, self.premio)
+        vender(DESTACADO, hoy() - timedelta(days=3), hoy(), self.premio)
+        datos = self.get()
+        self.assertEqual(len(datos["semanas"]), 1)
+        self.assertEqual(len(datos["destacados"]), 1)
+
+    def test_lo_apagado_no_sale_y_va_ordenado_por_fecha(self):
+        vender_semana(self.lunes + timedelta(days=7), comercio("Dos"))
+        vender_semana(self.lunes, comercio("Uno"))
+        vender_semana(self.lunes + timedelta(days=14), comercio("Apagada"), activo=False)
+        marcas = [s["patrocinador"]["marca"] for s in self.get()["semanas"]]
+        self.assertEqual(marcas, ["Uno", "Dos"])
+
+
 class CuponDeSemanaTests(TestCase):
     def setUp(self):
         preparar_version_de_reglas()

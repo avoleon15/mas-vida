@@ -182,6 +182,20 @@ def canjear_premio(request, premio_id):
 
 
 @api_view(["GET"])
+def patrocinios_vigentes(request):
+    """Lo que las marcas tienen comprado y todavía no terminó (hoy o más adelante).
+
+    Las semanas y los meses de La Liga traen la marca en la misma forma que
+    `patrocinador` de objetivos/semanas y `patrocinio` de ligas; los destacados
+    dicen qué premio y hasta cuándo. Es lo mismo que ya viaja dentro de esas
+    pantallas, en un solo lugar.
+    """
+    if _usuario(request) is None:
+        return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
+    return Response(patrocinios.vigentes(hoy()))
+
+
+@api_view(["GET"])
 def mis_cupones(request):
     """Todos los cupones del usuario (tienda, semanas y podios patrocinados).
 

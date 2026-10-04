@@ -49,6 +49,44 @@ def destacados(hoy: date) -> set[int]:
     )
 
 
+def vigentes(hoy: date) -> dict:
+    """Todo lo vendido que todavía no terminó (hoy o más adelante), por tipo."""
+    todos = _activos_desde(hoy)
+    return {
+        "semanas": [
+            {
+                "fecha_inicio": p.desde.isoformat(),
+                "fecha_fin": p.hasta.isoformat(),
+                "patrocinador": como_json(p),
+            }
+            for p in todos if p.tipo == Patrocinio.Tipo.SEMANA
+        ],
+        "ligas": [
+            {
+                "arranca": p.desde.isoformat(),
+                "cierra": p.hasta.isoformat(),
+                "patrocinio": como_json(p),
+            }
+            for p in todos if p.tipo == Patrocinio.Tipo.LIGA
+        ],
+        "destacados": [
+            {
+                "premio_id": str(p.premio_id),
+                "desde": p.desde.isoformat(),
+                "hasta": p.hasta.isoformat(),
+            }
+            for p in todos if p.tipo == Patrocinio.Tipo.DESTACADO
+        ],
+    }
+
+
+def _activos_desde(hoy: date) -> list[Patrocinio]:
+    return list(
+        Patrocinio.objects.filter(activo=True, hasta__gte=hoy)
+        .select_related("premio").order_by("desde", "id")
+    )
+
+
 def como_json(patrocinio: Patrocinio | None) -> dict | None:
     """Lo que lee la app (`Patrocinio.desdeJson` en Dart); null si no hay marca."""
     if patrocinio is None:
