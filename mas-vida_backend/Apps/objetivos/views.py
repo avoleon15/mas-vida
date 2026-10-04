@@ -3,48 +3,109 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import goals
-from services.tiempo import hoy
+from services import goals, monedas
+from services.tiempo import hoy, numero_semana_en_season
+
+SIN_PERFIL = {"mensaje": "El usuario autenticado no tiene un perfil asociado."}
+
+
+def _componente(meta, monedas_que_paga, acumulados=None, cumplido=None):
+    """Un componente del objetivo (pasos o workouts) tal como lo ve la app."""
+    return {
+        "meta": meta,
+        "monedas": monedas_que_paga,
+        "acumulados": acumulados,
+        "cumplido": cumplido,
+    }
+
+
+def _season(fecha):
+    season = goals.season_de(fecha)
+    semanas = ((season.fecha_fin - season.fecha_inicio).days + 1) // 7
+    return {
+        "numero": season.numero,
+        "anio": season.anio,
+        "fecha_inicio": season.fecha_inicio.isoformat(),
+        "fecha_cierre": season.fecha_fin.isoformat(),
+        "semanas": semanas,
+        # Las monedas se reinician al cerrar la season: se avisa 7 días antes.
+        "dias_para_cierre": monedas.dias_para_fin_de_season(fecha),
+        "aviso_fin_de_season": monedas.aviso_fin_de_season(fecha),
+    }
 
 
 @api_view(["GET"])
-def retos_estado(request):
-    """Objetivo de la semana en curso, avance del usuario y season (demo 1).
+def objetivos_estado(request):
+    """Objetivo de la semana en curso y el avance del usuario en cada componente.
 
-    El path conserva "retos" aunque el concepto ya se llama objetivo semanal
-    (contrato técnico, puntos abiertos). El objetivo es el mismo para todos;
-    `progreso` es del usuario que pregunta. `historial_seasons` va vacío en el
-    demo: mientras no haya progresión no hay objetivo máximo que registrar.
+    Cada componente (pasos y workouts) dice su meta, cuántas monedas paga y si
+    ya se cumplió; `completada` es true solo con los dos. La meta de pasos es la
+    del rango de edad del usuario. `historial_seasons` va vacío en el demo.
     """
     try:
         usuario = request.user.usuario
     except Usuario.DoesNotExist:
-        return Response(
-            {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
 
     fecha = hoy()
     objetivo = goals.objetivo_de_la_semana(fecha)
     avance = goals.progreso(usuario, objetivo)
-    season = goals.season_de(fecha)
 
     return Response({
-        "objetivo": {
-            "meta_pasos": objetivo.meta_pasos,
-            "meta_workouts": objetivo.meta_workouts,
-            "monedas_al_cumplir": goals.MONEDAS_POR_OBJETIVO,
+        "semana": {
+            "numero": numero_semana_en_season(fecha),
             "fecha_inicio": objetivo.fecha_inicio.isoformat(),
             "fecha_fin": objetivo.fecha_fin.isoformat(),
         },
-        "progreso": {
-            "pasos_acumulados": avance.pasos,
-            "workouts_acumulados": avance.workouts,
-            "cumplido": avance.cumplido,
-        },
-        "season": {
-            "numero": season.numero,
-            "fecha_cierre": season.fecha_fin.isoformat(),
-        },
+        "pasos": _componente(
+            avance.meta_pasos_efectiva, objetivo.monedas_pasos,
+            avance.pasos, avance.cumplio_pasos,
+        ),
+        "workouts": _componente(
+            objetivo.meta_workouts, objetivo.monedas_workouts,
+            avance.workouts, avance.cumplio_workouts,
+        ),
+        "completada": avance.completada,
+        "season": _season(fecha),
         "historial_seasons": [],
+    })
+
+
+@api_view(["GET"])
+def objetivos_semanas(request):
+    """Todas las semanas de la season en curso, para la vista tipo "battle pass".
+
+    Estado de cada una: `completada`, `parcial` (un solo componente),
+    `no_cumplida`, `en_curso` o `futura`. En las futuras, `acumulados` y
+    `cumplido` van en null. `patrocinador` va en null hasta que exista el
+    endpoint de patrocinios.
+    """
+    try:
+        usuario = request.user.usuario
+    except Usuario.DoesNotExist:
+        return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
+
+    fecha = hoy()
+    semanas = goals.semanas_de_la_season(usuario, fecha)
+
+    return Response({
+        "season": _season(fecha),
+        "semanas": [
+            {
+                "numero": semana.numero,
+                "fecha_inicio": semana.objetivo.fecha_inicio.isoformat(),
+                "fecha_fin": semana.objetivo.fecha_fin.isoformat(),
+                "estado": semana.estado,
+                "pasos": _componente(
+                    semana.meta_pasos, semana.objetivo.monedas_pasos,
+                    semana.pasos, semana.cumplio_pasos,
+                ),
+                "workouts": _componente(
+                    semana.objetivo.meta_workouts, semana.objetivo.monedas_workouts,
+                    semana.workouts, semana.cumplio_workouts,
+                ),
+                "patrocinador": None,
+            }
+            for semana in semanas
+        ],
     })

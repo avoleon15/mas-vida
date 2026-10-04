@@ -13,6 +13,12 @@ los últimos 7 días, con puntos. El envío en **segundo plano** y las
 del servidor cuenta como enviada. El wrapper de Dart ya tiene `actualizarSesion`.
 Ver "Cuándo se manda cada día" y "Puntos abiertos".
 
+**Actualizado el 3 oct 2026** (objetivo semanal por componente, backend): cada
+componente paga sus monedas por separado y la meta de pasos sale de la tabla por
+edad. `GET /api/v1/retos/estado` **se renombra** a `GET /api/v1/objetivos/estado`,
+con respuesta nueva, y se agrega `GET /api/v1/objetivos/semanas` para la vista
+tipo "battle pass". Ver "Respuesta de `GET /api/v1/objetivos/estado`".
+
 **Actualizado el 2 oct 2026** (reunión del equipo): inicio de sesión con Google y
 Apple; el objetivo semanal paga monedas **por componente** y su meta de pasos
 depende de la **edad**; vista de semanas tipo "battle pass"; **seasons de 13
@@ -541,6 +547,14 @@ cumpla cada uno.
 - Los valores (metas y monedas) viven en una tabla del backend, editable a
   mano — sin cálculo.
 
+**Hecho en el código (3 oct):** `services/goals.py`. La meta de pasos sale de la
+tabla `MetaPasosPorEdad` (editable en el admin) con la edad del usuario **el
+lunes de esa semana**: quien cumple años a media semana conserva la meta de su
+rango anterior hasta la semana siguiente. La meta de workouts y las monedas de
+cada componente viven en `ObjetivoSemanal`, también editables, y cada semana
+nueva copia las de la anterior. Un componente con 0 monedas no escribe nada en
+el ledger.
+
 ### Meta de pasos por edad — tabla provisional (2 oct 2026)
 
 | Edad | Pasos al día | Meta semanal de pasos |
@@ -571,8 +585,9 @@ lo que recomienda la evidencia de salud:
 **Es provisional:** después de 2 a 4 semanas de piloto se ajusta con los pasos
 reales de los usuarios de cada rango, que miden exactamente como mide la app.
 La edad sale de la fecha confirmada por la aseguradora si hay póliza
-verificada; si no, de la del registro. **[PENDIENTE] (Luis):** el código usa hoy
-una sola meta de 30.000 para todos.
+verificada; si no, de la del registro. **Hecho en el código (3 oct):** la tabla
+se carga con la migración `objetivos/0002`. Un menor de 18 usa, mientras no se
+decida otra cosa, la fila de 18 a 29 (ver "Puntos abiertos").
 
 ### Vista de semanas tipo "battle pass" (decidido 2 oct 2026)
 
@@ -583,9 +598,9 @@ monedas de cada componente, estado (completada, un componente cumplido, en
 curso o futura) y el **logo del patrocinador** si esa semana está vendida. Lo
 pidió la reunión para mostrar mejor la marca.
 
-**[PENDIENTE] (Luis):** hoy `GET /api/v1/retos/estado` devuelve solo la semana en
-curso. Falta un endpoint (o ampliar este) que devuelva la lista de semanas de
-la season, y el endpoint de patrocinios, que sigue pendiente desde septiembre.
+**Hecho en el código (3 oct):** `GET /api/v1/objetivos/semanas` (ver abajo).
+**[PENDIENTE] (Luis):** el endpoint de patrocinios, pendiente desde septiembre;
+hasta entonces `patrocinador` viene en `null` en todas las semanas.
 
 ### Diseño completo — cómo se mueve el objetivo semanal (se mantiene; vuelve después del demo)
 
@@ -628,8 +643,8 @@ lunes 4 ene 2027.
 **Hecho en el código (2 oct):** `services/tiempo.py` calcula las seasons por
 semanas ISO (`numero_season`, `anio_season` y `rango_season`). El año de la
 season es el **año ISO**: el 3 ene 2027 todavía es de la season 4 de 2026, y el
-29 dic 2025 ya es de la season 1 de 2026. `GET /api/v1/retos/estado` devuelve
-esa season y su `fecha_cierre` (domingo de cierre). La tabla `Season` se llena
+29 dic 2025 ya es de la season 1 de 2026. `GET /api/v1/objetivos/estado` devuelve
+esa season, su `fecha_cierre` (domingo de cierre) y cuántas semanas tiene. La tabla `Season` se llena
 sola al pedir la season, y corrige las filas que se hayan guardado con la regla
 vieja de trimestres.
 
@@ -661,8 +676,9 @@ vieja de trimestres.
   reinicia y después entra lo nuevo.
 - Las monedas se acreditan **sin tope**.
 - El servicio calcula cuántos días faltan para el cierre y si ya toca el aviso
-  (desde 7 días antes, inclusive el último domingo). La app puede mostrarlo con la
-  `fecha_cierre` de `retos/estado`.
+  (desde 7 días antes, inclusive el último domingo). Los dos vienen en
+  `season.dias_para_cierre` y `season.aviso_fin_de_season` de
+  `objetivos/estado` y `objetivos/semanas`.
 - **[PENDIENTE]** el endpoint de saldo, que es lo que la app lee para mostrar las
   monedas y el aviso, va con el paquete de premios y canje.
 
@@ -690,56 +706,105 @@ no se pierde progreso acumulado, solo una semana de avance.
 
 **Por qué esto no viaja en el JSON #2:** cambia una vez por semana (o una vez
 por season), no en cada sync — incluirlo repetiría el mismo dato sin
-necesidad. Daniel lo consulta por HTTP directo: `GET /api/v1/retos/estado`
-(tickets L11 y D12), que también debe devolver la season actual, su fecha de
-cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
-"retos" — ver "Puntos abiertos".*
+necesidad. Daniel lo consulta por HTTP directo: `GET /api/v1/objetivos/estado`
+(tickets L11 y D12), que también devuelve la season actual, su fecha de
+cierre, y el historial de seasons pasadas. *Hasta el 3 oct se llamaba
+`GET /api/v1/retos/estado`; se renombró junto con el cambio de respuesta, antes
+de que la app lo consumiera. La ruta vieja ya no existe (404).*
 
-**Respuesta de `GET /api/v1/retos/estado` (demo 1):**
+**Respuesta de `GET /api/v1/objetivos/estado`** (con token; desde el 3 oct):
 
 ```json
 {
-  "objetivo": {
-    "meta_pasos": 30000,
-    "meta_workouts": 1,
-    "monedas_al_cumplir": 20,
-    "fecha_inicio": "2026-09-21",
-    "fecha_fin": "2026-09-27"
+  "semana": { "numero": 2, "fecha_inicio": "2026-10-05", "fecha_fin": "2026-10-11" },
+  "pasos": { "meta": 45000, "monedas": 5, "acumulados": 46000, "cumplido": true },
+  "workouts": { "meta": 1, "monedas": 5, "acumulados": 0, "cumplido": false },
+  "completada": false,
+  "season": {
+    "numero": 4,
+    "anio": 2026,
+    "fecha_inicio": "2026-09-28",
+    "fecha_cierre": "2027-01-03",
+    "semanas": 14,
+    "dias_para_cierre": 88,
+    "aviso_fin_de_season": false
   },
-  "progreso": {
-    "pasos_acumulados": 12400,
-    "workouts_acumulados": 0,
-    "cumplido": false
-  },
-  "season": { "numero": 3, "fecha_cierre": "2026-09-27" },
   "historial_seasons": []
 }
 ```
 
-`objetivo.monedas_al_cumplir` es lo que paga **hoy el código**: 20 monedas por
-cumplir los dos componentes. **[PENDIENTE] (2 oct):** pasa a pagarse por
-componente (5 + 5 provisional), así que la respuesta tiene que traer las
-monedas de cada componente y, en `progreso`, si se cumplió cada uno además de
-si la semana quedó completada. Las monedas ya no tienen tope y caducan al
-cerrar la season (ver "Monedas y seasons").
+- Todo es del usuario que pregunta. `semana.numero` es la semana **dentro de la
+  season** (1 a 13, o 14).
+- `pasos.meta` es la del **rango de edad del usuario** (ver "Meta de pasos por
+  edad"); `workouts.meta` es igual para todos. La app **no calcula** ninguna de
+  las dos.
+- `monedas` es lo que paga **ese componente** al cerrar la semana, aunque el
+  otro no se cumpla. `cumplido` dice si el componente ya alcanzó su meta.
+- `completada` es `true` solo con los dos componentes cumplidos.
+- `season.anio` es el año ISO de la season; `dias_para_cierre` cuenta hasta el
+  domingo de cierre (0 ese domingo) y `aviso_fin_de_season` se pone en `true`
+  desde 7 días antes: es el aviso de que las monedas se reinician.
+- `historial_seasons` viene vacío en el demo (no hay objetivo máximo que
+  registrar mientras no haya progresión).
+- `403` si la cuenta no tiene perfil de usuario; `401` sin token.
 
-`progreso` es del usuario que pregunta. La meta de workouts es igual para todos;
-la de pasos, desde el 2 oct, depende del rango de edad (**[PENDIENTE]** en el
-código, que hoy usa la misma para todos). `historial_seasons` viene vacío en el demo (no
-hay objetivo máximo que registrar mientras no haya progresión).
+**Respuesta de `GET /api/v1/objetivos/semanas`** (con token; vista tipo "battle
+pass"): la misma `season` y **todas las semanas de la season en curso**, en
+orden.
 
-**Cómo está construido hoy (backend, 1 oct):**
+```json
+{
+  "season": { "numero": 4, "anio": 2026, "fecha_inicio": "2026-09-28", "...": "..." },
+  "semanas": [
+    {
+      "numero": 1,
+      "fecha_inicio": "2026-09-28",
+      "fecha_fin": "2026-10-04",
+      "estado": "parcial",
+      "pasos": { "meta": 45000, "monedas": 5, "acumulados": 46000, "cumplido": true },
+      "workouts": { "meta": 1, "monedas": 5, "acumulados": 0, "cumplido": false },
+      "patrocinador": null
+    },
+    {
+      "numero": 3,
+      "fecha_inicio": "2026-10-12",
+      "fecha_fin": "2026-10-18",
+      "estado": "futura",
+      "pasos": { "meta": 45000, "monedas": 5, "acumulados": null, "cumplido": null },
+      "workouts": { "meta": 1, "monedas": 5, "acumulados": null, "cumplido": null },
+      "patrocinador": null
+    }
+  ]
+}
+```
 
-- Las metas de cada semana viven en la tabla `ObjetivoSemanal` y se editan a
-  mano en el admin. Cada semana nueva copia las metas de la anterior; la
-  primera arranca con 30.000 pasos y 1 workout.
-- `progreso` se calcula en vivo: la suma de `pasos_totales_dia` y de workouts
+- `estado`: `completada` (los dos componentes), `parcial` (uno solo),
+  `no_cumplida` (ninguno), `en_curso` o `futura`.
+- Las semanas cerradas muestran lo que quedó guardado al cerrarlas, **con la
+  meta que se usó ese día** aunque después se edite la tabla. Si el cierre
+  todavía no corrió, se calculan en vivo.
+- En las `futura`, `acumulados` y `cumplido` vienen en `null`: solo se conocen
+  la meta y las monedas, que todavía se pueden editar en el admin.
+- `patrocinador` viene en `null` hasta que exista el endpoint de patrocinios.
+
+**Cómo está construido hoy (backend, 3 oct):**
+
+- La meta de pasos sale de `MetaPasosPorEdad`; la de workouts y las monedas de
+  cada componente, de `ObjetivoSemanal`. Todo se edita a mano en el admin. Cada
+  semana nueva copia la meta de workouts y las monedas de la anterior; la
+  primera arranca con 1 workout y 5 + 5 monedas.
+- El avance se calcula en vivo: la suma de `pasos_totales_dia` y de workouts
   de `resumen_diario` de lunes a domingo.
-- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del lunes** fija
-  `cumplido` de la semana que terminó y paga `monedas_al_cumplir` a quien
-  cumplió; con `--correccion`, a las **12:00**, solo actualiza los acumulados
-  (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces. Lo
-  dispara el servicio `programador` (ver "Cierre semanal programado").
+- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del lunes** guarda,
+  por usuario, la meta de pasos que se usó, si cumplió cada componente y si
+  completó la semana, y **paga cada componente cumplido por separado** (una fila
+  `objetivo_cumplido` por componente). Con `--correccion`, a las **12:00**, solo
+  actualiza los acumulados (no cambia el resultado ni paga). Correrlo dos veces
+  no paga dos veces. Lo dispara el servicio `programador` (ver "Cierre semanal
+  programado").
+- Las semanas que se cerraron antes del 3 oct (cuando se pagaba todo junto) se
+  completan con la migración `objetivos/0002`: si estaban cumplidas quedan con
+  los dos componentes cumplidos; las monedas que ya se pagaron no se tocan.
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
   **gastarlas**. Sin tope, y caducan al cerrar la season (hecho el 2 oct; ver
   "Monedas y seasons").
@@ -1523,7 +1588,8 @@ verificación" son el mismo momento.
   pantalla, y eso también corre el `main()` de Flutter (carga de datos, sesión,
   relevo de semana). Habrá que revisar que sea seguro y liviano.
 - El **objetivo semanal** no viene en la respuesta del sync — pedirlo aparte
-  con `GET /api/v1/retos/estado`. No confundirlo con `nivel` (el anual, de
+  con `GET /api/v1/objetivos/estado` (antes `retos/estado`, que ya no existe), y
+  las semanas de la season con `GET /api/v1/objetivos/semanas`. No confundirlo con `nivel` (el anual, de
   cashback) que sí viene en la respuesta del sync.
 - **Objetivos semanales (D12) — demo 1:** meta de pasos + meta de workouts de
   la semana, con el progreso del usuario en cada una. **Desde el 2 oct:** cada
@@ -1557,7 +1623,7 @@ verificación" son el mismo momento.
   - **Objetivo semanal:** vista tipo "battle pass" con las semanas de la season
     en scroll horizontal.
   - **Monedas:** sin tope; se quita el aviso de 80 y se avisa 7 días antes de
-    que termine la season (la fecha de cierre ya viene en `retos/estado`).
+    que termine la season (`season.aviso_fin_de_season` de `objetivos/estado`).
   - **Mi Plan:** la gráfica de nivel y la de barras se unen, con el cashback en
     quetzales debajo.
   - **Premios:** lista desplegable con los cupones usados y vencidos.
@@ -1730,12 +1796,9 @@ verificación" son el mismo momento.
 - **Metas del objetivo semanal:** la tabla de pasos por edad es provisional
   (ver "Meta de pasos por edad"); falta ajustarla con 2 a 4 semanas de datos
   del piloto. Falta decidir cuántos workouts y qué meta tiene un menor de 18
-  (la tabla empieza en 18). (Qué es un
+  (la tabla empieza en 18; mientras tanto el código le da la de 18 a 29). (Qué es un
   workout ya está decidido: cualquier entrenamiento con ritmo cardíaco, de
   cualquier duración.)
 - **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
   y qué premio le toca a cada tramo (Diego).
 - **Endpoints de La Liga y de Tus Ligas:** sin especificar.
-- **Nombre del path `GET /api/v1/retos/estado`:** conserva "retos" aunque el
-  concepto ya se llama objetivo semanal. Decidir con Luis si se renombra
-  (p. ej. `/objetivos/estado`) antes de que Daniel lo consuma.
