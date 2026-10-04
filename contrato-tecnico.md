@@ -7,6 +7,11 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 **Actualizado el 3 oct 2026** (La Liga): las monedas de La Liga van a **los 3
 primeros** del mes, no por percentil. Ver "La Liga y Tus Ligas".
 
+**Actualizado el 3 oct 2026** (premios y canje, backend): endpoints de saldo de
+monedas, catálogo, canje y cupones. Canjear exige póliza verificada y descuenta
+las monedas y crea el cupón en una sola transacción. Ver "Premios, canje y
+cupones".
+
 **Actualizado el 3 oct 2026** (sincronización): Swift ya no hace un backfill de
 una sola vez: **cada vez que la app se abre** (y al iniciar sesión y al dar el
 permiso de Salud) manda **desde el último día enviado hasta hoy**; la primera vez,
@@ -683,8 +688,8 @@ vieja de trimestres.
   (desde 7 días antes, inclusive el último domingo). Los dos vienen en
   `season.dias_para_cierre` y `season.aviso_fin_de_season` de
   `objetivos/estado` y `objetivos/semanas`.
-- **[PENDIENTE]** el endpoint de saldo, que es lo que la app lee para mostrar las
-  monedas y el aviso, va con el paquete de premios y canje.
+- **Hecho (3 oct):** `GET /api/v1/monedas/saldo`, que es lo que la app lee para
+  mostrar las monedas y el aviso. Ver "Premios, canje y cupones".
 
 ### Ciclos y cortes
 
@@ -1537,8 +1542,9 @@ verificación" son el mismo momento.
   - ~~Póliza: no rechazar por la fecha de renovación, y guardar y devolver
     nombre, apellido, plan, prima y fecha de renovación~~ — **hecho** (3 oct):
     ver "Datos que entrega la aseguradora".
-  - Endpoints nuevos: cashback en quetzales, cupones (activos, usados y
-    vencidos) y patrocinios.
+  - Endpoints nuevos: ~~cupones (activos, usados y vencidos)~~ — **hecho**
+    (3 oct): ver "Premios, canje y cupones"; faltan cashback en quetzales y
+    patrocinios.
   - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
     (hoy por año calendario), y prima anual en el registro de la aseguradora.
 - **Sincronización (3 oct) [PENDIENTE]:** el margen de gracia del cierre
@@ -1691,6 +1697,129 @@ verificación" son el mismo momento.
 
 ---
 
+## Premios, canje y cupones (3 oct 2026)
+
+Todo con token (`Authorization: Token <clave>`); `401` sin él y `403` si la
+cuenta no tiene perfil de usuario. **La forma sigue la del mock de la app**
+(`premios.json`) para que Daniel cambie el origen de los datos sin tocar los
+modelos; los `id` son texto.
+
+### `GET /api/v1/monedas/saldo`
+
+```json
+{
+  "saldo": 35,
+  "vence": "2027-01-03",
+  "dias_para_cierre": 88,
+  "aviso_fin_de_season": false,
+  "puede_canjear": true,
+  "season": { "numero": 4, "anio": 2026, "monedas_ganadas": 50, "semanas_completas": 2 }
+}
+```
+
+- `vence` es el domingo en que cierra la season: ese día todavía se pueden usar
+  y al siguiente el saldo vuelve a 0. `aviso_fin_de_season` es `true` desde 7
+  días antes (el aviso de que las monedas se reinician).
+- `puede_canjear` es `false` sin póliza verificada (sin póliza, pendiente o
+  rechazada): las monedas se ganan igual, pero no se gastan. La app lo usa para
+  el candado del botón de compra.
+- `season.monedas_ganadas` suma lo ganado en la season (no baja al gastar) y
+  `semanas_completas` cuenta las semanas con los dos objetivos cumplidos: son
+  los datos de la hoja de la temporada.
+
+### `GET /api/v1/premios`
+
+```json
+{
+  "categorias": ["Todos", "Cafecitos", "Restaurantes"],
+  "premios": [{
+    "id": "7", "nombre": "Ookii", "zona": "Guatemala", "categoria": "Restaurantes",
+    "descripcion": "2x1 en sushi", "detalle": "...", "condiciones": "...",
+    "costo_monedas": 40, "vence": "2026-12-31",
+    "foto": "assets/img/premios/restaurantes/ookii.webp", "fondo": null,
+    "destacado": false
+  }]
+}
+```
+
+- Solo salen los premios **activos** y dentro de su fecha de canje. El catálogo
+  se ve **completo con o sin póliza**.
+- `vence` es el último día para canjearlo y puede venir en **`null`** (premio
+  sin fecha). `foto` y `fondo` vienen en `null` si el premio no tiene logo o
+  usa fondo blanco: el catálogo tiene que seguir saliendo con el placeholder.
+- `destacado` va siempre en `false` hasta que exista el endpoint de
+  patrocinios.
+- `categorias` empieza con `"Todos"` y sigue con las que tengan los premios
+  que salen, en orden alfabético.
+
+### `POST /api/v1/premios/<id>/canjear`
+
+Sin cuerpo. Canjea el premio con las monedas del usuario y devuelve **201** con
+el cupón y el saldo que queda:
+
+```json
+{ "cupon": { "...": "ver abajo" }, "saldo": 60 }
+```
+
+| Código | `error` | Cuándo |
+|---|---|---|
+| 403 | `poliza_no_verificada` | Sin póliza verificada. No se toca nada. |
+| 404 | — | El premio no existe. |
+| 409 | `premio_no_disponible` | Está apagado o ya pasó su fecha de canje. |
+| 409 | `saldo_insuficiente` | No alcanzan las monedas; trae `saldo` y `costo`. |
+
+- El descuento (una fila `canje` negativa en el ledger) y el cupón se escriben
+  **en la misma transacción**: nunca queda uno sin el otro.
+- El cupón **caduca a los 60 días** del canje (hora de Guatemala), aparte de
+  las monedas. El código es único, con la forma `MV-XXXX-XXXX` (sin 0, O, 1, I
+  ni L, para que se lea y se teclee bien en caja).
+- Se puede canjear el mismo premio más de una vez; cada canje es otro cupón.
+- Un premio con costo 0 (promoción gratis) se canjea igual, sin mover el ledger.
+- Los canjes que existían antes del 3 oct reciben un código al migrar
+  (`coins/0002`).
+
+### `GET /api/v1/cupones`
+
+```json
+{
+  "cupones": [{
+    "id": "12", "comercio": "Ookii", "beneficio": "2x1 en sushi",
+    "codigo": "MV-OK41-7XQ2", "origen": "tienda",
+    "canjeado": "2026-10-03", "vence": "2026-12-02", "dias_para_vencer": 60,
+    "estado": "activo", "foto": null, "fondo": null,
+    "costo_monedas": 40, "ganado_en": null, "usado_el": null
+  }],
+  "por_usar": 1
+}
+```
+
+- Trae **todos** los cupones del usuario en una lista: `origen` es `tienda`
+  (comprado con monedas), `semana` o `liga` (ganados en una semana o un podio
+  patrocinados). Primero los activos —el que vence antes arriba— y después los
+  usados y vencidos, del más reciente al más viejo. La app arma "Mis cupones"
+  y el desplegable de usados y vencidos con `estado`.
+- `estado`: `activo`, `usado` o `vencido`. **El servidor lo calcula**: un
+  cupón activo pasa a `vencido` al día siguiente de su `vence` (el último día
+  todavía vale). `dias_para_vencer` es 0 en los que no están activos.
+- `costo_monedas` es `null` en los que se ganaron; `ganado_en` ("Semana 1")
+  solo viene en esos.
+- `por_usar` cuenta los activos (la píldora de la pestaña).
+
+### Admin
+
+- **Premios:** se crean y editan a mano (nombre, comercio, categoría, costo,
+  detalle, condiciones, logo, fondo, fecha límite y `activo`). Apagar un premio
+  lo saca del catálogo sin borrarlo: los cupones ya canjeados siguen
+  apuntando a él.
+- **Cupones:** acción "Marcar como usado" (ver "Puntos abiertos").
+- Para cargar el catálogo del mock de la app:
+  `python manage.py importar_premios <ruta al premios.json>`. Es idempotente
+  (un premio se identifica por nombre y comercio), no apaga lo que ya no esté
+  en el archivo y guarda todo o nada: si un premio viene mal, avisa cuál y no
+  guarda ninguno.
+
+---
+
 ## Puntos abiertos
 
 *Del 3 oct (sincronización):*
@@ -1715,9 +1844,9 @@ verificación" son el mismo momento.
 
 *De la reunión del 2 oct:*
 
-- **Endpoints que faltan definir:** inicio de sesión con Google y Apple, lista de
-  semanas de la season (vista "battle pass"), cashback en quetzales, cupones
-  (activos, usados y vencidos) y patrocinios.
+- **Endpoints que faltan definir:** inicio de sesión con Google y Apple,
+  cashback en quetzales y patrocinios. (Ya están hechos la lista de semanas de
+  la season, `objetivos/semanas`, y los de saldo, premios, canje y cupones.)
 - **Póliza cancelada después de verificada:** cómo se entera el sistema y qué
   pasa con los puntos y monedas de ese momento.
 - **Año de póliza y cuentas sin póliza:** una cuenta base no tiene año de
@@ -1757,9 +1886,16 @@ verificación" son el mismo momento.
   o se dejan solo como dato.
 - **Cuánto paga el objetivo semanal:** desde el 2 oct, 5 monedas por pasos +
   5 por workouts, de forma **provisional** (la reunión los dio de ejemplo). El
-  código paga hoy 20 por cumplir los dos.
-- **La Liga, Tus Ligas, Premios y Canje:** las tablas existen en el backend,
-  pero no hay cálculo ni endpoints todavía.
+  código ya paga por componente (3 oct); los montos se editan en el admin.
+- **La Liga y Tus Ligas:** las tablas existen en el backend, pero no hay
+  cálculo ni endpoints todavía. (Premios y canje ya tienen endpoints: ver
+  "Premios, canje y cupones".)
+- **Cupones que se ganan (semanas y podios patrocinados):** el modelo ya los
+  admite (`origen` = `semana` o `liga`, con `ganado_en`), pero nadie los crea
+  todavía: llegan con los patrocinios y con el cierre de La Liga.
+- **Quién marca un cupón como usado:** hoy solo se hace a mano en el admin
+  (acción "Marcar como usado"). Falta decidir si el comercio lo marca (por
+  ejemplo con un endpoint que reciba el código) o si basta con que venza.
 
 *Abiertos desde antes:*
 
