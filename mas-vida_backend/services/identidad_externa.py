@@ -41,6 +41,10 @@ _PROVEEDORES = {
 
 PROVEEDORES = tuple(_PROVEEDORES)
 
+# Segundos de tolerancia entre el reloj del servidor y el del proveedor: sin
+# esto, un token recién emitido se rechaza si el servidor va unos segundos atrás.
+MARGEN_DE_RELOJ = 60
+
 
 class CredencialInvalida(Exception):
     """El token no es de ese proveedor, no es para esta app, venció o no coincide el nonce."""
@@ -87,8 +91,10 @@ def _clave_de(proveedor: str, credencial: str):
 
 def _nonce_coincide(esperado: str, en_el_token: str) -> bool:
     """El token lleva el nonce tal cual o su SHA-256 en hexadecimal (así lo hace Apple)."""
-    candidatos = (esperado, hashlib.sha256(esperado.encode()).hexdigest())
-    return any(hmac.compare_digest(en_el_token, c) for c in candidatos)
+    # En bytes: compare_digest no acepta textos con caracteres fuera de ASCII.
+    token = en_el_token.encode()
+    candidatos = (esperado.encode(), hashlib.sha256(esperado.encode()).hexdigest().encode())
+    return any(hmac.compare_digest(token, c) for c in candidatos)
 
 
 def _correo_verificado(claims: dict) -> str | None:
@@ -124,6 +130,7 @@ def verificar(proveedor: str, credencial: str, nonce: str | None = None) -> Iden
             audience=audiencias,
             issuer=datos["emisores"],
             options={"require": ["exp", "iss", "aud", "sub"]},
+            leeway=MARGEN_DE_RELOJ,
         )
     except jwt.PyJWTError as error:
         raise CredencialInvalida() from error

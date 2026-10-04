@@ -67,7 +67,15 @@ class VerificarTests(SimpleTestCase):
         self.assertInvalida(ie.GOOGLE, emitir(firma=CLAVE_DE_OTRO))
 
     def test_vencido_se_rechaza(self):
-        self.assertInvalida(ie.GOOGLE, emitir(exp=int(time.time()) - 60))
+        self.assertInvalida(ie.GOOGLE, emitir(exp=int(time.time()) - 300))
+
+    def test_un_reloj_del_servidor_un_poco_atrasado_no_rechaza_un_token_recien_emitido(self):
+        # El proveedor lo emitió "30 s en el futuro" según el reloj del servidor.
+        token = emitir(iat=int(time.time()) + 30, nbf=int(time.time()) + 30)
+        self.assertEqual(ie.verificar(ie.GOOGLE, token).sub, "109876543210")
+
+    def test_un_token_emitido_mucho_despues_se_rechaza(self):
+        self.assertInvalida(ie.GOOGLE, emitir(iat=int(time.time()) + 600, nbf=int(time.time()) + 600))
 
     def test_sin_vencimiento_se_rechaza(self):
         self.assertInvalida(ie.GOOGLE, emitir(exp=None))
@@ -148,6 +156,13 @@ class VerificarTests(SimpleTestCase):
 
     def test_si_la_app_manda_nonce_el_token_tiene_que_traerlo(self):
         self.assertInvalida(ie.GOOGLE, emitir(), nonce="abc123")
+
+    def test_un_nonce_con_acentos_se_compara_sin_romperse(self):
+        self.assertEqual(ie.verificar(ie.GOOGLE, emitir(nonce="señal"), nonce="señal").sub, "109876543210")
+        hash_ = hashlib.sha256("señal".encode()).hexdigest()
+        self.assertEqual(ie.verificar(ie.APPLE, emitir(ie.APPLE, nonce=hash_), nonce="señal").sub, "109876543210")
+        self.assertInvalida(ie.GOOGLE, emitir(nonce="señal"), nonce="senal")
+        self.assertInvalida(ie.GOOGLE, emitir(nonce="abc"), nonce="ñandú")
 
     def test_sin_nonce_en_ningun_lado_es_valido(self):
         self.assertEqual(ie.verificar(ie.GOOGLE, emitir()).sub, "109876543210")

@@ -228,7 +228,7 @@ class CredencialInvalidaTests(_ConProveedor, APITestCase):
         self.assertRechazada(self.entrar(token=emitir(firma=CLAVE_DE_OTRO)))
 
     def test_vencida(self):
-        self.assertRechazada(self.entrar(token=emitir(exp=int(time.time()) - 60)))
+        self.assertRechazada(self.entrar(token=emitir(exp=int(time.time()) - 300)))
 
     def test_para_otra_app(self):
         self.assertRechazada(self.entrar(token=emitir(aud="otra-app")))
@@ -255,6 +255,14 @@ class NonceTests(_ConProveedor, APITestCase):
         r = self.entrar(APPLE_URL, ie.APPLE, token=token, nonce="otro")
         self.assertEqual(r.status_code, 401)
         self.assertFalse(User.objects.exists())
+
+    def test_un_nonce_con_acentos_no_rompe_el_servidor(self):
+        r = self.entrar(APPLE_URL, ie.APPLE, token=emitir(ie.APPLE, nonce="abc"), nonce="ñandú")
+        self.assertEqual(r.status_code, 401)
+
+    def test_el_nonce_no_se_recorta(self):
+        token = emitir(ie.APPLE, nonce=" abc ")
+        self.assertEqual(self.entrar(APPLE_URL, ie.APPLE, token=token, nonce=" abc ").status_code, 201)
 
     def test_si_el_token_trae_nonce_la_app_tiene_que_mandarlo(self):
         token = emitir(ie.APPLE, nonce="abc123")

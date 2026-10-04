@@ -216,7 +216,9 @@ bono 60+ y la meta semanal de pasos.
 claves públicas del proveedor (Google: `googleapis.com/oauth2/v3/certs`; Apple:
 `appleid.apple.com/auth/keys`), el emisor, que la audiencia (`aud`) sea de
 **esta** app, el vencimiento y el `sub`. Un token de Apple no vale en la ruta de
-Google ni al revés. Los identificadores de la app se configuran por variable de
+Google ni al revés. Se tolera un minuto de diferencia entre el reloj del
+servidor y el del proveedor (sin eso, un token recién emitido se rechazaría si
+el servidor va unos segundos atrás). Los identificadores de la app se configuran por variable de
 entorno (lista separada por comas); **sin ellos el proveedor queda apagado**
 (`503`):
 
