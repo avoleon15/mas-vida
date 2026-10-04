@@ -139,8 +139,9 @@ campo dentro del JSON.
 3. El servidor busca a quién pertenece ese token y trabaja con ese usuario.
    Nunca toma la identidad del cuerpo de la petición.
 
-**No piden token:** `POST /api/v1/registro`, `POST /api/v1/login` y
-`GET /api/health/`. Todo lo demás sí.
+**No piden token:** `POST /api/v1/registro`, `POST /api/v1/login`,
+`POST /api/v1/login/google`, `POST /api/v1/login/apple` y `GET /api/health/`.
+Todo lo demás sí.
 
 ### Registro y login
 
@@ -153,7 +154,7 @@ Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
 (credenciales incorrectas en el login).
 
-### Inicio de sesión con Google y Apple (decidido 2 oct 2026)
+### Inicio de sesión con Google y Apple (decidido 2 oct 2026, hecho 4 oct 2026)
 
 Además de usuario y contraseña, la app ofrece **"Continuar con Google"** e
 **"Iniciar sesión con Apple"**. Apple no es opcional: la App Store exige
@@ -167,11 +168,97 @@ ofrecerlo si se ofrece Google (guía 4.8).
   un paso aparte y **sin ella no se crea la cuenta**: la edad decide la FCmáx,
   el bono 60+ y la meta semanal de pasos.
 - Apple puede ocultar el correo real (entrega uno de reenvío).
-- **[PENDIENTE] (Luis y Daniel):** la forma de los endpoints (propuesta:
-  `POST /api/v1/login/google` y `POST /api/v1/login/apple` con la credencial
-  del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
-  cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
-  cuentas distintas).
+
+#### `POST /api/v1/login/google` y `POST /api/v1/login/apple`
+
+Sin token. Cuerpo:
+
+```json
+{ "credencial": "<token firmado del proveedor>", "birth_date": "1990-05-17", "nonce": "abc123" }
+```
+
+- `credencial`: el token (JWT) que Google o Apple le dio a la app. **Es tan
+  sensible como una contraseña:** nunca se escribe en logs ni en mensajes de
+  error. En Google es el `idToken`; en Apple, el `identityToken`.
+- `birth_date`: solo hace falta **la primera vez** (ver abajo). Si la cuenta ya
+  existe se ignora: nunca cambia la fecha guardada.
+- `nonce`: opcional pero recomendado. La app genera un valor aleatorio, se lo
+  pide al proveedor (Apple lo pide como su SHA-256) y lo manda aquí en claro.
+  **Si el token trae `nonce`, la app tiene que mandarlo y coincidir**; si lo
+  manda y el token no lo trae, se rechaza. Evita que alguien reutilice un token
+  robado.
+
+| Situación | Código | Cuerpo |
+|---|---|---|
+| Cuenta ya existente | `200` | `{ "token", "nuevo": false, "username", "usuario_id" }` |
+| Primera vez, con `birth_date` | `201` | `{ "token", "nuevo": true, "username", "usuario_id" }` |
+| Primera vez, y ese correo ya tiene cuenta | `409` | `{ "error": "correo_ya_registrado", "metodo": "contrasena" \| "google" \| "apple", "mensaje" }` — **no se crea nada** |
+| Primera vez, sin `birth_date` | `422` | `{ "error": "falta_fecha_nacimiento", "mensaje" }` — **no se crea nada** |
+| Falta `credencial` o `birth_date` futura | `400` | `{ "<campo>": [mensajes] }`, como el registro |
+| Credencial falsa, vencida, para otra app o con otro `nonce` | `401` | `{ "error": "credencial_invalida", "mensaje" }` |
+| Cuenta desactivada por un administrador | `403` | `{ "error": "cuenta_inactiva", "mensaje" }` |
+| Falta configurar el proveedor, o no se pueden pedir sus claves | `503` | `{ "error": "proveedor_no_configurado" \| "proveedor_no_disponible", "mensaje" }` |
+
+El `token` es **el mismo de siempre** (un token por cuenta, mismo encabezado,
+mismo `actualizarSesion`, mismo `sync`). Un `Authorization` viejo o inválido en
+el encabezado no impide iniciar sesión: estos dos endpoints no lo leen.
+
+**Flujo de la primera vez.** El servidor primero revisa el correo (ver abajo).
+Si no hay conflicto, la app manda la credencial sin `birth_date`; el servidor
+responde `422 falta_fecha_nacimiento`; la app muestra el paso que pide
+la fecha y **vuelve a mandar la misma credencial** con `birth_date`. Hay que
+hacerlo rápido: el token de Apple vale unos 10 minutos y el de Google cerca de
+una hora; si venció, la app vuelve a pedírselo al proveedor (el servidor
+responde `401`). Sin la fecha no se crea la cuenta: la edad decide la FCmáx, el
+bono 60+ y la meta semanal de pasos.
+
+**Cómo se verifica** (`services/identidad_externa.py`): la firma (RS256) con las
+claves públicas del proveedor (Google: `googleapis.com/oauth2/v3/certs`; Apple:
+`appleid.apple.com/auth/keys`), el emisor, que la audiencia (`aud`) sea de
+**esta** app, el vencimiento y el `sub`. Un token de Apple no vale en la ruta de
+Google ni al revés. Los identificadores de la app se configuran por variable de
+entorno (lista separada por comas); **sin ellos el proveedor queda apagado**
+(`503`):
+
+| Variable | Qué lleva |
+|---|---|
+| `GOOGLE_CLIENT_IDS` | el ID de cliente de iOS de Google (y el de web, si hay) |
+| `APPLE_CLIENT_IDS` | el bundle id de la app |
+
+**Qué es una cuenta social** (decidido 4 oct 2026):
+
+- La identidad es **(proveedor, `sub`)**: el `sub` es estable y único por
+  persona en cada proveedor. Se guarda en `IdentidadExterna`.
+- **El correo no identifica a nadie, pero sí evita cuentas repetidas.** En +Vida
+  el correo es el `username` de las cuentas con contraseña (la app lo manda así
+  en el registro y en el login). Si es la primera vez que esa identidad entra y
+  el proveedor trae un **correo verificado** (`email` con `email_verified`), el
+  servidor busca una cuenta con ese correo, sin distinguir mayúsculas, en el
+  `username` o en el correo de una cuenta social. Si la hay, responde `409
+  correo_ya_registrado` con el `metodo` con el que se creó esa cuenta
+  (`contrasena`, `google` o `apple`) y **no crea otra cuenta ni une nada solo**
+  (decidido 4 oct). La app debe decirle a la persona con qué entrar. Se hizo
+  así porque +Vida **no verifica el correo al registrar con contraseña**: unir
+  por coincidir dejaría entrar a quien registró primero el correo de otra
+  persona. Una sola cuenta por persona, sin repartir puntos ni póliza.
+- **Un correo sin verificar no se toma:** ni choca con nadie ni se guarda. La
+  cuenta social guarda el correo verificado, en minúsculas, en `User.email`.
+- **Límite conocido:** Apple puede entregar un correo de reenvío
+  (`…@privaterelay.appleid.com`), que no coincide con ninguna cuenta; esa
+  persona podría terminar con dos cuentas. Se resuelve con el pendiente de
+  abajo.
+- Se crea lo mismo que en el registro: `User`, `Usuario` con `usuario_id` público
+  generado por el servidor, y el token. El `username` es generado
+  (`google-…` o `apple-…`) y **la cuenta no tiene contraseña**: no entra por
+  `POST /api/v1/login`, solo con su proveedor.
+- Una cuenta tiene a lo sumo una identidad de Google y una de Apple.
+- **[PENDIENTE]:** ligar Google o Apple a una cuenta con contraseña desde
+  Perfil (con la sesión abierta y la contraseña a la mano, sin riesgo de robar
+  cuentas) y quitarlo; **normalizar el correo en el registro y el login con
+  contraseña** (hoy `Ana@x.com` y `ana@x.com` son dos cuentas distintas y el
+  login distingue mayúsculas); verificar el correo al registrar con contraseña;
+  y la baja de la cuenta (Apple pide poder eliminarla desde la app y revocar el
+  token de Apple).
 
 ### Reglas del token
 
@@ -1706,8 +1793,8 @@ verificación" son el mismo momento.
   Salud, el servidor la conserva (solo inserta, nunca borra). El día se
   recalcula con lo guardado, así que esa muestra sigue contando.
 - **Reunión del 2 oct — trabajo de backend [PENDIENTE]:**
-  - Inicio de sesión con Google y Apple (ver "Inicio de sesión con Google y
-    Apple").
+  - ~~Inicio de sesión con Google y Apple~~ — **hecho** (4 oct): ver
+    "Inicio de sesión con Google y Apple".
   - Objetivo semanal: pago por componente (5 + 5 provisional), meta de pasos
     por rango de edad y lista de semanas de la season para la vista "battle
     pass".
@@ -2133,8 +2220,9 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 
 *De la reunión del 2 oct:*
 
-- **Endpoints que faltan definir:** inicio de sesión con Google y Apple y
-  patrocinios (el de cashback en quetzales y los patrocinios ya están). (Ya están hechos la lista de semanas de
+- **Endpoints que faltan definir:** ninguno de la reunión (el de cashback en
+  quetzales, los patrocinios y el inicio de sesión con Google y Apple ya están).
+  (Ya están hechos la lista de semanas de
   la season, `objetivos/semanas`, y los de saldo, premios, canje y cupones.)
 - **Póliza cancelada después de verificada:** cómo se entera el sistema y qué
   pasa con los puntos y monedas de ese momento.
