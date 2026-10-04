@@ -4,6 +4,9 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 3 oct 2026** (La Liga): las monedas de La Liga van a **los 3
+primeros** del mes, no por percentil. Ver "La Liga y Tus Ligas".
+
 **Actualizado el 3 oct 2026** (sincronización): Swift ya no hace un backfill de
 una sola vez: **cada vez que la app se abre** (y al iniciar sesión y al dar el
 permiso de Salud) manda **desde el último día enviado hasta hoy**; la primera vez,
@@ -53,7 +56,8 @@ pasa de 2 a 3 métodos (`actualizarSesion`); y Swift conserva los días
 pendientes cuando no hay sesión.
 
 **Actualizado el 23 sep 2026** (demo 1): objetivo semanal fijo e igual para
-todos, La Liga con un solo grupo y premios por percentil, Tus Ligas sin
+todos, La Liga con un solo grupo y premios por percentil (reemplazados el 3 oct
+por monedas al top 3), Tus Ligas sin
 póliza y sin premios, duelos 1 contra 1 eliminados. Todo "reto semanal" pasa a
 llamarse **objetivo semanal**.
 
@@ -824,10 +828,19 @@ toca el contrato.
   una aparte: la marca se muestra arriba, junto al nombre de la liga,
   destacada, y los 3 primeros ganan además un cupón de esa marca.
   **[PENDIENTE] (Luis):** el endpoint de patrocinios.
-- **Premios por percentil** de la posición final: el corte de cada tramo es
-  `max(1, floor(N × percentil_acumulado))`. Tramos de partida: top 3% /
-  siguiente 7% (hasta 10%) / 10%–25% / "y así" (por definir). Luis calcula
-  posición, percentil y tramo **una sola vez, al cierre del mes**.
+- **Premio: monedas a los 3 primeros** del mes (decidido 3 oct 2026; reemplaza
+  los premios por percentil). Nadie más gana monedas en La Liga. El servidor
+  calcula la posición **una sola vez, al cierre del mes**, con el desempate de
+  arriba, y paga las monedas en ese momento.
+  - **Cuántas monedas a cada puesto (1.º, 2.º, 3.º): [PENDIENTE] (Diego).**
+  - **Empate total** (mismos puntos y mismos pasos en el mes):
+    **[PENDIENTE]**. Opciones: compartir el puesto y la misma cantidad de
+    monedas, o desempatar por quien llegó antes a esos puntos.
+  - El ranking devuelve `premios_monedas`: una lista con las monedas del 1.º, el
+    2.º y el 3.º (vacía si el grupo no premia, como Tus Ligas). Flutter ya la lee
+    (`GrupoRanking.premiosMonedas`).
+  - Con patrocinio, el cupón de la marca es **además** de las monedas, para los
+    mismos 3.
 
 **Tus Ligas:** grupos que crea o a los que se une el usuario. Ranking mensual
 **por puntos** entre miembros (decidido 2 oct 2026, igual que La Liga; antes era
@@ -1418,13 +1431,13 @@ verificación" son el mismo momento.
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
   vinculada y verificada. Desde el 2 oct compite **por puntos** del mes (tal
   cual, con tope y bono 60+), con desempate por pasos del mes. Al cierre del
-  mes calcular una vez posición,
-  percentil y tramo de premio de cada participante
-  (`max(1, floor(N × percentil_acumulado))`) y guardarlos. Tabla de tramos y
-  premios en configuración — por definir con Diego. Sin franja de edad ni
-  sub-ligas (diseño futuro).
-- **Tus Ligas:** grupos que crea/une el usuario; ranking mensual de pasos;
-  **sin premios y sin exigir póliza**. **Duelos 1 contra 1: no construir.**
+  mes calcular una vez la posición de cada participante, guardarla y **pagar las
+  monedas a los 3 primeros** (decidido 3 oct; ya no hay percentiles ni tramos).
+  Las monedas de cada puesto, en configuración — por definir con Diego. Sin
+  franja de edad ni sub-ligas (diseño futuro).
+- **Tus Ligas:** grupos que crea/une el usuario; ranking mensual **por puntos**
+  (desde el 2 oct), con el mismo desempate; **sin premios y sin exigir póliza**.
+  **Duelos 1 contra 1: no construir.**
 - **Endpoint de resumen para el dashboard (decidido):** tabla `resumen_diario`
   (`usuario_id` + `fecha`), upsert en cada sync con lo que el sync ya calcula
   — `pasos_totales_dia`, agregado de los workouts del día que cuentan
@@ -1534,7 +1547,8 @@ verificación" son el mismo momento.
   cuánto falta para que cierre (las seasons se mantienen). La progresión
   completa vuelve después del demo — no construir hoy.
 - **La Liga:** un solo grupo, todos los usuarios con póliza verificada,
-  premios por percentil (el servidor calcula posición y tramo). **Desde el 2
+  **monedas a los 3 primeros** del mes (el servidor calcula la posición y manda
+  `premios_monedas`; los textos de los términos ya dicen "los 3 primeros"). **Desde el 2
   oct compite por puntos**, con desempate por pasos y un botón de información
   que lo explique; si el mes está patrocinado, la marca va arriba junto al
   nombre de la liga. **Tus Ligas también compite por puntos.** En La Liga se
@@ -1626,9 +1640,9 @@ verificación" son el mismo momento.
   Flutter) y cuándo suena el recordatorio (24 h sin datos, domingo en la tarde,
   o las dos). Necesita: llave `.p8` en Apple Developer, modelo y endpoint de
   dispositivos en el backend, envío programado y la pantalla del permiso.
-- **Monedas de La Liga:** este contrato dice **premios por percentil**; los
-  términos (`hoja_terminos.dart`) y `CLAUDE.md` dicen "los 3 primeros". Decidir
-  cuál es la regla.
+- **Monedas de La Liga — resuelto (3 oct):** van a los 3 primeros, como ya
+  decían los términos y `CLAUDE.md`. Quedan abiertos cuántas monedas da cada
+  puesto y qué pasa con un empate total (ver "La Liga y Tus Ligas").
 - **Textos de los términos:** dicen que los demás ven "tu nombre y tu posición"
   (desde el 2 oct también ven los puntos) y "4 temporadas de 13 semanas" (la
   season 4 de 2026 tiene 14).
@@ -1733,8 +1747,8 @@ verificación" son el mismo momento.
   (la tabla empieza en 18). (Qué es un
   workout ya está decidido: cualquier entrenamiento con ritmo cardíaco, de
   cualquier duración.)
-- **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
-  y qué premio le toca a cada tramo (Diego).
+- **Monedas de cada puesto de La Liga:** cuántas al 1.º, al 2.º y al 3.º
+  (Diego), y qué pasa con un empate total en puntos y pasos.
 - **Endpoints de La Liga y de Tus Ligas:** sin especificar.
 - **Nombre del path `GET /api/v1/retos/estado`:** conserva "retos" aunque el
   concepto ya se llama objetivo semanal. Decidir con Luis si se renombra
