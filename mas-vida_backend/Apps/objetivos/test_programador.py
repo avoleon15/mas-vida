@@ -8,11 +8,13 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from Apps.activities.models import ResumenDiario
+from Apps.liga.models import LigaMensual
 from Apps.objetivos.models import CumplimientoSemanal, MetaPasosPorEdad
-from Apps.poincs.models import VersionRegla
+from Apps.poincs.models import Ledger, VersionRegla
+from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
 from services import monedas, programador
-from services.programador import CIERRE, CORRECCION, correr, ejecutar, proxima_ejecucion
+from services.programador import CIERRE, CORRECCION, LIGA, correr, ejecutar, proxima_ejecucion
 from services.tiempo import inicio_semana
 
 GT = ZoneInfo("America/Guatemala")
@@ -49,7 +51,18 @@ class ProximaEjecucionTests(SimpleTestCase):
         self.assertEqual(proxima_ejecucion(gt(2026, 10, 7, 15, 30)), (gt(2026, 10, 13, 0, 0), CIERRE))
 
     def test_cruza_el_fin_de_anio(self):
-        self.assertEqual(proxima_ejecucion(gt(2026, 12, 29, 13, 0)), (gt(2027, 1, 5, 0, 0), CIERRE))
+        # El 2 de enero (sábado) cierra La Liga de diciembre; después, el martes.
+        self.assertEqual(proxima_ejecucion(gt(2026, 12, 29, 13, 0)), (gt(2027, 1, 2, 0, 0), LIGA))
+        self.assertEqual(proxima_ejecucion(gt(2027, 1, 2, 0, 0)), (gt(2027, 1, 5, 0, 0), CIERRE))
+
+    def test_la_liga_cierra_el_dia_2_y_el_dia_1_es_margen_de_gracia(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 31, 23, 0)), (gt(2026, 11, 2, 0, 0), LIGA))
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 1, 12, 0)), (gt(2026, 11, 2, 0, 0), LIGA))
+
+    def test_si_el_dia_2_es_martes_lo_cubre_el_cierre_y_no_se_repite(self):
+        # 2 feb 2027 es martes: una sola corrida a las 00:00 y después la corrección.
+        self.assertEqual(proxima_ejecucion(gt(2027, 2, 1, 23, 0)), (gt(2027, 2, 2, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2027, 2, 2, 0, 0)), (gt(2027, 2, 2, 12, 0), CORRECCION))
 
     def test_trabaja_en_hora_de_guatemala_aunque_llegue_en_utc(self):
         # Martes 5:59 UTC = lunes 23:59 en Guatemala: el martes en Guatemala
@@ -229,6 +242,22 @@ class EjecutarTests(TestCase):
         self.assertEqual(cumplimiento.pasos_semanales, 40_000)  # acumulado corregido
         self.assertFalse(cumplimiento.cumplido)                 # el resultado no se reabre
         self.assertEqual(monedas.saldo(beto, self.SIGUIENTE), 0)
+
+    def test_la_corrida_de_liga_cierra_el_mes_y_el_cierre_del_lunes_tambien(self):
+        PolizaVinculada.objects.create(
+            usuario=self.ana, policy_number="P-1", insurer="Demo", estado_verificacion="verificada",
+        )
+        Ledger.objects.create(
+            usuario=self.ana, puntos=100, tipo=Ledger.TipoLedger.AJUSTE_MANUAL,
+            fecha=date(2026, 10, 10), version_regla=VersionRegla.objects.get(version=1),
+        )
+        ejecutar(LIGA, gt(2026, 11, 2, 0, 0))
+        self.assertTrue(LigaMensual.objects.get(mes=date(2026, 10, 1)).cerrada_en)
+        # Un martes que cae día 2: el cierre semanal también cierra la liga.
+        resultado = ejecutar(CIERRE, gt(2027, 2, 2, 0, 0))
+        self.assertEqual(
+            [r["mes"] for r in resultado["liga"]], ["2026-11-01", "2026-12-01", "2027-01-01"],
+        )
 
     def test_una_corrida_desconocida_falla(self):
         with self.assertRaises(ValueError):

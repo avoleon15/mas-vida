@@ -39,5 +39,6 @@ urlpatterns = [
     path("api/v1/", include("Apps.policies.urls")),
     path("api/v1/", include("Apps.objetivos.urls")),
     path("api/v1/", include("Apps.coins.urls")),
+    path("api/v1/", include("Apps.liga.urls")),
 
 ]
