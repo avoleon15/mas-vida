@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from Apps.policies.models import PolizaVinculada
-from .models import Usuario
+from .models import IdentidadExterna, Usuario
 
 
 class PolizaVinculadaInline(admin.StackedInline):
@@ -45,3 +45,19 @@ class UsuarioAdmin(admin.ModelAdmin):
             and poliza.estado_verificacion
             == PolizaVinculada.EstadoVerificacion.VERIFICADA
         )
+
+
+@admin.register(IdentidadExterna)
+class IdentidadExternaAdmin(admin.ModelAdmin):
+    """Solo lectura: la crea el inicio de sesión, nunca a mano."""
+
+    list_display = ("user", "proveedor", "creado_en")
+    list_filter = ("proveedor",)
+    search_fields = ("user__username",)
+    list_select_related = ("user",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

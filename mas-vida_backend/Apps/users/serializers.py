@@ -14,6 +14,16 @@ from .models import Usuario
 User = get_user_model()
 
 
+def validar_fecha_nacimiento(value):
+    # La edad sale de esta fecha (FCmáx, bono 60+): una fecha futura daría
+    # una edad negativa y rompería el cálculo de puntos.
+    if value > timezone.localdate():
+        raise serializers.ValidationError(
+            "La fecha de nacimiento no puede ser futura."
+        )
+    return value
+
+
 class RegistroSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(
@@ -30,13 +40,7 @@ class RegistroSerializer(serializers.Serializer):
         return value
 
     def validate_birth_date(self, value):
-        # La edad sale de esta fecha (FCmáx, bono 60+): una fecha futura daría
-        # una edad negativa y rompería el cálculo de puntos.
-        if value > timezone.localdate():
-            raise serializers.ValidationError(
-                "La fecha de nacimiento no puede ser futura."
-            )
-        return value
+        return validar_fecha_nacimiento(value)
 
     def validate(self, attrs):
         user = User(username=attrs["username"])
@@ -66,3 +70,16 @@ class RegistroSerializer(serializers.Serializer):
         )
 
         return user
+
+
+class LoginSocialSerializer(serializers.Serializer):
+    # El token firmado que el proveedor le dio a la app.
+    credencial = serializers.CharField(max_length=10_000, trim_whitespace=True)
+    # Ni Google ni Apple la entregan: solo hace falta la primera vez.
+    birth_date = serializers.DateField(required=False)
+    # El que la app le pidió al proveedor al iniciar (protege contra reuso del token).
+    # Sin recortar espacios: tiene que llegar idéntico al que se le dio al proveedor.
+    nonce = serializers.CharField(max_length=200, required=False, trim_whitespace=False)
+
+    def validate_birth_date(self, value):
+        return validar_fecha_nacimiento(value)
