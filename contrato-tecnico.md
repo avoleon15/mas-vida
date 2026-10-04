@@ -710,8 +710,9 @@ vieja de trimestres.
   ciclo cerrado no se reabre. Antes se cerraba el lunes 00:00 y un domingo que
   llegaba tarde nunca completaba el objetivo (StepBet da 24 h; Discovery
   Vitality, 48 h).
-- **El lunes**, la semana que terminó el domingo todavía no tiene resultado: si
-  la app la muestra, va "en revisión" hasta el martes.
+- **El lunes**, la semana que terminó el domingo todavía no tiene resultado:
+  `GET /api/v1/objetivos/semanas` la devuelve con `estado: "en_revision"` hasta
+  el martes.
 - Huso horario: **zona horaria de Guatemala**, por ahora — para el piloto
   (todo Guatemala) una sola corrida alcanza.
 
@@ -797,10 +798,15 @@ orden.
 ```
 
 - `estado`: `completada` (los dos componentes), `parcial` (uno solo),
-  `no_cumplida` (ninguno), `en_curso` o `futura`.
+  `no_cumplida` (ninguno), `en_curso`, `en_revision` o `futura`.
+- **`en_revision` (3 oct):** el lunes, la semana que terminó el domingo sigue en
+  su margen de gracia hasta el cierre del martes 00:00 (ver "Ciclos y cortes").
+  Sus `acumulados` y `cumplido` vienen **en vivo y son provisionales**: todavía
+  pueden llegar datos del domingo. La app no la muestra como cumplida ni como no
+  cumplida.
 - Las semanas cerradas muestran lo que quedó guardado al cerrarlas, **con la
-  meta que se usó ese día** aunque después se edite la tabla. Si el cierre
-  todavía no corrió, se calculan en vivo.
+  meta que se usó ese día** aunque después se edite la tabla. Si ya pasó el
+  margen y el cierre no corrió (por ejemplo, falló), se calculan en vivo.
 - En las `futura`, `acumulados` y `cumplido` vienen en `null`: solo se conocen
   la meta y las monedas, que todavía se pueden editar en el admin.
 - `patrocinador` viene en `null` hasta que exista el endpoint de patrocinios.
@@ -1639,8 +1645,10 @@ verificación" son el mismo momento.
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia
   después** — la semana nueva arranca normal, sin pantalla de "evaluando".
   **Desde el 3 oct:** el **resultado** de la semana anterior (si se completó y
-  sus monedas) llega el **martes 00:00**. Si el lunes la app muestra la semana
-  que terminó, va "en revisión", no "no cumplida".
+  sus monedas) llega el **martes 00:00**. El lunes, `objetivos/semanas` la
+  devuelve con `estado: "en_revision"` (cifras provisionales): mostrarla "en
+  revisión", nunca "no cumplida". Es un estado nuevo que la app tiene que
+  manejar.
 - `dispositivo_*` (nuevo) no cambia nada del lado de Flutter — son campos que
   Swift agrega al payload de sync; Daniel no los toca ni los muestra.
 - Nada de SDKs de terceros (ej. Firebase) puede tocar datos de HealthKit, ni

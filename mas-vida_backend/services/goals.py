@@ -361,6 +361,10 @@ COMPLETADA = "completada"      # los dos componentes cumplidos
 PARCIAL = "parcial"            # solo uno
 NO_CUMPLIDA = "no_cumplida"    # ninguno
 EN_CURSO = "en_curso"
+# La semana terminó el domingo pero sigue en su margen de gracia (el lunes): todavía
+# pueden llegar datos atrasados, así que no se dice "no cumplida" ni "completada"
+# hasta el cierre del martes. Las cifras van en vivo, como provisionales.
+EN_REVISION = "en_revision"
 FUTURA = "futura"
 
 
@@ -388,7 +392,10 @@ def semanas_de_la_season(usuario, hoy: date) -> list[SemanaDeSeason]:
     """Todas las semanas de la season de `hoy`, con lo que hizo el usuario.
 
     - Semanas cerradas: lo que quedó guardado al cerrarlas (CumplimientoSemanal).
-      Si todavía no corrió el cierre, se calcula en vivo.
+    - La que terminó el domingo, mientras dura su margen de gracia (el lunes):
+      `en_revision`, con las cifras en vivo.
+    - Una semana que ya pasó su margen y sigue sin cerrar (el cierre falló): se
+      calcula en vivo.
     - La semana en curso: en vivo.
     - Las futuras: solo metas y monedas. Su ObjetivoSemanal se crea (copiando la
       semana anterior) para que se pueda editar en el admin antes de que llegue.
@@ -425,10 +432,12 @@ def semanas_de_la_season(usuario, hoy: date) -> list[SemanaDeSeason]:
             continue
 
         avance = progreso(usuario, objetivo)
-        estado = (
-            EN_CURSO if lunes == lunes_hoy
-            else _estado_por_componentes(avance.cumplio_pasos, avance.cumplio_workouts)
-        )
+        if lunes == lunes_hoy:
+            estado = EN_CURSO
+        elif hoy < primer_dia_de_cierre(lunes):
+            estado = EN_REVISION
+        else:
+            estado = _estado_por_componentes(avance.cumplio_pasos, avance.cumplio_workouts)
         semanas.append(SemanaDeSeason(
             numero=numero, objetivo=objetivo, estado=estado,
             meta_pasos=avance.meta_pasos_efectiva,

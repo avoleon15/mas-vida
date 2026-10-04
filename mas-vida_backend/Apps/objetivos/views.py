@@ -76,7 +76,8 @@ def objetivos_semanas(request):
     """Todas las semanas de la season en curso, para la vista tipo "battle pass".
 
     Estado de cada una: `completada`, `parcial` (un solo componente),
-    `no_cumplida`, `en_curso` o `futura`. En las futuras, `acumulados` y
+    `no_cumplida`, `en_curso`, `en_revision` (el lunes, la que terminó el domingo:
+    sigue en su margen de gracia hasta el cierre del martes) o `futura`. En las futuras, `acumulados` y
     `cumplido` van en null. `patrocinador` va en null hasta que exista el
     endpoint de patrocinios.
     """
