@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from Apps.activities.models import ResumenDiario
-from Apps.objetivos.models import CumplimientoSemanal
+from Apps.objetivos.models import CumplimientoSemanal, MetaPasosPorEdad
 from Apps.poincs.models import VersionRegla
 from Apps.users.models import Usuario
 from services import monedas, programador
@@ -159,6 +159,16 @@ class BucleTests(SimpleTestCase):
         self.assertEqual(hechas, [CIERRE, CORRECCION, CIERRE])
 
 
+# 5 + 5: una semana completada (ver services/goals.py).
+PAGO_SEMANA_COMPLETA = 10
+
+
+def meta_fija(pasos=30_000):
+    """Una sola meta de pasos para todas las edades: aquí se prueba el programador."""
+    MetaPasosPorEdad.objects.all().delete()
+    MetaPasosPorEdad.objects.create(edad_desde=0, meta_pasos=pasos)
+
+
 def crear_usuario(nombre):
     user = User.objects.create_user(username=nombre, password="clave-segura-1")
     return Usuario.objects.create(user=user, usuario_id=f"{nombre}-1", birth_date=date(1990, 1, 1))
@@ -171,6 +181,7 @@ class EjecutarTests(TestCase):
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         self.ana = crear_usuario("ana")
+        meta_fija()
         ResumenDiario.objects.create(
             usuario=self.ana, fecha=self.LUNES, pasos_totales_dia=31_000,
             workouts_cantidad=1, puntos_dia=0,
@@ -178,17 +189,17 @@ class EjecutarTests(TestCase):
 
     def test_el_cierre_paga_a_quien_cumplio(self):
         ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
-        self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), 20)
+        self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), PAGO_SEMANA_COMPLETA)
         self.assertTrue(CumplimientoSemanal.objects.get(usuario=self.ana).cumplido)
 
     def test_el_cierre_pone_al_dia_las_semanas_que_se_quedaron_sin_cerrar(self):
         ejecutar(CIERRE, gt(2026, 10, 12, 0, 0))  # nadie corrió el 5 de octubre
-        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 12)), 20)
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 12)), PAGO_SEMANA_COMPLETA)
 
     def test_el_cierre_dos_veces_no_paga_dos_veces(self):
         ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
         ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
-        self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), 20)
+        self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), PAGO_SEMANA_COMPLETA)
 
     def test_la_correccion_actualiza_acumulados_sin_pagar_ni_reabrir(self):
         beto = crear_usuario("beto")
@@ -214,6 +225,7 @@ class ComandoProgramadorTests(TestCase):
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         self.ana = crear_usuario("ana")
+        meta_fija()
 
     def test_una_vez_se_pone_al_dia_y_dice_cuando_es_la_proxima_corrida(self):
         hoy = timezone.localdate()
@@ -230,7 +242,7 @@ class ComandoProgramadorTests(TestCase):
         self.assertIn(f"semana {semana_pasada}", texto)
         self.assertIn("Próxima corrida:", texto)
         self.assertIn("hora de Guatemala", texto)
-        self.assertEqual(monedas.saldo(self.ana, hoy), 20)
+        self.assertEqual(monedas.saldo(self.ana, hoy), PAGO_SEMANA_COMPLETA)
 
     def test_una_vez_sin_nada_pendiente_lo_dice(self):
         salida = StringIO()
