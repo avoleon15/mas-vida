@@ -39,7 +39,7 @@ from Apps.liga.models import (
 )
 from Apps.poincs.models import Ledger
 from Apps.users.models import Usuario
-from services import monedas
+from services import monedas, patrocinios
 from services.goals import DIAS_DE_GRACIA
 from services.polizas import VERIFICADA
 
@@ -223,7 +223,10 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
             " (terminó o está en su margen de gracia)"
         )
 
-    resumen = {"mes": inicio.isoformat(), "cerrada": False, "participantes": 0, "monedas_pagadas": 0}
+    resumen = {
+        "mes": inicio.isoformat(), "cerrada": False, "participantes": 0,
+        "monedas_pagadas": 0, "cupones": 0,
+    }
     with transaction.atomic():
         liga, _ = LigaMensual.objects.select_for_update().get_or_create(mes=inicio)
         if liga.cerrada_en is not None:
@@ -231,6 +234,7 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
 
         filas = tabla(participantes_la_liga().values_list("pk", flat=True), inicio, fin)
         podio = premios_podio()
+        patrocinio = patrocinios.de_liga(inicio)
         por_pk = usuarios(f.usuario_pk for f in filas)
         for fila in filas:
             gana = (
@@ -249,6 +253,12 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
             if gana:
                 monedas.acreditar(por_pk[fila.usuario_pk], gana, MonedaLedger.Tipo.LIGA_MENSUAL, fecha=hoy)
                 resumen["monedas_pagadas"] += gana
+                # Con patrocinio, el cupón de la marca va ADEMÁS de las monedas, a los mismos.
+                if patrocinio is not None:
+                    cupon = patrocinios.premiar_liga(
+                        por_pk[fila.usuario_pk], patrocinio, inicio,
+                    )
+                    resumen["cupones"] += cupon is not None
 
         liga.total_participantes = len(filas)
         liga.cerrada_en = hoy

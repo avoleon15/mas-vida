@@ -621,8 +621,8 @@ curso o futura) y el **logo del patrocinador** si esa semana está vendida. Lo
 pidió la reunión para mostrar mejor la marca.
 
 **Hecho en el código (3 oct):** `GET /api/v1/objetivos/semanas` (ver abajo).
-**[PENDIENTE] (Luis):** el endpoint de patrocinios, pendiente desde septiembre;
-hasta entonces `patrocinador` viene en `null` en todas las semanas.
+**Hecho en el código (4 oct):** `patrocinador` trae la marca de cada semana
+vendida (ver "Patrocinios"); en las demás viene en `null`.
 
 ### Diseño completo — cómo se mueve el objetivo semanal (se mantiene; vuelve después del demo)
 
@@ -821,7 +821,9 @@ orden.
   margen y el cierre no corrió (por ejemplo, falló), se calculan en vivo.
 - En las `futura`, `acumulados` y `cumplido` vienen en `null`: solo se conocen
   la meta y las monedas, que todavía se pueden editar en el admin.
-- `patrocinador` viene en `null` hasta que exista el endpoint de patrocinios.
+- `patrocinador` es la marca que compró esa semana (misma forma que el
+  `patrocinio` de La Liga, ver "Patrocinios") o `null` si no tiene. Sale en las
+  pasadas, la en curso y las futuras.
 
 **Cómo está construido hoy (backend, 3 oct):**
 
@@ -934,8 +936,8 @@ toca el contrato.
   2 oct 2026; los workouts se suman el 3 oct).
 - **Patrocinio:** algunos meses La Liga tiene una marca. Es la misma Liga, no
   una aparte: la marca se muestra arriba, junto al nombre de la liga,
-  destacada, y los 3 primeros ganan además un cupón de esa marca.
-  **[PENDIENTE] (Luis):** el endpoint de patrocinios.
+  destacada, y los 3 primeros ganan además un cupón de esa marca. **Hecho
+  (4 oct):** ver "Patrocinios".
 - **Premio: monedas a los 3 primeros** del mes (decidido 3 oct 2026; reemplaza
   los premios por percentil). Nadie más gana monedas en La Liga. El servidor
   calcula la posición **una sola vez, al cierre del mes**, con el desempate de
@@ -1007,7 +1009,8 @@ Ligas del usuario, en el orden en que entró.
 - `puede_entrar_a_la_liga` es `false` sin póliza verificada: La Liga no viene
   en `grupos` y la app muestra el CTA de vincular póliza.
 - Tus Ligas traen `premios_monedas` vacío (no premian) y `patrocinio` en `null`;
-  La Liga trae `patrocinio` en `null` hasta que exista el endpoint de patrocinios.
+  La Liga trae el `patrocinio` del mes si está vendido y `null` si no (ver
+  "Patrocinios").
 
 **`POST /api/v1/ligas`** `{"nombre": "Oficina"}` → **201** con el grupo nuevo
 (misma forma). Quien lo crea queda adentro. El código tiene 6 caracteres, sin
@@ -1718,7 +1721,8 @@ verificación" son el mismo momento.
     ver "Datos que entrega la aseguradora".
   - Endpoints nuevos: ~~cupones (activos, usados y vencidos)~~ — **hecho**
     (3 oct): ver "Premios, canje y cupones"; ~~cashback en quetzales~~ —
-    **hecho** (4 oct, `GET /api/v1/cashback`); falta patrocinios.
+    **hecho** (4 oct, `GET /api/v1/cashback`); ~~patrocinios~~ — **hecho**
+    (4 oct): ver "Patrocinios".
   - ~~Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**,
     y prima anual en el registro de la aseguradora~~ — **hecho** (4 oct): ver
     "Cashback en quetzales".
@@ -1927,8 +1931,8 @@ modelos; los `id` son texto.
 - `vence` es el último día para canjearlo y puede venir en **`null`** (premio
   sin fecha). `foto` y `fondo` vienen en `null` si el premio no tiene logo o
   usa fondo blanco: el catálogo tiene que seguir saliendo con el placeholder.
-- `destacado` va siempre en `false` hasta que exista el endpoint de
-  patrocinios.
+- `destacado` es `true` para el comercio que compró visibilidad hoy (ver
+  "Patrocinios") y `false` para los demás.
 - `categorias` empieza con `"Todos"` y sigue con las que tengan los premios
   que salen, en orden alfabético.
 
@@ -1992,11 +1996,114 @@ el cupón y el saldo que queda:
   lo saca del catálogo sin borrarlo: los cupones ya canjeados siguen
   apuntando a él.
 - **Cupones:** acción "Marcar como usado" (ver "Puntos abiertos").
+- **Patrocinios:** aquí se venden las semanas, los meses de La Liga y los
+  premios destacados (ver "Patrocinios").
 - Para cargar el catálogo del mock de la app:
   `python manage.py importar_premios <ruta al premios.json>`. Es idempotente
   (un premio se identifica por nombre y comercio), no apaga lo que ya no esté
   en el archivo y guarda todo o nada: si un premio viene mal, avisa cuál y no
   guarda ninguno.
+
+---
+
+## Patrocinios (4 oct 2026)
+
+Una marca puede comprar tres cosas (las tres vías de ingreso del comercio): una
+**semana** del objetivo semanal, **La Liga de un mes** y el **destacado** de su
+premio en el catálogo. Todo se carga a mano en el admin (tabla *Patrocinios*);
+la marca viaja dentro de los endpoints que ya usa la app y, además, hay un
+endpoint que lista todo lo vendido (ver abajo). Sin patrocinio no se dibuja
+nada (nunca un hueco ni un cartel).
+
+**Qué lleva un patrocinio:** el comercio (el mismo del catálogo de Premios: de
+ahí salen el nombre de la marca, el logo y el color de fondo), el periodo
+(`desde` y `hasta`, inclusivos), el texto del cupón que se gana, el color de
+`acento`, las fotos del carrusel y `activo`. Apagarlo lo quita de la app sin
+borrarlo. El admin valida que una semana vaya de lunes a domingo, que un mes de
+La Liga vaya del día 1 al último, que semana y liga tengan texto de cupón y que
+el comercio tenga logo. **Una sola marca por semana y por mes de La Liga.**
+
+**La forma que lee la app** (`Patrocinio.desdeJson` en Dart), igual en las tres
+partes donde aparece:
+
+```json
+{
+  "id": "12",
+  "marca": "Montanos",
+  "logo": "assets/img/premios/restaurantes/montanos.webp",
+  "fondo": "#000000",
+  "acento": "#8C5A3C",
+  "cupon": "2x1 en Puyazo 8 oz",
+  "fotos": ["assets/img/premios/restaurantes/montanos.webp"]
+}
+```
+
+`id` es el id del premio del comercio, el mismo del catálogo. `fondo` y
+`acento` vienen en `null` si no se cargaron; `fotos` viene vacía si no hay (el
+carrusel usa solo el logo).
+
+**Dónde sale:**
+
+| Compra | Dónde viaja |
+|---|---|
+| Semana | `patrocinador` de cada semana en `GET /api/v1/objetivos/semanas` |
+| La Liga de un mes | `liga.patrocinio` de La Liga en `GET /api/v1/ligas` (Tus Ligas siempre `null`) |
+| Premio destacado | `destacado: true` del premio en `GET /api/v1/premios` (vigente si hoy cae entre `desde` y `hasta`) |
+
+#### `GET /api/v1/patrocinios`
+
+Con token (`403` si la cuenta no tiene perfil). Lista **todo lo vendido que
+todavía no terminó** (la semana, el mes o el destacado de hoy y los de más
+adelante; lo apagado y lo que ya pasó no salen), ordenado por fecha. Es lo mismo
+que viaja dentro de las otras pantallas, en un solo lugar, para quien necesite
+saber qué hay vendido sin pedir cada pantalla.
+
+```json
+{
+  "semanas": [{
+    "fecha_inicio": "2026-10-05", "fecha_fin": "2026-10-11",
+    "patrocinador": {"id": "12", "marca": "Montanos", "logo": "assets/img/premios/restaurantes/montanos.webp",
+                     "fondo": "#000000", "acento": "#8C5A3C", "cupon": "2x1 en Puyazo 8 oz", "fotos": []}
+  }],
+  "ligas": [{
+    "arranca": "2026-10-01", "cierra": "2026-10-31",
+    "patrocinio": {"id": "7", "marca": "Ookii", "logo": "assets/img/premios/restaurantes/ookii.webp",
+                   "fondo": null, "acento": null, "cupon": "2x1 en sushi", "fotos": []}
+  }],
+  "destacados": [{"premio_id": "7", "desde": "2026-10-04", "hasta": "2026-10-31"}]
+}
+```
+
+`patrocinador` y `patrocinio` llevan la forma de marca de arriba; los
+destacados dicen solo qué premio (`premio_id`, el id del catálogo) y hasta
+cuándo, porque el premio ya lo trae `GET /api/v1/premios`. Las tres listas
+vienen siempre, vacías si no hay nada.
+
+**Cupones que se ganan** (siempre **además** de las monedas, nunca en lugar de
+ellas). Los crea el servidor al cerrar el ciclo y aparecen en
+`GET /api/v1/cupones` con `origen` `semana` o `liga`:
+
+- **Semana patrocinada:** al cierre del martes 00:00, quien **completó** la
+  semana (los dos componentes) gana el cupón. Con un solo componente cumplido
+  cobra sus monedas pero no el cupón. `ganado_en` = "Semana 7".
+- **La Liga patrocinada:** al cierre del día 2, los que ganan monedas (el podio,
+  con al menos 1 punto) ganan el cupón. `ganado_en` = "La Liga de octubre".
+- **Hace falta póliza verificada al momento del cierre** (decidido 4 oct): un
+  cupón es un premio, y todo premio exige póliza. Sin ella las monedas se
+  ganan igual, pero el cupón no. Tampoco se da por una semana anterior a la
+  verificación si se denegó el retroactivo.
+- **Un patrocinio da un solo cupón por persona**: correr el cierre dos veces,
+  o la corrección de las 12:00, no duplica.
+- El cupón caduca a los **60 días** de ganado (igual que uno canjeado), no
+  cuesta monedas (`costo_monedas` en `null`) y su `beneficio` es el texto del
+  cupón del patrocinio, no el del premio del catálogo. Si un patrocinio se
+  carga o se apaga **después** del cierre, no se premia hacia atrás.
+- Los resúmenes de `cerrar_semana` y `cerrar_liga` traen `cupones`: cuántos se
+  entregaron.
+
+**[PENDIENTE]:** Diego define los comercios, los textos de cupón y las fotos
+de cada marca (las del mock son de ejemplo). Qué pasa con el cupón de quien
+ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 
 ---
 
@@ -2027,7 +2134,7 @@ el cupón y el saldo que queda:
 *De la reunión del 2 oct:*
 
 - **Endpoints que faltan definir:** inicio de sesión con Google y Apple y
-  patrocinios (el de cashback en quetzales ya está). (Ya están hechos la lista de semanas de
+  patrocinios (el de cashback en quetzales y los patrocinios ya están). (Ya están hechos la lista de semanas de
   la season, `objetivos/semanas`, y los de saldo, premios, canje y cupones.)
 - **Póliza cancelada después de verificada:** cómo se entera el sistema y qué
   pasa con los puntos y monedas de ese momento.
@@ -2069,9 +2176,8 @@ el cupón y el saldo que queda:
   Liga y Tus Ligas"). La tabla `TramoPremio` (premios por percentil) quedó
   sin uso: decidir si se borra. El código de invitación se valida único al
   crearlo, pero la columna todavía no tiene restricción `unique` en la base.
-- **Cupones que se ganan (semanas y podios patrocinados):** el modelo ya los
-  admite (`origen` = `semana` o `liga`, con `ganado_en`), pero nadie los crea
-  todavía: llegan con los patrocinios y con el cierre de La Liga.
+- ~~Cupones que se ganan (semanas y podios patrocinados)~~ — **hecho** (4 oct):
+  los crean el cierre semanal y el cierre de La Liga (ver "Patrocinios").
 - **Quién marca un cupón como usado:** hoy solo se hace a mano en el admin
   (acción "Marcar como usado"). Falta decidir si el comercio lo marca (por
   ejemplo con un endpoint que reciba el código) o si basta con que venza.

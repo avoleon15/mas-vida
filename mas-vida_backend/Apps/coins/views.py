@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from Apps.objetivos.models import CumplimientoSemanal
 from Apps.users.models import Usuario
-from services import goals, monedas, polizas, premios
+from services import goals, monedas, patrocinios, polizas, premios
 from services.tiempo import hoy
 
 from .models import MonedaLedger, Premio
@@ -29,7 +29,7 @@ def _fecha(valor):
     return valor.isoformat() if valor else None
 
 
-def _premio(premio):
+def _premio(premio, destacado=False):
     return {
         # Texto, como en el resto de ids que lee la app.
         "id": str(premio.pk),
@@ -44,8 +44,8 @@ def _premio(premio):
         "vence": _fecha(premio.vigente_hasta),
         "foto": _o_none(premio.foto),
         "fondo": _o_none(premio.fondo),
-        # Qué comercio está vendido lo dirá el endpoint de patrocinios.
-        "destacado": False,
+        # El comercio compró visibilidad: su tarjeta sale ancha en el mosaico.
+        "destacado": destacado,
     }
 
 
@@ -55,7 +55,8 @@ def _cupon(canje, fecha):
     return {
         "id": str(canje.pk),
         "comercio": canje.premio.comercio_aliado,
-        "beneficio": canje.premio.descripcion,
+        # Los que se ganaron por un patrocinio traen el cupón de la marca.
+        "beneficio": canje.beneficio or canje.premio.descripcion,
         "codigo": canje.codigo,
         "origen": canje.origen,
         "canjeado": timezone.localtime(canje.fecha_canje).date().isoformat(),
@@ -123,10 +124,11 @@ def catalogo(request):
         return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
 
     lista = premios.catalogo()
+    vendidos = patrocinios.destacados(hoy())
     categorias = sorted({p.categoria for p in lista if p.categoria})
     return Response({
         "categorias": ["Todos", *categorias],
-        "premios": [_premio(p) for p in lista],
+        "premios": [_premio(p, p.pk in vendidos) for p in lista],
     })
 
 
@@ -177,6 +179,20 @@ def canjear_premio(request, premio_id):
         {"cupon": _cupon(canje, fecha), "saldo": monedas.saldo(usuario, fecha)},
         status=status.HTTP_201_CREATED,
     )
+
+
+@api_view(["GET"])
+def patrocinios_vigentes(request):
+    """Lo que las marcas tienen comprado y todavía no terminó (hoy o más adelante).
+
+    Las semanas y los meses de La Liga traen la marca en la misma forma que
+    `patrocinador` de objetivos/semanas y `patrocinio` de ligas; los destacados
+    dicen qué premio y hasta cuándo. Es lo mismo que ya viaja dentro de esas
+    pantallas, en un solo lugar.
+    """
+    if _usuario(request) is None:
+        return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
+    return Response(patrocinios.vigentes(hoy()))
 
 
 @api_view(["GET"])

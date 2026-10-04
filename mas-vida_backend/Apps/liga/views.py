@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import ligas
+from services import ligas, patrocinios
 from services.tiempo import hoy
 
 SIN_PERFIL = {"mensaje": "El usuario autenticado no tiene un perfil asociado."}
@@ -39,14 +39,14 @@ def _miembros(pks, yo, fecha):
     ]
 
 
-def _bloque_liga(fecha, premios):
+def _bloque_liga(fecha, premios, patrocina=False):
     inicio, fin = ligas.rango_mes(fecha)
     return {
         "arranca": inicio.isoformat(),
         "cierra": fin.isoformat(),
         "premios_monedas": premios,
-        # Hasta que exista el endpoint de patrocinios.
-        "patrocinio": None,
+        # Solo La Liga se patrocina; Tus Ligas va siempre en null.
+        "patrocinio": patrocinios.como_json(patrocinios.de_liga(inicio)) if patrocina else None,
     }
 
 
@@ -58,7 +58,7 @@ def _la_liga(yo, fecha):
         "mostrar_puntos": True,
         "ciclo": "mes",
         "miembros": _miembros(ligas.participantes_la_liga().values_list("pk", flat=True), yo, fecha),
-        "liga": _bloque_liga(fecha, ligas.premios_podio()),
+        "liga": _bloque_liga(fecha, ligas.premios_podio(), patrocina=True),
     }
 
 
