@@ -64,3 +64,20 @@ def rango_season(fecha: date) -> tuple[date, date]:
         date.fromisocalendar(anio, primera_semana, 1),
         date.fromisocalendar(anio, ultima_semana, 7),
     )
+
+
+def lunes_de_la_season(fecha: date) -> list[date]:
+    """Los lunes de todas las semanas de la season de `fecha` (13, o 14)."""
+    inicio, fin = rango_season(fecha)
+    lunes = []
+    dia = inicio
+    while dia <= fin:
+        lunes.append(dia)
+        dia += timedelta(days=7)
+    return lunes
+
+
+def numero_semana_en_season(fecha: date) -> int:
+    """Qué semana de su season es la de `fecha`: 1 a 13 (o 14)."""
+    inicio, _ = rango_season(fecha)
+    return (inicio_semana(fecha) - inicio).days // 7 + 1
