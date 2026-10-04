@@ -17,15 +17,17 @@ Las monedas ganadas antes del corte también se anulan (ver
 services.monedas.anular_ganadas_antes_de).
 """
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from Apps.activities.models import ResumenDiario
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger
 from services import monedas
+from services.niveles import TOPE_ANUAL
 
 PENDIENTE = "pendiente"
 VERIFICADA = "verificada"
@@ -62,18 +64,66 @@ def proxima_renovacion(fecha_renovacion: date | None, hoy: date | None = None) -
 
     La póliza se renueva cada año en la misma fecha y no vence (2 oct 2026): si
     la fecha guardada ya pasó, la renovación siguiente es un año después, y así
-    hasta llegar a hoy o más adelante. El día de la renovación cuenta como
-    "próxima" (todavía no se renovó).
+    hasta pasar de hoy. El día de la renovación ya cuenta como renovado y
+    responde la del año siguiente, igual que `anio_de`, donde ese día es el
+    primero del año de póliza nuevo (4 oct 2026).
     """
     if fecha_renovacion is None:
         return None
     hoy = hoy or timezone.localdate()
     anio = fecha_renovacion.year
     renovacion = fecha_renovacion
-    while renovacion < hoy:
+    while renovacion <= hoy:
         anio += 1
         renovacion = _mismo_dia_otro_anio(fecha_renovacion, anio)
     return renovacion
+
+
+def anio_de(usuario, fecha: date) -> tuple[date, date]:
+    """Primer y último día (inclusivos) del año de `fecha` para este usuario.
+
+    Con póliza verificada es el año de póliza: de un aniversario de la
+    renovación al día antes del siguiente (2 oct 2026). Lo de antes del inicio
+    de ese año no cuenta para él: cada año arranca en cero. Sin póliza
+    verificada la cuenta base usa el año calendario, solo como referencia (no
+    paga nada).
+    """
+    poliza = PolizaVinculada.objects.filter(
+        usuario=usuario, estado_verificacion=VERIFICADA
+    ).first()
+    ancla = poliza and (poliza.fecha_renovacion or poliza.policy_start_date)
+    if not ancla:
+        return date(fecha.year, 1, 1), date(fecha.year, 12, 31)
+
+    inicio = _mismo_dia_otro_anio(ancla, fecha.year)
+    if inicio > fecha:
+        inicio = _mismo_dia_otro_anio(ancla, fecha.year - 1)
+    siguiente = _mismo_dia_otro_anio(ancla, inicio.year + 1)
+    return inicio, siguiente - timedelta(days=1)
+
+
+def tiene_ancla_de_anio(usuario) -> bool:
+    """True si el año se cuenta por póliza (verificada y con alguna fecha de ancla)."""
+    poliza = PolizaVinculada.objects.filter(
+        usuario=usuario, estado_verificacion=VERIFICADA
+    ).first()
+    return bool(poliza and (poliza.fecha_renovacion or poliza.policy_start_date))
+
+
+def puntos_del_anio(usuario, fecha: date) -> int:
+    """Lo acreditado en el ledger dentro del año (de póliza) que contiene `fecha`.
+
+    La actividad se limita al techo anual: los días ya asentados se recortaron
+    con la ventana vigente en su momento (año calendario si todavía no había
+    póliza), así que al pasar al año de póliza la suma podría juntar dos años
+    calendario y pasarse de 12.000. El ledger no se toca.
+    """
+    inicio, fin = anio_de(usuario, fecha)
+    del_anio = Ledger.objects.filter(usuario=usuario, fecha__range=(inicio, fin))
+    chequeo = Ledger.TipoLedger.CHEQUEO_MEDICO
+    actividad = del_anio.exclude(tipo=chequeo).aggregate(total=Sum("puntos"))["total"] or 0
+    chequeos = del_anio.filter(tipo=chequeo).aggregate(total=Sum("puntos"))["total"] or 0
+    return min(actividad, TOPE_ANUAL) + chequeos
 
 
 def poliza_de(usuario) -> PolizaVinculada | None:

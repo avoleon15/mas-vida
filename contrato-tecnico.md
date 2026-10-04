@@ -471,7 +471,7 @@ HTTP directo contra la API de Luis — no viaja por acá.
 | `puntos_intensidad` | int | FCM = 219 − edad. Escalón de **la mejor sesión del día** (no se suman): 30 min al 60% = 50, 30 min al 70% = 100, 60 min al 60% = 100, 90 min al 60% = 150. Cuentan los workouts y las sesiones que el servidor infiere del ritmo cardíaco. **+25** con 60 años o más si ganó algo por intensidad |
 | `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` |
 | `tope_diario_aplicado` | bool | true si los puntos brutos pasaron de 200 (llegar a 200 justos no es recorte) |
-| `puntos_ano` | int | lo acreditado en el **año de póliza** en curso (desde la fecha de inicio o la última renovación de la póliza; suma del ledger), con el techo de 12.000 ya aplicado. **[PENDIENTE] (código):** hoy se cuenta del 1 de enero al 31 de diciembre |
+| `puntos_ano` | int | lo acreditado en el **año de póliza** en curso (desde la fecha de inicio o la última renovación de la póliza; suma del ledger), con el techo de 12.000 ya aplicado (hecho el 4 oct; ver "Cashback en quetzales"). Es el año **en curso**, aunque el día sincronizado sea de uno anterior. Sin póliza verificada es el año calendario, solo de referencia |
 | `tope_anual_aplicado` | bool | true si el techo del año de póliza **recortó lo de este día** |
 | `nivel` | int (0–4) | nivel de cashback del **año de póliza**, según `puntos_ano`: 0 bajo 2.500, 1 desde 2.500 (5%), 2 desde 5.000 (7,5%), 3 desde 10.000 (10%), 4 desde 15.000 (20%) — no confundir con el **objetivo semanal** (ver abajo) |
 | `pasos_totales_dia` | int | total de pasos del día con la regla por hora (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
@@ -1466,8 +1466,10 @@ aseguradora confirma la póliza (y vuelven a `null` si se rechaza).
 `prima_anual_gtq` viaja como **texto con dos decimales** (es dinero: no debe
 pasar por un número de punto flotante). `fecha_renovacion` es la **próxima**
 renovación anual, no un vencimiento: se guarda la que dio la aseguradora y, si
-ya pasó, se responde la del año siguiente (y así hasta hoy o después; el 29 de
-febrero cae en el 28 los años que no son bisiestos). `verificada` es el único valor que debe usarse
+ya pasó **o es hoy**, se responde la del año siguiente (y así hasta después de
+hoy; el 29 de febrero cae en el 28 los años que no son bisiestos). El día de la
+renovación ya es el primero del año de póliza nuevo, igual que en
+`GET /api/v1/cashback` (4 oct 2026). `verificada` es el único valor que debe usarse
 para habilitar canje, cashback y La Liga.
 
 ### Datos que entrega la aseguradora (decidido 2 oct 2026)
@@ -1497,22 +1499,73 @@ coaseguro y red).
   cancelada (depende de la integración real con la aseguradora). Si se verifica
   a mano desde el admin, estos cinco datos no se llenan solos.
 
-### Cashback en quetzales (decidido 2 oct 2026)
+### Cashback en quetzales (decidido 2 oct 2026, hecho 4 oct 2026)
 
-**Monto = % del nivel × prima anual.** Se devuelve como dinero **después** del
-pago de la prima, nunca como descuento (regla regulatoria, ver `CLAUDE.md`). Se
-muestra en Mi Plan, debajo de las gráficas.
+**Monto = % del nivel × prima anual**, redondeado a centavos. Se devuelve como
+dinero **después** del pago de la prima, nunca como descuento (regla
+regulatoria, ver `CLAUDE.md`). Se muestra en Mi Plan, debajo de las gráficas.
 
-**El año del cashback es el año de póliza** (decidido 2 oct 2026): los puntos
-anuales, el techo de 12.000, el nivel y el cashback se cuentan desde la fecha de
-inicio (o la última renovación) de la póliza hasta su siguiente renovación, no
-del 1 de enero al 31 de diciembre. Con varias personas en la misma póliza
+**El año del cashback es el año de póliza:** los puntos anuales, el techo de
+12.000, el nivel y el cashback se cuentan desde un aniversario de la
+renovación hasta el día antes del siguiente, no del 1 de enero al 31 de
+diciembre. El ancla es `fecha_renovacion` (la que dio la aseguradora; si ya
+pasó se proyecta un año tras otro) o, si falta, `policy_start_date`. El día de
+la renovación ya es del año nuevo. Con varias personas en la misma póliza
 (pólizas familiares), todas comparten esas fechas.
 
-**[PENDIENTE] (Luis):**
-- No hay endpoint que devuelva el cashback.
-- El código cuenta el año por calendario (`fecha__year` en el ledger y en el
-  techo anual); hay que pasarlo al año de póliza.
+**Cada año de póliza arranca en cero** (decidido 4 oct 2026): los puntos de
+antes de su inicio no cuentan para él ni gastan su techo de 12.000, y al
+renovar el total vuelve a 0. Esto vale también con retroactividad: lo ganado
+antes del inicio del año en curso pertenece a un año anterior (la regla de
+retroactividad de abajo solo decide si lo de la cuenta base existe o no). No
+se borra ni se edita nada del ledger: solo cambia qué filas entran en la
+ventana. Como los días ya asentados se recortaron con la ventana de su
+momento (año calendario antes de verificar), al pasar al año de póliza la
+actividad del año **se limita a 12.000 al sumarla**; el chequeo médico va
+aparte, como en el techo.
+
+**Sin póliza verificada** (pendiente y rechazada incluidas) la cuenta base
+cuenta sus puntos por año calendario, solo como referencia: se ve el avance y
+el nivel, pero no hay prima ni monto. Al verificar, pasa al año de póliza.
+
+**Cuándo se paga:** el backend solo calcula y muestra. El pago lo hace la
+aseguradora, fuera de la app, después de cobrar la prima. Mientras el año
+corre, el monto es una **proyección** con el nivel de hoy; al cerrar el año
+(la renovación), el del año que terminó queda **por pagar** en el bloque
+`anterior`. El backend no mueve dinero ni registra si ya se pagó.
+
+#### `GET /api/v1/cashback`
+
+Con token. Cuenta sin perfil: `403`.
+
+```json
+{
+  "con_poliza": true,
+  "anio": {"inicio": "2026-03-01", "fin": "2027-02-28", "renovacion": "2027-03-01"},
+  "puntos_ano": 5200,
+  "nivel": 2,
+  "porcentaje": 7.5,
+  "siguiente_nivel": {"nivel": 3, "desde": 10000, "faltan": 4800, "porcentaje": 10.0, "cashback_gtq": "600.00"},
+  "prima_anual_gtq": "6000.00",
+  "cashback_gtq": "450.00",
+  "estado": "proyeccion",
+  "anterior": {
+    "inicio": "2025-03-01", "fin": "2026-02-28", "puntos_ano": 2600,
+    "nivel": 1, "porcentaje": 5.0, "cashback_gtq": "300.00", "estado": "por_pagar"
+  }
+}
+```
+
+- `estado`: `proyeccion` (póliza verificada) o `sin_poliza`. Sin póliza,
+  `anio.renovacion`, `prima_anual_gtq`, `cashback_gtq` y
+  `siguiente_nivel.cashback_gtq` son `null`, y `anterior` también.
+- El dinero va como **texto con dos decimales**; el porcentaje, como número.
+- `siguiente_nivel` es `null` en el último nivel (con el techo de 12.000, el
+  nivel 4 no se alcanza en el piloto).
+- `anterior` es `null` si la póliza todavía no tenía un año cerrado o si ese
+  año no llegó al nivel 1 (no hay nada por pagar). **[PENDIENTE]:** usa la
+  prima actual; si la prima cambia en una renovación, el monto del año
+  anterior se calcula con la nueva.
 
 ### Retroactividad
 
@@ -1664,10 +1717,11 @@ verificación" son el mismo momento.
     nombre, apellido, plan, prima y fecha de renovación~~ — **hecho** (3 oct):
     ver "Datos que entrega la aseguradora".
   - Endpoints nuevos: ~~cupones (activos, usados y vencidos)~~ — **hecho**
-    (3 oct): ver "Premios, canje y cupones"; faltan cashback en quetzales y
-    patrocinios.
-  - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
-    (hoy por año calendario), y prima anual en el registro de la aseguradora.
+    (3 oct): ver "Premios, canje y cupones"; ~~cashback en quetzales~~ —
+    **hecho** (4 oct, `GET /api/v1/cashback`); falta patrocinios.
+  - ~~Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**,
+    y prima anual en el registro de la aseguradora~~ — **hecho** (4 oct): ver
+    "Cashback en quetzales".
 - **Sincronización (3 oct) [PENDIENTE]:** para las notificaciones push, guardar
   los dispositivos y mandar el recordatorio (ver "Puntos abiertos"). Lo puede
   hacer Luis o Alvaro. El margen de gracia del cierre ya está hecho (A34).
@@ -1972,19 +2026,14 @@ el cupón y el saldo que queda:
 
 *De la reunión del 2 oct:*
 
-- **Endpoints que faltan definir:** inicio de sesión con Google y Apple,
-  cashback en quetzales y patrocinios. (Ya están hechos la lista de semanas de
+- **Endpoints que faltan definir:** inicio de sesión con Google y Apple y
+  patrocinios (el de cashback en quetzales ya está). (Ya están hechos la lista de semanas de
   la season, `objetivos/semanas`, y los de saldo, premios, canje y cupones.)
 - **Póliza cancelada después de verificada:** cómo se entera el sistema y qué
   pasa con los puntos y monedas de ese momento.
-- **Año de póliza y cuentas sin póliza:** una cuenta base no tiene año de
-  póliza. ¿Con qué fechas cuenta sus puntos anuales y su nivel mientras no
-  vincula una póliza?
-- **Puntos de antes del inicio de la póliza:** al verificar con retroactividad,
-  ¿los días anteriores al inicio del año de póliza en curso cuentan para ese
-  año o para el anterior?
-- **Cuándo se paga el cashback:** ¿al cerrar cada año de póliza (en la
-  renovación, después de pagar la prima)?
+- ~~Año de póliza y cuentas sin póliza~~, ~~puntos de antes del inicio de la
+  póliza~~ y ~~cuándo se paga el cashback~~ — **decididos el 4 oct**: ver
+  "Cashback en quetzales".
 - **Transición de la season en curso:** según la regla nueva, la season 4 de
   2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas), y
   el código ya la calcula así (2 oct). Falta decidir qué pasa con las monedas
