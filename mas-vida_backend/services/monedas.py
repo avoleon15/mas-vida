@@ -4,17 +4,26 @@ MonedaLedger es append-only: ganar, gastar, expirar y ajustar son filas
 nuevas, nunca se edita una vieja. El saldo no se guarda en ningún lado: se
 recalcula recorriendo el ledger.
 
-Caducidad: cada ganancia es un "lote" que vence a los 90 días (se puede usar
-hasta el último día inclusive). Todo descuento (canje, expiración, ajuste
-negativo) consume primero el lote que vence antes. Antes de leer o mover el
-saldo se asientan las expiraciones pendientes, así un canje nunca consume
-monedas ya vencidas.
+Reglas (decididas el 2 oct 2026):
+- Sin tope de acumulación.
+- Todas las monedas caducan al cerrar la season en que se ganaron: el saldo
+  vuelve a 0. Se pueden usar hasta el domingo en que termina la season,
+  inclusive.
+
+Cada ganancia es un "lote" y su vencimiento SIEMPRE se calcula de la season de
+su fecha (`fin_de_season`), no de lo que haya quedado guardado en
+`fecha_expiracion`: así las filas viejas, que se guardaron con 90 días,
+siguen la regla nueva. Antes de leer o mover el saldo se asientan las
+expiraciones pendientes. Eso resuelve solo el orden que pide el contrato el
+lunes en que cambia la season: primero se reinicia el saldo y después se paga
+la semana que cerró, que ya es de la season nueva porque se paga con la fecha
+de ese lunes.
 
 Se ganan con o sin póliza; lo que exige póliza verificada es GASTARLAS, y eso
 lo valida quien llama a `gastar`, no este módulo.
 """
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 
 from django.db import transaction
 
@@ -22,10 +31,27 @@ from Apps.coins.models import MonedaLedger
 from Apps.users.models import Usuario
 from services.reglas import version_regla_vigente
 from services.tiempo import hoy as hoy_guatemala
+from services.tiempo import rango_season
 
-TOPE_MONEDAS = 100
-AVISO_MONEDAS = 80
-DIAS_CADUCIDAD_MONEDAS = 90
+# Se avisa que las monedas se reinician cuando faltan 7 días o menos para que
+# termine la season. Reemplaza el aviso al llegar a 80, que existía por el tope.
+DIAS_AVISO_FIN_SEASON = 7
+
+
+def fin_de_season(fecha: date) -> date:
+    """Último día (domingo) de la season de `fecha`: hasta ahí valen las monedas."""
+    return rango_season(fecha)[1]
+
+
+def dias_para_fin_de_season(hoy: date | None = None) -> int:
+    """Días que faltan para que termine la season (0 el último domingo)."""
+    hoy = hoy or hoy_guatemala()
+    return (fin_de_season(hoy) - hoy).days
+
+
+def aviso_fin_de_season(hoy: date | None = None) -> bool:
+    """True desde 7 días antes de que termine la season: avisar del reinicio."""
+    return dias_para_fin_de_season(hoy) <= DIAS_AVISO_FIN_SEASON
 
 
 class SaldoInsuficiente(Exception):
@@ -38,24 +64,18 @@ class SaldoInsuficiente(Exception):
 @dataclass
 class Lote:
     restante: int
-    fecha: date                    # día en que se ganó
-    fecha_expiracion: date | None  # None = no vence
+    fecha: date              # día en que se ganó
+    fecha_expiracion: date   # último día que se puede usar: fin de su season
 
 
 @dataclass
 class ResultadoAcreditacion:
     acreditadas: int
-    perdidas_por_tope: int
     saldo: int
-
-    @property
-    def aviso_80(self) -> bool:
-        """Dispara el modal de aviso: saldo resultante >= 80 (no == 80)."""
-        return self.saldo >= AVISO_MONEDAS
 
 
 def _orden_de_consumo(lote: Lote):
-    return (lote.fecha_expiracion is None, lote.fecha_expiracion or date.max)
+    return lote.fecha_expiracion
 
 
 def lotes_vivos(usuario) -> list[Lote]:
@@ -63,7 +83,7 @@ def lotes_vivos(usuario) -> list[Lote]:
     lotes: list[Lote] = []
     for mov in MonedaLedger.objects.filter(usuario=usuario).order_by("id"):
         if mov.cantidad > 0:
-            lotes.append(Lote(mov.cantidad, mov.fecha, mov.fecha_expiracion))
+            lotes.append(Lote(mov.cantidad, mov.fecha, fin_de_season(mov.fecha)))
             continue
 
         por_descontar = -mov.cantidad
@@ -90,7 +110,7 @@ def expirar_vencidas(usuario, hoy: date | None = None) -> int:
     vencidas = sum(
         lote.restante
         for lote in lotes_vivos(usuario)
-        if lote.fecha_expiracion is not None and lote.fecha_expiracion < hoy
+        if lote.fecha_expiracion < hoy
     )
     if vencidas:
         MonedaLedger.objects.create(
@@ -111,7 +131,7 @@ def saldo(usuario, hoy: date | None = None) -> int:
 
 
 def acreditar(usuario, cantidad: int, tipo: str, fecha: date | None = None) -> ResultadoAcreditacion:
-    """Suma monedas respetando el tope de 100: el excedente se pierde."""
+    """Suma monedas al saldo. Sin tope; caducan al cerrar la season de `fecha`."""
     if cantidad <= 0:
         raise ValueError("Solo se acreditan cantidades positivas")
     fecha = fecha or hoy_guatemala()
@@ -120,22 +140,16 @@ def acreditar(usuario, cantidad: int, tipo: str, fecha: date | None = None) -> R
         _bloquear(usuario)
         expirar_vencidas(usuario, fecha)
         previo = sum(lote.restante for lote in lotes_vivos(usuario))
-        acreditadas = max(0, min(cantidad, TOPE_MONEDAS - previo))
-        if acreditadas:
-            MonedaLedger.objects.create(
-                usuario=usuario,
-                cantidad=acreditadas,
-                tipo=tipo,
-                fecha=fecha,
-                fecha_expiracion=fecha + timedelta(days=DIAS_CADUCIDAD_MONEDAS),
-                version_regla=version_regla_vigente(fecha),
-            )
+        MonedaLedger.objects.create(
+            usuario=usuario,
+            cantidad=cantidad,
+            tipo=tipo,
+            fecha=fecha,
+            fecha_expiracion=fin_de_season(fecha),
+            version_regla=version_regla_vigente(fecha),
+        )
 
-    return ResultadoAcreditacion(
-        acreditadas=acreditadas,
-        perdidas_por_tope=cantidad - acreditadas,
-        saldo=previo + acreditadas,
-    )
+    return ResultadoAcreditacion(acreditadas=cantidad, saldo=previo + cantidad)
 
 
 def gastar(usuario, cantidad: int, fecha: date | None = None) -> int:

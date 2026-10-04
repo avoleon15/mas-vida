@@ -1,8 +1,8 @@
 from django.db import models
-from Apps.core.models import UserIdBase, ModeloBase
+from Apps.core.models import ModeloBase, SoloAgregar, UserIdBase
 
 # Create your models here.
-class MonedaLedger(UserIdBase):
+class MonedaLedger(SoloAgregar, UserIdBase):
     class Tipo(models.TextChoices):
         OBJETIVO_CUMPLIDO = 'objetivo_cumplido', 'Objetivo cumplido'
         LIGA_MENSUAL = 'liga_mensual', 'Liga mensual'

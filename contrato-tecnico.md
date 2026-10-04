@@ -510,7 +510,8 @@ por eso se aplican antes: el resultado no depende del motor.
 
 Si el servidor no tiene ninguna versión de reglas vigente responde `500`, y
 Swift reintenta los `5xx`. **Una base migrada ya la trae:** la migración
-`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026), así que un
+`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026) y la `0008` la
+versión 2 (desde el 2 oct 2026), así que un
 despliegue limpio con `migrate` no tiene este problema. Solo ocurriría si
 alguien borra la versión. Cada fila del ledger queda sellada con la versión
 vigente en la fecha del día que puntúa.
@@ -634,9 +635,13 @@ lunes 4 ene 2027.
   reemplaza la regla anterior (corte el 1 de enero, abril, julio y octubre,
   aunque cayera a media semana).
 
-**[PENDIENTE] (Luis):** el código (`services/tiempo.py`) todavía calcula las
-seasons por trimestre de calendario: para el código la season 4 de 2026 empezó
-el jueves 1 oct, y según esta regla empezó el lunes 28 sep.
+**Hecho en el código (2 oct):** `services/tiempo.py` calcula las seasons por
+semanas ISO (`numero_season`, `anio_season` y `rango_season`). El año de la
+season es el **año ISO**: el 3 ene 2027 todavía es de la season 4 de 2026, y el
+29 dic 2025 ya es de la season 1 de 2026. `GET /api/v1/retos/estado` devuelve
+esa season y su `fecha_cierre` (domingo de cierre). La tabla `Season` se llena
+sola al pedir la season, y corrige las filas que se hayan guardado con la regla
+vieja de trimestres.
 
 ### Monedas y seasons (decidido 2 oct 2026)
 
@@ -653,8 +658,24 @@ el jueves 1 oct, y según esta regla empezó el lunes 28 sep.
   season se reinician como las demás.
 - Los **cupones ya canjeados** no cambian: caducan a los 60 días del canje.
 
-**[PENDIENTE] (Luis):** `services/monedas.py` aplica hoy el tope de 100 y la
-caducidad de 90 días, y nada reinicia el saldo al cambiar de season.
+**Hecho en el código (2 oct):** `services/monedas.py`.
+
+- Cada ganancia **caduca el domingo en que cierra la season en que se ganó**, y
+  ese día todavía se puede usar. El vencimiento se calcula **siempre de la
+  season de la fecha de la ganancia**, no de lo que haya quedado guardado en
+  `fecha_expiracion`: así las filas anteriores (guardadas con 90 días) también
+  siguen la regla nueva.
+- **El reinicio no necesita un proceso aparte.** Antes de leer o mover el saldo
+  se asientan las monedas vencidas con una fila `expiracion` negativa (el ledger
+  no se edita). Por eso el orden del lunes en que cambia la season sale solo:
+  como la semana que cerró se paga con la fecha de ese lunes, primero se
+  reinicia y después entra lo nuevo.
+- Las monedas se acreditan **sin tope**.
+- El servicio calcula cuántos días faltan para el cierre y si ya toca el aviso
+  (desde 7 días antes, inclusive el último domingo). La app puede mostrarlo con la
+  `fecha_cierre` de `retos/estado`.
+- **[PENDIENTE]** el endpoint de saldo, que es lo que la app lee para mostrar las
+  monedas y el aviso, va con el paquete de premios y canje.
 
 ### Ciclos y cortes
 
@@ -707,7 +728,7 @@ cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
     "workouts_acumulados": 0,
     "cumplido": false
   },
-  "season": { "numero": 3, "fecha_cierre": "2026-09-30" },
+  "season": { "numero": 3, "fecha_cierre": "2026-09-27" },
   "historial_seasons": []
 }
 ```
@@ -740,8 +761,7 @@ hay objetivo máximo que registrar mientras no haya progresión).
   antes de tiempo. Correrlo dos veces no paga dos veces. Lo
   dispara el servicio `programador` (ver "Cierre semanal programado").
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
-  **gastarlas**. Hoy el código aplica el tope de 100 y la caducidad de 90 días;
-  **[PENDIENTE] (2 oct):** sin tope y con reinicio al cerrar la season (ver
+  **gastarlas**. Sin tope, y caducan al cerrar la season (hecho el 2 oct; ver
   "Monedas y seasons").
 - **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
   vinculada") **sí** cuentan para el progreso de la semana en curso. Las
@@ -1427,7 +1447,11 @@ verificación" son el mismo momento.
   Ver sección "Endpoint de resumen del dashboard" arriba para el shape
   completo.
 - **Ledger append-only:** cada acreditación es una fila nueva con la versión
-  de la regla que la generó — nunca `UPDATE` sobre una fila existente. Tipos:
+  de la regla que la generó — nunca `UPDATE` sobre una fila existente.
+  **Se hace cumplir en el código (3 oct):** en `Ledger` (puntos) y
+  `MonedaLedger` (monedas), editar una fila, `update()` y borrar (una fila o en
+  bloque) lanzan `FilaInmutable`. En el admin se pueden ver y **agregar** filas
+  (acreditaciones manuales del demo), nunca editarlas ni borrarlas. Tipos:
   `pasos` e `intensidad` (el primer cálculo del día), `ajuste_manual` (cada
   corrección por datos tardíos, positiva o negativa; el nombre se presta a
   confusión porque también lo usa el sistema), `retroactivo_denegado` y
@@ -1441,9 +1465,9 @@ verificación" son el mismo momento.
   - Objetivo semanal: pago por componente (5 + 5 provisional), meta de pasos
     por rango de edad y lista de semanas de la season para la vista "battle
     pass".
-  - Seasons por semanas ISO (hoy por trimestre de calendario).
-  - Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
-    cambia (primero reiniciar, después pagar).
+  - ~~Seasons por semanas ISO~~ — **hecho** (2 oct): ver "Seasons".
+  - ~~Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
+    cambia~~ — **hecho** (2 oct): ver "Monedas y seasons".
   - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
     devuelven los puntos de cada participante pero nunca sus pasos.
   - Póliza: no rechazar por la fecha de renovación (solo cancelada o
@@ -1645,8 +1669,10 @@ verificación" son el mismo momento.
 - **Cuándo se paga el cashback:** ¿al cerrar cada año de póliza (en la
   renovación, después de pagar la prima)?
 - **Transición de la season en curso:** según la regla nueva, la season 4 de
-  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas); el
-  código la empezó el jueves 1 oct. Hay que decidir si se corrige hacia atrás.
+  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas), y
+  el código ya la calcula así (2 oct). Falta decidir qué pasa con las monedas
+  que se pagaron en las semanas de la season 3 (hasta el 27 sep) cuando se
+  construya el reinicio de saldo: ¿se reinician el 28 sep o no se tocan?
 
 *Encontrados en la revisión contra el código (1 oct):*
 
@@ -1691,6 +1717,11 @@ verificación" son el mismo momento.
   la versión 1 sola, con cualquier `migrate`; no hace falta comando ni fixture.
   Cuando cambie una regla de puntaje o de monedas, se agrega una versión nueva
   con su `vigente_desde` (por ejemplo con otra migración de datos igual a esa).
+  **La versión 2** (migración `poincs/0008`, vigente desde el **2 oct 2026**)
+  marca las reglas de la reunión de ese día, empezando por las monedas sin tope
+  que caducan con la season. Cada fila de los ledgers queda sellada con la versión
+  vigente en su fecha: lo anterior al 2 oct es versión 1 y lo posterior, versión 2.
+  La versión es solo una etiqueta de auditoría: los cálculos los hace el código.
 - **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
   fila por día ya no se lee. No hay datos reales en ese formato; una base de
   pruebas vieja se vuelve a sincronizar.
