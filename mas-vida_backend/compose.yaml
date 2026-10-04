@@ -31,7 +31,7 @@ services:
     
     
 
-  # Cierre semanal del objetivo (lunes 00:00) y su corrección (lunes 12:00),
+  # Cierre semanal del objetivo (martes 00:00) y su corrección (martes 12:00),
   # en hora de Guatemala. Se pone al día al arrancar con las semanas que hayan
   # quedado sin cerrar. Ver `python manage.py programador`.
   programador:

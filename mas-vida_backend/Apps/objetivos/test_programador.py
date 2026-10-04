@@ -23,39 +23,46 @@ def gt(anio, mes, dia, hora=0, minuto=0, segundo=0):
 
 
 class ProximaEjecucionTests(SimpleTestCase):
-    """2026-10-05 es lunes. Todas las horas son de Guatemala."""
+    """2026-10-05 es lunes y 2026-10-06 martes. Todas las horas son de Guatemala.
+    El cierre es el martes 00:00: el lunes entero queda para los datos atrasados
+    del domingo (goals.DIAS_DE_GRACIA, decidido el 3 oct 2026)."""
 
-    def test_el_domingo_por_la_noche_sigue_el_cierre_del_lunes(self):
-        self.assertEqual(proxima_ejecucion(gt(2026, 10, 4, 23, 59)), (gt(2026, 10, 5, 0, 0), CIERRE))
+    def test_el_lunes_por_la_noche_sigue_el_cierre_del_martes(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 23, 59)), (gt(2026, 10, 6, 0, 0), CIERRE))
+
+    def test_el_lunes_00_ya_no_cierra(self):
+        # Antes del 3 oct el cierre era el lunes 00:00. Ahora el lunes es de gracia.
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 4, 23, 59)), (gt(2026, 10, 6, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 0, 0)), (gt(2026, 10, 6, 0, 0), CIERRE))
 
     def test_justo_en_el_cierre_la_siguiente_es_la_correccion(self):
         # Estrictamente después: el cierre de las 00:00 no se repite a las 00:00.
-        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 0, 0)), (gt(2026, 10, 5, 12, 0), CORRECCION))
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 6, 0, 0)), (gt(2026, 10, 6, 12, 0), CORRECCION))
 
-    def test_el_lunes_por_la_manana_sigue_la_correccion(self):
-        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 11, 59, 59)), (gt(2026, 10, 5, 12, 0), CORRECCION))
+    def test_el_martes_por_la_manana_sigue_la_correccion(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 6, 11, 59, 59)), (gt(2026, 10, 6, 12, 0), CORRECCION))
 
     def test_justo_en_la_correccion_la_siguiente_es_el_cierre_de_la_otra_semana(self):
-        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 12, 0)), (gt(2026, 10, 12, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 6, 12, 0)), (gt(2026, 10, 13, 0, 0), CIERRE))
 
-    def test_a_mitad_de_semana_sigue_el_proximo_lunes(self):
-        self.assertEqual(proxima_ejecucion(gt(2026, 10, 7, 15, 30)), (gt(2026, 10, 12, 0, 0), CIERRE))
+    def test_a_mitad_de_semana_sigue_el_proximo_martes(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 7, 15, 30)), (gt(2026, 10, 13, 0, 0), CIERRE))
 
     def test_cruza_el_fin_de_anio(self):
-        self.assertEqual(proxima_ejecucion(gt(2026, 12, 28, 13, 0)), (gt(2027, 1, 4, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2026, 12, 29, 13, 0)), (gt(2027, 1, 5, 0, 0), CIERRE))
 
     def test_trabaja_en_hora_de_guatemala_aunque_llegue_en_utc(self):
-        # Domingo 5:59 UTC = sábado 23:59 en Guatemala: el lunes en Guatemala
+        # Martes 5:59 UTC = lunes 23:59 en Guatemala: el martes en Guatemala
         # empieza a las 06:00 UTC.
-        ahora_utc = datetime(2026, 10, 4, 5, 59, tzinfo=utc.utc)
+        ahora_utc = datetime(2026, 10, 6, 5, 59, tzinfo=utc.utc)
         momento, tipo = proxima_ejecucion(ahora_utc)
         self.assertEqual(tipo, CIERRE)
-        self.assertEqual(momento.astimezone(utc.utc), datetime(2026, 10, 5, 6, 0, tzinfo=utc.utc))
+        self.assertEqual(momento.astimezone(utc.utc), datetime(2026, 10, 6, 6, 0, tzinfo=utc.utc))
 
-    def test_el_lunes_a_las_6_utc_ya_es_lunes_00_en_guatemala(self):
-        ahora_utc = datetime(2026, 10, 5, 6, 0, tzinfo=utc.utc)
+    def test_el_martes_a_las_6_utc_ya_es_martes_00_en_guatemala(self):
+        ahora_utc = datetime(2026, 10, 6, 6, 0, tzinfo=utc.utc)
         momento, tipo = proxima_ejecucion(ahora_utc)
-        self.assertEqual((momento, tipo), (gt(2026, 10, 5, 12, 0), CORRECCION))
+        self.assertEqual((momento, tipo), (gt(2026, 10, 6, 12, 0), CORRECCION))
 
 
 class RelojFalso:
@@ -92,9 +99,9 @@ class BucleTests(SimpleTestCase):
         self.assertEqual(
             [(t, m) for t, m, _ in hechas],
             [
-                (CIERRE, gt(2026, 10, 5, 0, 0)),
-                (CORRECCION, gt(2026, 10, 5, 12, 0)),
-                (CIERRE, gt(2026, 10, 12, 0, 0)),
+                (CIERRE, gt(2026, 10, 6, 0, 0)),
+                (CORRECCION, gt(2026, 10, 6, 12, 0)),
+                (CIERRE, gt(2026, 10, 13, 0, 0)),
             ],
         )
 
@@ -166,7 +173,7 @@ def crear_usuario(nombre):
 
 class EjecutarTests(TestCase):
     LUNES = date(2026, 9, 28)   # semana a evaluar
-    SIGUIENTE = date(2026, 10, 5)
+    SIGUIENTE = date(2026, 10, 6)  # el martes en que se cierra
 
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
@@ -177,28 +184,35 @@ class EjecutarTests(TestCase):
         )
 
     def test_el_cierre_paga_a_quien_cumplio(self):
-        ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
         self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), 20)
         self.assertTrue(CumplimientoSemanal.objects.get(usuario=self.ana).cumplido)
 
     def test_el_cierre_pone_al_dia_las_semanas_que_se_quedaron_sin_cerrar(self):
-        ejecutar(CIERRE, gt(2026, 10, 12, 0, 0))  # nadie corrió el 5 de octubre
-        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 12)), 20)
+        ejecutar(CIERRE, gt(2026, 10, 13, 0, 0))  # nadie corrió el 6 de octubre
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 13)), 20)
+
+    def test_un_cierre_que_corre_el_lunes_no_cierra_la_semana_que_termino_ayer(self):
+        # Un servidor que arranca un lunes se pone al día, pero la semana que
+        # terminó el domingo sigue esperando datos hasta el martes.
+        ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
+        self.assertFalse(CumplimientoSemanal.objects.exists())
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 5)), 0)
 
     def test_el_cierre_dos_veces_no_paga_dos_veces(self):
-        ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
-        ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
         self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), 20)
 
     def test_la_correccion_actualiza_acumulados_sin_pagar_ni_reabrir(self):
         beto = crear_usuario("beto")
-        ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
         ResumenDiario.objects.create(
             usuario=beto, fecha=date(2026, 9, 30), pasos_totales_dia=40_000,
             workouts_cantidad=2, puntos_dia=0,
         )  # llegó tarde, ya cumpliría
 
-        ejecutar(CORRECCION, gt(2026, 10, 5, 12, 0))
+        ejecutar(CORRECCION, gt(2026, 10, 6, 12, 0))
 
         cumplimiento = CumplimientoSemanal.objects.get(usuario=beto)
         self.assertEqual(cumplimiento.pasos_semanales, 40_000)  # acumulado corregido

@@ -252,9 +252,12 @@ en hora de Guatemala. Quién releva la semana es el **servidor**: el teléfono
 nunca lo calcula, solo vuelve a pedir los datos al pasar el cierre
 (`programarRelevoDeSemana`). Si lo decidiera el teléfono, cambiar la zona
 horaria en Ajustes abriría una semana nueva antes de tiempo. El objetivo nuevo
-se fija a las 00:00 del lunes; no hay estado de "evaluando". El servidor
-acepta datos atrasados de la semana cerrada hasta el **mediodía del lunes**,
-pero eso ya no cambia la semana cerrada — solo el historial y el acumulado anual. Por lo mismo,
+se fija a las 00:00 del lunes; no hay estado de "evaluando". El **resultado**
+de la semana que terminó (si se completó y sus monedas) se fija el **martes
+00:00** (decidido el 3 de octubre de 2026): el lunes entero queda para los
+datos atrasados del domingo. El lunes, esa semana se muestra "en revisión",
+nunca "no cumplida". Lo que llegue después del martes ya no cambia la semana
+cerrada — solo el historial y el acumulado anual. Por lo mismo,
 **ningún texto del objetivo puede sonar a plazo propio** ("Faltan 42 min" se
 leía como cuenta regresiva): se dice el avance sobre la meta ("48.000 de 70.000 pasos")
 y el plazo una sola vez, abajo.

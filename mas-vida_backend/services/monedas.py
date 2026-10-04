@@ -14,10 +14,11 @@ Cada ganancia es un "lote" y su vencimiento SIEMPRE se calcula de la season de
 su fecha (`fin_de_season`), no de lo que haya quedado guardado en
 `fecha_expiracion`: así las filas viejas, que se guardaron con 90 días,
 siguen la regla nueva. Antes de leer o mover el saldo se asientan las
-expiraciones pendientes. Eso resuelve solo el orden que pide el contrato el
-lunes en que cambia la season: primero se reinicia el saldo y después se paga
-la semana que cerró, que ya es de la season nueva porque se paga con la fecha
-de ese lunes.
+expiraciones pendientes. Eso resuelve solo el orden que pide el contrato al
+cambiar de season: primero se reinicia el saldo y después se paga la semana
+que terminó, que ya es de la season nueva porque se paga con la fecha de su
+cierre, el martes 00:00 (el lunes es margen de gracia, `goals.DIAS_DE_GRACIA`).
+Las seasons empiezan en lunes, así que ese martes siempre es de la season nueva.
 
 Se ganan con o sin póliza; lo que exige póliza verificada es GASTARLAS, y eso
 lo valida quien llama a `gastar`, no este módulo.

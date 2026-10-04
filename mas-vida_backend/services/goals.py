@@ -8,8 +8,10 @@ y MetaPorPasosObjetivo quedan para cuando vuelva el diseño completo.
 Las metas viven en ObjetivoSemanal y se editan a mano en el admin. Cada semana
 nueva copia las de la anterior; la primera usa los valores de abajo.
 
-Dos corridas el lunes (comando `cerrar_semana`):
-- 00:00: fija `cumplido` de la semana que cerró y paga las monedas.
+Dos corridas el martes (comando `cerrar_semana`):
+- 00:00: fija `cumplido` de la semana que terminó el domingo y paga las
+  monedas. Espera todo el lunes (DIAS_DE_GRACIA) para que lleguen los datos
+  atrasados: un domingo que se sincroniza el lunes todavía cuenta.
 - 12:00 (`--correccion`): actualiza los acumulados con datos atrasados, pero
   ya no cambia `cumplido` ni paga nada. Un ciclo cerrado no se reabre.
 
@@ -46,6 +48,13 @@ META_WORKOUTS_INICIAL = 1
 
 # [PENDIENTE] ningún documento fija cuántas monedas paga cumplir el objetivo.
 MONEDAS_POR_OBJETIVO = 20
+
+# Días después del domingo que se esperan antes de cerrar una semana: con 1, se
+# cierra el martes 00:00 y los datos atrasados tienen todo el lunes para llegar
+# (decidido 3 oct 2026; StepBet da 24 h, Discovery Vitality 48 h). Vale para
+# cualquier cierre, también para ponerse al día: un servidor que arranca un
+# lunes no cierra la semana anterior antes de tiempo.
+DIAS_DE_GRACIA = 1
 
 # Cuántas semanas atrasadas se cierran como máximo al ponerse al día. Sin tope,
 # la primera vez que corra con datos viejos pagaría monedas de hace meses.
@@ -141,6 +150,12 @@ def _progreso_de_todos(usuarios, objetivo: ObjetivoSemanal) -> dict[int, tuple[i
     return {f["usuario"]: (f["pasos"] or 0, f["workouts"] or 0) for f in filas}
 
 
+def primer_dia_de_cierre(lunes: date) -> date:
+    """Desde qué día se puede cerrar la semana que arranca en `lunes`: el
+    martes siguiente (el domingo + 1 + DIAS_DE_GRACIA)."""
+    return fin_semana(lunes) + timedelta(days=1 + DIAS_DE_GRACIA)
+
+
 def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
     """Evalúa la semana que arranca en `lunes`, para todos los usuarios.
 
@@ -150,6 +165,11 @@ def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
     objetivo = objetivo_de_la_semana(lunes)
     if hoy <= objetivo.fecha_fin:
         raise ValueError("La semana todavía no terminó")
+    if hoy < primer_dia_de_cierre(lunes):
+        raise ValueError(
+            "La semana sigue en su margen de gracia: se cierra el "
+            f"{primer_dia_de_cierre(lunes).isoformat()}"
+        )
 
     usuarios = list(Usuario.objects.all())
     avance = _progreso_de_todos(usuarios, objetivo)
@@ -197,21 +217,23 @@ def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
             )
             resumen["monedas_pagadas"] += pago.acreditadas
 
-    # El objetivo de la semana que arranca queda fijado desde las 00:00.
+    # El objetivo de la semana siguiente ya está fijado desde el lunes 00:00 (se
+    # crea al pedirlo); esto solo asegura que exista.
     objetivo_de_la_semana(objetivo.fecha_fin + timedelta(days=1))
     return resumen
 
 
 def semanas_pendientes(hoy: date) -> list[date]:
-    """Lunes de las semanas ya terminadas que todavía no se cerraron.
+    """Lunes de las semanas que ya se pueden cerrar y todavía no se cerraron.
 
-    "Cerrada" = existe al menos un CumplimientoSemanal de esa semana. La semana
-    en curso nunca entra: el lunes `hoy` ya cuenta como semana nueva y la
-    anterior es la última que terminó. Si nunca se cerró ninguna, se empieza
-    por la primera semana con datos (o con objetivo), sin pasar de
+    "Cerrada" = existe al menos un CumplimientoSemanal de esa semana. "Se puede
+    cerrar" = ya pasó su margen de gracia (`primer_dia_de_cierre`): la semana en
+    curso nunca entra, y el lunes la que terminó el domingo tampoco, porque
+    todavía espera datos atrasados. Si nunca se cerró ninguna, se empieza por la
+    primera semana con datos (o con objetivo), sin pasar de
     MAX_SEMANAS_ATRASADAS hacia atrás.
     """
-    ultima_terminada = inicio_semana(hoy) - timedelta(days=7)
+    ultima_cerrable = inicio_semana(hoy - timedelta(days=DIAS_DE_GRACIA)) - timedelta(days=7)
 
     ultima_cerrada = ObjetivoSemanal.objects.filter(
         cumplimientosemanal__isnull=False
@@ -231,7 +253,7 @@ def semanas_pendientes(hoy: date) -> list[date]:
             return []
         primera = min(candidatas)
 
-    mas_vieja_permitida = ultima_terminada - timedelta(days=7 * (MAX_SEMANAS_ATRASADAS - 1))
+    mas_vieja_permitida = ultima_cerrable - timedelta(days=7 * (MAX_SEMANAS_ATRASADAS - 1))
     if primera < mas_vieja_permitida:
         logger.warning(
             "Se omiten las semanas anteriores al %s: pasan del tope de %d semanas atrasadas",
@@ -241,7 +263,7 @@ def semanas_pendientes(hoy: date) -> list[date]:
 
     semanas = []
     lunes = primera
-    while lunes <= ultima_terminada:
+    while lunes <= ultima_cerrable:
         semanas.append(lunes)
         lunes += timedelta(days=7)
     return semanas

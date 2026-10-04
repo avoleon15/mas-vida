@@ -1,8 +1,10 @@
-"""Programador de las dos corridas del lunes (hora de Guatemala).
+"""Programador de las dos corridas del martes (hora de Guatemala).
 
-- Lunes 00:00 (cierre): se ponen al día todas las semanas terminadas que sigan
-  sin cerrar; fija `cumplido` y paga las monedas.
-- Lunes 12:00 (corrección): actualiza los acumulados de la semana que cerró con
+- Martes 00:00 (cierre): se ponen al día todas las semanas que ya pasaron su
+  margen de gracia y sigan sin cerrar; fija `cumplido` y paga las monedas. El
+  lunes entero queda para que lleguen los datos atrasados del domingo
+  (`goals.DIAS_DE_GRACIA`, decidido el 3 oct 2026; antes cerraba el lunes 00:00).
+- Martes 12:00 (corrección): actualiza los acumulados de la semana que cerró con
   los datos atrasados, sin cambiar `cumplido` ni pagar.
 
 La lógica está separada del bucle y el reloj se inyecta, así se puede probar
@@ -25,8 +27,12 @@ logger = logging.getLogger(__name__)
 CIERRE = "cierre"
 CORRECCION = "correccion"
 
-# (hora del lunes, qué corrida es), en orden.
-CORRIDAS_DEL_LUNES = ((0, CIERRE), (12, CORRECCION))
+# (días después del lunes, hora, qué corrida es), en orden. El cierre espera
+# `goals.DIAS_DE_GRACIA` días después del domingo.
+CORRIDAS_DE_LA_SEMANA = (
+    (goals.DIAS_DE_GRACIA, 0, CIERRE),
+    (goals.DIAS_DE_GRACIA, 12, CORRECCION),
+)
 
 # Cada cuánto despierta mientras espera: si el reloj salta (suspensión del
 # servidor) no se pasa de largo una corrida por mucho.
@@ -46,11 +52,11 @@ def proxima_ejecucion(ahora: datetime) -> tuple[datetime, str]:
     lunes = inicio_semana(timezone.localtime(ahora).date())
 
     for semana in (lunes, lunes + timedelta(days=7)):
-        for hora, tipo in CORRIDAS_DEL_LUNES:
-            momento = datetime.combine(semana, time(hora), tzinfo=zona)
+        for dias, hora, tipo in CORRIDAS_DE_LA_SEMANA:
+            momento = datetime.combine(semana + timedelta(days=dias), time(hora), tzinfo=zona)
             if momento > ahora:
                 return momento, tipo
-    raise AssertionError("Siempre hay una corrida el lunes siguiente")  # pragma: no cover
+    raise AssertionError("Siempre hay una corrida la semana siguiente")  # pragma: no cover
 
 
 def ejecutar(tipo: str, momento: datetime):
