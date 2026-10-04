@@ -1,15 +1,17 @@
 """Evalúa el objetivo de la semana que acaba de cerrar y paga las monedas.
 
 Uso (hora de Guatemala):
-  python manage.py cerrar_semana                  # lunes 00:00: fija y paga
-  python manage.py cerrar_semana --correccion     # lunes 12:00: solo corrige acumulados
-  python manage.py cerrar_semana --fecha 2026-09-28   # simular otro "hoy"
+  python manage.py cerrar_semana                  # martes 00:00: fija y paga
+  python manage.py cerrar_semana --correccion     # martes 12:00: solo corrige acumulados
+  python manage.py cerrar_semana --fecha 2026-09-29   # simular otro "hoy"
   python manage.py cerrar_semana --ponerse-al-dia     # cierra TODAS las pendientes
 
-Sin `--ponerse-al-dia` evalúa solo la semana anterior a la de `--fecha`. Se
-puede correr las veces que haga falta: no paga dos veces. Con
-`--ponerse-al-dia` cierra todas las semanas terminadas que sigan sin cerrar
-(hasta MAX_SEMANAS_ATRASADAS), útil después de un cron que falló.
+Sin `--ponerse-al-dia` evalúa solo la semana anterior a la de `--fecha`, y no
+antes del martes: el lunes la semana todavía espera datos atrasados
+(`goals.DIAS_DE_GRACIA`). Se puede correr las veces que haga falta: no paga dos
+veces. Con `--ponerse-al-dia` cierra todas las semanas que ya pasaron su margen
+y sigan sin cerrar (hasta MAX_SEMANAS_ATRASADAS), útil después de un cron que
+falló.
 """
 from datetime import date, timedelta
 
@@ -37,7 +39,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--correccion",
             action="store_true",
-            help="Corrida de las 12:00: actualiza acumulados, no cambia cumplido ni paga.",
+            help="Corrida del martes 12:00: actualiza acumulados, no cambia cumplido ni paga.",
         )
 
     def handle(self, *args, **opciones):
@@ -57,7 +59,11 @@ class Command(BaseCommand):
             return
 
         lunes = inicio_semana(hoy) - timedelta(days=7)
-        resumen = goals.cerrar_semana(lunes, hoy, correccion=opciones["correccion"])
+        try:
+            resumen = goals.cerrar_semana(lunes, hoy, correccion=opciones["correccion"])
+        except ValueError as error:
+            # Por ejemplo, un lunes: la semana sigue en su margen de gracia.
+            raise CommandError(str(error))
 
         modo = "corrección" if opciones["correccion"] else "cierre"
         self.stdout.write(self.style.SUCCESS(

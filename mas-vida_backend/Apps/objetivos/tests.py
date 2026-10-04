@@ -20,7 +20,8 @@ from services.tiempo import fin_semana, inicio_semana, numero_season, rango_seas
 
 LUNES = date(2026, 9, 21)
 DOMINGO = date(2026, 9, 27)
-HOY = date(2026, 9, 28)  # el lunes en que se evalúa la semana anterior
+HOY = date(2026, 9, 29)  # el martes en que se cierra la semana anterior
+EL_LUNES = date(2026, 9, 28)  # la semana ya terminó, pero sigue en su margen de gracia
 
 # Pago de una semana COMPLETADA: cada componente paga lo suyo (5 + 5).
 PAGO_SEMANA_COMPLETA = 2 * goals.MONEDAS_POR_COMPONENTE_INICIAL
@@ -187,16 +188,37 @@ class CerrarSemanaTests(TestCase):
         with self.assertRaises(ValueError):
             goals.cerrar_semana(LUNES, DOMINGO)  # el domingo todavía corre
 
+    def test_el_lunes_la_semana_sigue_en_su_margen_de_gracia(self):
+        with self.assertRaises(ValueError):
+            goals.cerrar_semana(LUNES, EL_LUNES)
+        with self.assertRaises(ValueError):
+            goals.cerrar_semana(LUNES, EL_LUNES, correccion=True)
+        self.assertFalse(CumplimientoSemanal.objects.exists())
+
+    def test_un_domingo_que_llega_el_lunes_todavia_cuenta(self):
+        # Es la razón del margen: Carla no abrió la app el domingo; su domingo
+        # llega el lunes, y la semana se cierra el martes.
+        with self.assertRaises(ValueError):
+            goals.cerrar_semana(LUNES, EL_LUNES)
+        dia(self.carla, DOMINGO, 31_000, workouts=1)   # sincronizó el lunes
+        self._cerrar()
+        self.assertTrue(self._cumplimiento(self.carla).cumplido)
+        self.assertEqual(monedas.saldo(self.carla, HOY), PAGO_SEMANA_COMPLETA)
+
+    def test_el_martes_ya_se_puede_cerrar(self):
+        self.assertEqual(goals.primer_dia_de_cierre(LUNES), HOY)
+
     def test_el_domingo_a_las_2359_cuenta_y_el_lunes_no(self):
         dia(self.carla, DOMINGO, 31_000, workouts=1)          # último día de la semana
-        dia(self.beto, HOY, 5_000, workouts=1)                # ya es la semana nueva
+        dia(self.beto, EL_LUNES, 5_000, workouts=1)           # ya es la semana nueva
         self._cerrar()
         self.assertTrue(self._cumplimiento(self.carla).cumplido)
         self.assertEqual(self._cumplimiento(self.beto).workouts_acumulados, 0)
 
     def test_deja_fijado_el_objetivo_de_la_semana_nueva(self):
         self._cerrar()
-        self.assertTrue(ObjetivoSemanal.objects.filter(fecha_inicio=HOY).exists())
+        # La semana nueva empieza el lunes, aunque la anterior se cierre el martes.
+        self.assertTrue(ObjetivoSemanal.objects.filter(fecha_inicio=EL_LUNES).exists())
 
     def test_usa_las_metas_y_monedas_editadas_a_mano_en_el_admin(self):
         meta_fija(5_000)
@@ -281,20 +303,25 @@ class CerrarSemanaTests(TestCase):
 
     def test_el_comando_cierra_la_semana_anterior_a_la_fecha_dada(self):
         salida = StringIO()
-        call_command("cerrar_semana", "--fecha", "2026-09-28", stdout=salida)
+        call_command("cerrar_semana", "--fecha", "2026-09-29", stdout=salida)
         self.assertIn("2026-09-21", salida.getvalue())
         self.assertEqual(monedas.saldo(self.ana, HOY), PAGO_SEMANA_COMPLETA)
 
     def test_el_comando_se_puede_correr_dos_veces(self):
-        call_command("cerrar_semana", "--fecha", "2026-09-28", stdout=StringIO())
-        call_command("cerrar_semana", "--fecha", "2026-09-28", stdout=StringIO())
+        call_command("cerrar_semana", "--fecha", "2026-09-29", stdout=StringIO())
+        call_command("cerrar_semana", "--fecha", "2026-09-29", stdout=StringIO())
         self.assertEqual(monedas.saldo(self.ana, HOY), PAGO_SEMANA_COMPLETA)
 
     def test_el_comando_en_modo_correccion(self):
-        call_command("cerrar_semana", "--fecha", "2026-09-28", stdout=StringIO())
+        call_command("cerrar_semana", "--fecha", "2026-09-29", stdout=StringIO())
         salida = StringIO()
-        call_command("cerrar_semana", "--fecha", "2026-09-28", "--correccion", stdout=salida)
+        call_command("cerrar_semana", "--fecha", "2026-09-29", "--correccion", stdout=salida)
         self.assertIn("corrección", salida.getvalue())
+
+    def test_el_comando_un_lunes_avisa_que_la_semana_sigue_en_gracia(self):
+        with self.assertRaises(CommandError):
+            call_command("cerrar_semana", "--fecha", "2026-09-28", stdout=StringIO())
+        self.assertFalse(CumplimientoSemanal.objects.exists())
 
     def test_el_comando_rechaza_una_fecha_mal_escrita(self):
         with self.assertRaises(CommandError):
@@ -311,7 +338,8 @@ class PonerseAlDiaTests(TestCase):
     """
 
     S0, S1, S2, S3 = date(2026, 9, 7), date(2026, 9, 14), date(2026, 9, 21), date(2026, 9, 28)
-    LUNES_5_OCT = date(2026, 10, 5)  # la última semana terminada es la del 28 sep
+    LUNES_5_OCT = date(2026, 10, 5)  # la semana del 28 sep ya terminó, pero sigue en gracia
+    MARTES_6_OCT = date(2026, 10, 6)  # ya se puede cerrar la del 28 sep
 
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
@@ -324,19 +352,19 @@ class PonerseAlDiaTests(TestCase):
     # --- qué semanas faltan ---------------------------------------------------
 
     def test_sin_datos_ni_objetivos_no_hay_nada_pendiente(self):
-        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [])
+        self.assertEqual(goals.semanas_pendientes(self.MARTES_6_OCT), [])
 
     def test_sin_nada_cerrado_empieza_por_la_primera_semana_con_datos(self):
         self._cumple(self.S1)
         self.assertEqual(
-            goals.semanas_pendientes(self.LUNES_5_OCT), [self.S1, self.S2, self.S3]
+            goals.semanas_pendientes(self.MARTES_6_OCT), [self.S1, self.S2, self.S3]
         )
 
     def test_tras_cerrar_una_semana_solo_faltan_las_siguientes(self):
         self._cumple(self.S0)
-        goals.cerrar_semana(self.S0, self.LUNES_5_OCT)
+        goals.cerrar_semana(self.S0, self.MARTES_6_OCT)
         self.assertEqual(
-            goals.semanas_pendientes(self.LUNES_5_OCT), [self.S1, self.S2, self.S3]
+            goals.semanas_pendientes(self.MARTES_6_OCT), [self.S1, self.S2, self.S3]
         )
 
     def test_la_semana_en_curso_nunca_entra(self):
@@ -349,25 +377,36 @@ class PonerseAlDiaTests(TestCase):
         # Domingo 4 oct: la semana del 28 sep cierra hoy 23:59, aún no es "terminada".
         self.assertEqual(goals.semanas_pendientes(date(2026, 10, 4)), [])
 
-    def test_el_lunes_la_semana_anterior_ya_esta_pendiente(self):
+    def test_el_lunes_la_semana_anterior_todavia_no_esta_pendiente(self):
         self._cumple(self.S3)
-        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [self.S3])
+        # Lunes 5 oct: la del 28 sep terminó ayer, pero espera datos hasta el martes.
+        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [])
+
+    def test_el_martes_la_semana_anterior_ya_esta_pendiente(self):
+        self._cumple(self.S3)
+        self.assertEqual(goals.semanas_pendientes(self.MARTES_6_OCT), [self.S3])
+
+    def test_ponerse_al_dia_un_lunes_no_cierra_la_semana_en_gracia(self):
+        self._cumple(self.S2)
+        self._cumple(self.S3)
+        cerradas = goals.ponerse_al_dia(self.LUNES_5_OCT)
+        self.assertEqual([l for l, _ in cerradas], [self.S2])
 
     def test_si_todo_esta_cerrado_no_queda_nada(self):
         self._cumple(self.S3)
-        goals.cerrar_semana(self.S3, self.LUNES_5_OCT)
-        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [])
+        goals.cerrar_semana(self.S3, self.MARTES_6_OCT)
+        self.assertEqual(goals.semanas_pendientes(self.MARTES_6_OCT), [])
 
     def test_una_semana_anterior_a_la_ultima_cerrada_no_se_reabre(self):
         self._cumple(self.S2)
-        goals.cerrar_semana(self.S2, self.LUNES_5_OCT)
+        goals.cerrar_semana(self.S2, self.MARTES_6_OCT)
         dia(self.ana, self.S0, 31_000, workouts=1)  # dato viejo que aparece después
-        self.assertEqual(goals.semanas_pendientes(self.LUNES_5_OCT), [self.S3])
+        self.assertEqual(goals.semanas_pendientes(self.MARTES_6_OCT), [self.S3])
 
     def test_el_tope_limita_cuantas_semanas_atrasadas_se_cierran(self):
         self._cumple(self.S0)
-        lunes_nov = date(2026, 11, 2)  # la última terminada es la del 26 oct
-        pendientes = goals.semanas_pendientes(lunes_nov)
+        martes_nov = date(2026, 11, 3)  # la última que se puede cerrar es la del 26 oct
+        pendientes = goals.semanas_pendientes(martes_nov)
         self.assertEqual(len(pendientes), goals.MAX_SEMANAS_ATRASADAS)
         self.assertEqual(pendientes[-1], date(2026, 10, 26))
         self.assertEqual(pendientes[0], date(2026, 10, 5))
@@ -377,59 +416,59 @@ class PonerseAlDiaTests(TestCase):
     def test_cierra_todas_las_pendientes_en_orden_y_paga_cada_una(self):
         self._cumple(self.S1)
         self._cumple(self.S2)
-        cerradas = goals.ponerse_al_dia(self.LUNES_5_OCT)
+        cerradas = goals.ponerse_al_dia(self.MARTES_6_OCT)
 
         self.assertEqual([l for l, _ in cerradas], [self.S1, self.S2, self.S3])
         self.assertEqual([r["cumplidos"] for _, r in cerradas], [1, 1, 0])
-        self.assertEqual(monedas.saldo(self.ana, self.LUNES_5_OCT), 2 * PAGO_SEMANA_COMPLETA)
+        self.assertEqual(monedas.saldo(self.ana, self.MARTES_6_OCT), 2 * PAGO_SEMANA_COMPLETA)
 
     def test_es_idempotente(self):
         self._cumple(self.S1)
-        goals.ponerse_al_dia(self.LUNES_5_OCT)
-        self.assertEqual(goals.ponerse_al_dia(self.LUNES_5_OCT), [])
-        self.assertEqual(monedas.saldo(self.ana, self.LUNES_5_OCT), PAGO_SEMANA_COMPLETA)
+        goals.ponerse_al_dia(self.MARTES_6_OCT)
+        self.assertEqual(goals.ponerse_al_dia(self.MARTES_6_OCT), [])
+        self.assertEqual(monedas.saldo(self.ana, self.MARTES_6_OCT), PAGO_SEMANA_COMPLETA)
 
     def test_crea_el_objetivo_de_las_semanas_que_no_tenian(self):
         self._cumple(self.S1)
-        goals.ponerse_al_dia(self.LUNES_5_OCT)
+        goals.ponerse_al_dia(self.MARTES_6_OCT)
         inicios = set(ObjetivoSemanal.objects.values_list("fecha_inicio", flat=True))
         self.assertTrue({self.S1, self.S2, self.S3, self.LUNES_5_OCT} <= inicios)
 
-    def test_un_cron_que_fallo_un_lunes_se_recupera_el_siguiente(self):
+    def test_un_cron_que_fallo_un_martes_se_recupera_el_siguiente(self):
         self._cumple(self.S2)
-        goals.cerrar_semana(self.S2, date(2026, 9, 28))   # el lunes 28 sí corrió
-        self._cumple(self.S3)                              # el lunes 5 oct NO corrió
-        # Corre el lunes 12 oct: debe cerrar la del 28 sep que se quedó sin cerrar.
-        cerradas = goals.ponerse_al_dia(date(2026, 10, 12))
+        goals.cerrar_semana(self.S2, date(2026, 9, 29))   # el martes 29 sí corrió
+        self._cumple(self.S3)                              # el martes 6 oct NO corrió
+        # Corre el martes 13 oct: debe cerrar la del 28 sep que se quedó sin cerrar.
+        cerradas = goals.ponerse_al_dia(date(2026, 10, 13))
         self.assertEqual([l for l, _ in cerradas], [self.S3, self.LUNES_5_OCT])
-        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 12)), 2 * PAGO_SEMANA_COMPLETA)
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 13)), 2 * PAGO_SEMANA_COMPLETA)
 
     # --- comando --------------------------------------------------------------
 
     def test_el_comando_cierra_todas_con_ponerse_al_dia(self):
         self._cumple(self.S1)
         salida = StringIO()
-        call_command("cerrar_semana", "--ponerse-al-dia", "--fecha", "2026-10-05", stdout=salida)
+        call_command("cerrar_semana", "--ponerse-al-dia", "--fecha", "2026-10-06", stdout=salida)
         texto = salida.getvalue()
         for lunes in ("2026-09-14", "2026-09-21", "2026-09-28"):
             self.assertIn(f"Semana {lunes}", texto)
-        self.assertEqual(monedas.saldo(self.ana, self.LUNES_5_OCT), PAGO_SEMANA_COMPLETA)
+        self.assertEqual(monedas.saldo(self.ana, self.MARTES_6_OCT), PAGO_SEMANA_COMPLETA)
 
     def test_el_comando_avisa_cuando_no_hay_nada_pendiente(self):
         salida = StringIO()
-        call_command("cerrar_semana", "--ponerse-al-dia", "--fecha", "2026-10-05", stdout=salida)
+        call_command("cerrar_semana", "--ponerse-al-dia", "--fecha", "2026-10-06", stdout=salida)
         self.assertIn("No hay semanas pendientes", salida.getvalue())
 
     def test_ponerse_al_dia_no_se_combina_con_correccion(self):
         with self.assertRaises(CommandError):
             call_command(
                 "cerrar_semana", "--ponerse-al-dia", "--correccion",
-                "--fecha", "2026-10-05", stdout=StringIO(),
+                "--fecha", "2026-10-06", stdout=StringIO(),
             )
 
     def test_el_comando_sin_la_bandera_sigue_cerrando_solo_la_anterior(self):
         self._cumple(self.S1)
-        call_command("cerrar_semana", "--fecha", "2026-10-05", stdout=StringIO())
+        call_command("cerrar_semana", "--fecha", "2026-10-06", stdout=StringIO())
         self.assertEqual(
             CumplimientoSemanal.objects.values_list("objetivo_semanal__fecha_inicio", flat=True).distinct().count(),
             1,

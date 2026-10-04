@@ -21,7 +21,7 @@ from Apps.poincs.models import VersionRegla
 from services import goals, monedas
 
 LUNES = date(2026, 9, 21)
-HOY = date(2026, 9, 28)
+HOY = date(2026, 9, 29)  # el martes en que se cierra la semana del 21 (el lunes 28 es margen de gracia)
 
 # Season 4 de 2026: arranca el lunes 28 de sep y, como 2026 tiene semana ISO 53,
 # trae 14 semanas (cierra el domingo 3 de enero de 2027).
@@ -285,6 +285,32 @@ class ObjetivosSemanasTests(_ConToken, APITestCase):
         semana_1 = self.get()["semanas"][0]
         self.assertEqual(semana_1["estado"], goals.COMPLETADA)
         self.assertEqual(semana_1["pasos"]["acumulados"], 45_000)
+
+    def test_el_lunes_la_semana_que_termino_va_en_revision(self):
+        # Lunes 5 oct: la semana 1 (28 sep - 4 oct) sigue en su margen de gracia.
+        # Aunque en vivo no esté cumplida, no se dice "no cumplida": su domingo
+        # puede llegar todavía. Las cifras van en vivo.
+        dia(self.usuario, date(2026, 9, 29), 1_000)
+        with mock.patch("Apps.objetivos.views.hoy", return_value=date(2026, 10, 5)):
+            semanas = self.get()["semanas"]
+        self.assertEqual(semanas[0]["estado"], goals.EN_REVISION)
+        self.assertEqual(semanas[0]["pasos"]["acumulados"], 1_000)
+        self.assertFalse(semanas[0]["pasos"]["cumplido"])
+        self.assertEqual(semanas[1]["estado"], goals.EN_CURSO)
+
+    def test_en_revision_aunque_en_vivo_ya_este_completa(self):
+        dia(self.usuario, date(2026, 9, 29), 45_000, workouts=1)
+        with mock.patch("Apps.objetivos.views.hoy", return_value=date(2026, 10, 5)):
+            semana_1 = self.get()["semanas"][0]
+        self.assertEqual(semana_1["estado"], goals.EN_REVISION)
+        self.assertTrue(semana_1["pasos"]["cumplido"])
+
+    def test_el_martes_sin_cierre_vuelve_a_calcularse_en_vivo(self):
+        # Pasó el margen y el cierre no corrió (falló): el cálculo en vivo de siempre.
+        dia(self.usuario, date(2026, 9, 29), 1_000)
+        with mock.patch("Apps.objetivos.views.hoy", return_value=date(2026, 10, 6)):
+            semana_1 = self.get()["semanas"][0]
+        self.assertEqual(semana_1["estado"], goals.NO_CUMPLIDA)
 
     def test_la_meta_guardada_al_cerrar_manda_sobre_la_actual(self):
         self._cerrada(date(2026, 9, 28), 46_000, 0, True, False)
