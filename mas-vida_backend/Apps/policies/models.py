@@ -65,6 +65,18 @@ class PolizaVinculada(ModeloBase):
         blank=True,
     )
 
+    # Lo que entrega la aseguradora al verificar (2 oct 2026). Nulos mientras
+    # la póliza no esté verificada. La póliza es anual: se renueva cada año y
+    # su prima es anual; no vence, solo deja de valer si la cancelan o la
+    # suspenden.
+    nombre = models.CharField(max_length=100, null=True, blank=True)
+    apellido = models.CharField(max_length=100, null=True, blank=True)
+    plan = models.CharField(max_length=100, null=True, blank=True)
+    prima_anual_gtq = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+    )
+    fecha_renovacion = models.DateField(null=True, blank=True)
+
     def __str__(self):
         return f"{self.insurer} {self.policy_number} - {self.estado_verificacion}"
 
@@ -80,8 +92,9 @@ class RegistroAseguradora(ModeloBase):
     """
 
     class Estado(models.TextChoices):
+        # No existe "vencida": una póliza médica se renueva cada año y solo
+        # deja de valer si la aseguradora la cancela o la suspende (2 oct 2026).
         VIGENTE = 'vigente', 'Vigente'
-        VENCIDA = 'vencida', 'Vencida'
         CANCELADA = 'cancelada', 'Cancelada'
         SUSPENDIDA = 'suspendida', 'Suspendida'
 
@@ -91,13 +104,16 @@ class RegistroAseguradora(ModeloBase):
     apellido = models.CharField(max_length=100)
     fecha_nacimiento = models.DateField()
     plan = models.CharField(max_length=100)
-    prima_mensual_gtq = models.DecimalField(max_digits=10, decimal_places=2)
+    # La prima es anual (2 oct 2026); antes se guardaba la mensual.
+    prima_anual_gtq = models.DecimalField(max_digits=10, decimal_places=2)
     deducible_gtq = models.DecimalField(max_digits=10, decimal_places=2)
     coaseguro_pct = models.PositiveSmallIntegerField(
         validators=[MaxValueValidator(100)],
     )
     red = models.CharField(max_length=100)
     vigencia_inicio = models.DateField()
+    # Fecha de la próxima RENOVACIÓN anual, no un vencimiento: pasada esta
+    # fecha la póliza sigue valiendo (el nombre se conserva por compatibilidad).
     vigencia_fin = models.DateField()
     estado = models.CharField(max_length=10, choices=Estado.choices)
 

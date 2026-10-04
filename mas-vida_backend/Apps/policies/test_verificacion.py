@@ -96,9 +96,52 @@ class VincularPolizaTests(APITestCase):
         # Una póliza rechazada no guarda nada confirmado por la aseguradora.
         self.assertIsNone(poliza.birth_date_confirmada)
         self.assertIsNone(poliza.policy_start_date)
+        for campo in ("nombre", "apellido", "plan", "prima_anual_gtq", "fecha_renovacion"):
+            self.assertIsNone(getattr(poliza, campo), campo)
 
-    def test_pol_100004_vencida_se_rechaza(self):
-        self.rechazar_fila("POL-100004", "1990-05-30", "no_vigente")
+    def test_pol_100004_con_la_renovacion_ya_pasada_se_verifica(self):
+        # Su fecha de renovación (28 feb 2026) ya pasó: la póliza se renovó y
+        # sigue valiendo. Antes se rechazaba como "vencida" (2 oct 2026).
+        self.verificar_fila("POL-100004", "1990-05-30", D(2025, 3, 1))
+
+    def test_al_verificar_guarda_lo_que_entrega_la_aseguradora(self):
+        usuario, token = self.nuevo_usuario()
+        self.vincular(token, "POL-100001", "1994-03-12")
+        poliza = usuario.poliza
+        self.assertEqual(
+            (poliza.nombre, poliza.apellido, poliza.plan),
+            ("Ana", "Morales", "Plan Plus"),
+        )
+        self.assertEqual(str(poliza.prima_anual_gtq), "15000.00")
+        self.assertEqual(poliza.fecha_renovacion, D(2027, 1, 14))
+
+    def test_el_estado_devuelve_los_datos_de_la_poliza(self):
+        usuario, token = self.nuevo_usuario()
+        self.vincular(token, "POL-100001", "1994-03-12")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        datos = self.client.get("/api/v1/polizas/estado").json()
+        self.assertTrue(datos["verificada"])
+        self.assertEqual(datos["poliza"], {
+            "policy_number": "POL-100001",
+            "insurer": "Seguros Demo GT",
+            "policy_start_date": "2026-01-15",
+            "nombre": "Ana",
+            "apellido": "Morales",
+            "plan": "Plan Plus",
+            "prima_anual_gtq": "15000.00",
+            "fecha_renovacion": "2027-01-14",
+        })
+
+    def test_volver_a_vincular_tras_un_rechazo_no_arrastra_datos_viejos(self):
+        usuario, token = self.nuevo_usuario()
+        self.vincular(token, "POL-100005", "1998-09-18")  # cancelada: rechazada
+        poliza = usuario.poliza
+        poliza.refresh_from_db()
+        self.assertIsNone(poliza.prima_anual_gtq)
+        self.vincular(token, "POL-100002", "1985-07-25")  # ahora sí
+        poliza.refresh_from_db()
+        self.assertEqual(poliza.estado_verificacion, "verificada")
+        self.assertEqual(str(poliza.prima_anual_gtq), "9360.00")
 
     def test_pol_100005_cancelada_se_rechaza(self):
         self.rechazar_fila("POL-100005", "1998-09-18", "no_vigente")
@@ -320,14 +363,20 @@ class ServicioVerificacionTests(SimpleTestCase):
     def test_el_ultimo_dia_de_vigencia_cuenta(self):
         self.assertEqual(self.verificar(self.datos(), hoy=D(2027, 1, 14)), ("verificada", None))
 
-    def test_el_dia_despues_de_la_vigencia_no_cuenta(self):
-        self.assertEqual(self.verificar(self.datos(), hoy=D(2027, 1, 15)), ("rechazada", "no_vigente"))
+    def test_pasada_la_fecha_de_renovacion_sigue_valiendo(self):
+        # La póliza es anual y se renueva: no vence (2 oct 2026).
+        self.assertEqual(self.verificar(self.datos(), hoy=D(2027, 1, 15)), ("verificada", None))
+        self.assertEqual(self.verificar(self.datos(), hoy=D(2030, 6, 1)), ("verificada", None))
 
-    def test_el_dia_antes_de_empezar_no_cuenta(self):
-        self.assertEqual(self.verificar(self.datos(), hoy=D(2026, 1, 14)), ("rechazada", "no_vigente"))
+    def test_las_fechas_no_deciden_solo_el_estado(self):
+        self.assertEqual(self.verificar(self.datos(), hoy=D(2026, 1, 14)), ("verificada", None))
+        self.assertEqual(
+            self.verificar(self.datos(vigente=False), hoy=D(2026, 6, 1)),
+            ("rechazada", "no_vigente"),
+        )
 
     def test_si_fallan_varias_cosas_gana_el_primer_motivo(self):
-        # aseguradora mal + fecha mal -> aseguradora; vencida + fecha mal -> no_vigente
+        # aseguradora mal + fecha mal -> aseguradora; cancelada + fecha mal -> no_vigente
         self.assertEqual(
             self.verificar(self.datos(), insurer="Otra", nacimiento=D(1990, 1, 1)),
             ("rechazada", "aseguradora_no_coincide"),
@@ -381,7 +430,7 @@ class CargarRegistroAseguradoraTests(TestCase):
         r = RegistroAseguradora.objects.get(numero_poliza="POL-100002")
         self.assertEqual((r.nombre, r.apellido, r.plan), ("Carlos", "Pérez", "Plan Básico"))
         self.assertEqual(r.fecha_nacimiento, D(1985, 7, 25))
-        self.assertEqual(str(r.prima_mensual_gtq), "780.00")
+        self.assertEqual(str(r.prima_anual_gtq), "9360.00")  # 780 al mes x 12
         self.assertEqual(r.coaseguro_pct, 20)
         self.assertEqual(r.estado, "vigente")
 
@@ -393,7 +442,7 @@ class CargarRegistroAseguradoraTests(TestCase):
             estados,
             {
                 "POL-100001": "vigente", "POL-100002": "vigente", "POL-100003": "vigente",
-                "POL-100004": "vencida", "POL-100005": "cancelada", "POL-100006": "suspendida",
+                "POL-100004": "vigente", "POL-100005": "cancelada", "POL-100006": "suspendida",
             },
         )
 
@@ -442,6 +491,13 @@ class CargarRegistroAseguradoraTests(TestCase):
         with self.assertRaisesMessage(CommandError, "estado inválido"):
             self.cargar(self.csv_temporal(filas))
 
+    def test_el_estado_vencida_ya_no_existe_y_lo_explica(self):
+        filas = self.filas_ejemplo()
+        filas[0]["estado"] = "vencida"
+
+        with self.assertRaisesMessage(CommandError, "'vencida' ya no existe"):
+            self.cargar(self.csv_temporal(filas))
+
     def test_vigencia_al_reves_se_rechaza(self):
         filas = self.filas_ejemplo()
         filas[0]["vigencia_fin"] = "2020-01-01"
@@ -478,7 +534,7 @@ class RegistroAseguradoraModeloTests(TestCase):
     def datos(self, **cambios):
         base = dict(
             numero_poliza="POL-1", aseguradora="A", nombre="Ana", apellido="Morales",
-            fecha_nacimiento=D(1994, 3, 12), plan="P", prima_mensual_gtq="100.00",
+            fecha_nacimiento=D(1994, 3, 12), plan="P", prima_anual_gtq="1200.00",
             deducible_gtq="0", coaseguro_pct=10, red="R",
             vigencia_inicio=D(2026, 1, 1), vigencia_fin=D(2026, 12, 31), estado="vigente",
         )
@@ -510,3 +566,24 @@ class RegistroAseguradoraModeloTests(TestCase):
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "POL-1")
+
+
+class MigracionPolizaAnualTests(TestCase):
+    """La migración 0006 pasa la prima a anual y quita el estado "vencida"."""
+
+    def test_multiplica_la_prima_por_12_y_pasa_vencida_a_vigente(self):
+        from importlib import import_module
+
+        from django.apps import apps as apps_reales
+
+        migracion = import_module("Apps.policies.migrations.0006_poliza_anual")
+        r = RegistroAseguradora.objects.create(
+            numero_poliza="POL-9", aseguradora="A", nombre="Ana", apellido="M",
+            fecha_nacimiento=D(1994, 3, 12), plan="P", prima_anual_gtq="1250.00",
+            deducible_gtq="0", coaseguro_pct=10, red="R",
+            vigencia_inicio=D(2025, 3, 1), vigencia_fin=D(2026, 2, 28), estado="vencida",
+        )
+        migracion.a_prima_anual_y_sin_vencida(apps_reales, None)
+        r.refresh_from_db()
+        self.assertEqual(str(r.prima_anual_gtq), "15000.00")
+        self.assertEqual(r.estado, "vigente")

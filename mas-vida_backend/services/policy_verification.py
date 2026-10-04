@@ -7,6 +7,7 @@ de verificación no cambia.
 """
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Optional, Protocol
 
 from django.utils import timezone
@@ -28,8 +29,12 @@ class DatosPoliza:
     aseguradora: str
     fecha_nacimiento: date
     vigencia_inicio: date
-    vigencia_fin: date
-    vigente: bool  # el estado de la póliza en la aseguradora (vigente o no)
+    vigencia_fin: date  # fecha de la próxima renovación anual, no un vencimiento
+    vigente: bool  # False solo si la aseguradora la canceló o la suspendió
+    nombre: str = ""
+    apellido: str = ""
+    plan: str = ""
+    prima_anual_gtq: Optional[Decimal] = None
 
 
 class FuenteRegistro(Protocol):
@@ -59,6 +64,10 @@ class FuenteTablaRegistro:
             vigencia_inicio=registro.vigencia_inicio,
             vigencia_fin=registro.vigencia_fin,
             vigente=registro.estado == RegistroAseguradora.Estado.VIGENTE,
+            nombre=registro.nombre,
+            apellido=registro.apellido,
+            plan=registro.plan,
+            prima_anual_gtq=registro.prima_anual_gtq,
         )
 
 
@@ -84,11 +93,16 @@ def verificar_con_datos(
 ) -> ResultadoVerificacion:
     """Verifica y devuelve también los datos de la aseguradora.
 
-    Se verifica solo si la póliza existe, la aseguradora coincide, está
-    vigente (estado y fechas) y la fecha de nacimiento coincide. Cualquier otro
+    Se verifica solo si la póliza existe, la aseguradora coincide, no está
+    cancelada ni suspendida, y la fecha de nacimiento coincide. Cualquier otro
     caso es rechazo, con el primer motivo que falle, en este orden.
+
+    Las fechas NO se miran (2 oct 2026): la póliza es anual y se renueva, así
+    que pasada su fecha de renovación sigue valiendo. Solo la deja sin valer
+    que la aseguradora la cancele o la suspenda.
     """
-    hoy = hoy or _hoy()
+    # `hoy` se sigue aceptando por compatibilidad, pero ya no decide nada:
+    # las fechas de la póliza no se usan para rechazar (ver arriba).
     fuente = fuente or FuenteTablaRegistro()
 
     datos = fuente.buscar(policy_number.strip())
@@ -98,7 +112,7 @@ def verificar_con_datos(
     if datos.aseguradora.strip().casefold() != insurer.strip().casefold():
         return ResultadoVerificacion(RECHAZADA, ASEGURADORA_NO_COINCIDE, datos)
 
-    if not datos.vigente or not (datos.vigencia_inicio <= hoy <= datos.vigencia_fin):
+    if not datos.vigente:
         return ResultadoVerificacion(RECHAZADA, NO_VIGENTE, datos)
 
     if datos.fecha_nacimiento != birth_date:

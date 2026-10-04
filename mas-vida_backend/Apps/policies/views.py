@@ -23,6 +23,10 @@ from .serializers import VincularPolizaSerializer
 SIN_PERFIL = {"mensaje": "El usuario autenticado no tiene un perfil asociado."}
 
 
+def _fecha(valor):
+    return valor.isoformat() if valor else None
+
+
 def _estado(poliza):
     """Lo que ve la app. `verificada` es el gate: pendiente y rechazada no desbloquean nada."""
     if poliza is None:
@@ -39,11 +43,16 @@ def _estado(poliza):
         "poliza": {
             "policy_number": poliza.policy_number,
             "insurer": poliza.insurer,
-            # Nulo hasta que la aseguradora confirma la póliza.
-            "policy_start_date": (
-                poliza.policy_start_date.isoformat()
-                if poliza.policy_start_date else None
+            # Lo de abajo es nulo hasta que la aseguradora confirma la póliza.
+            "policy_start_date": _fecha(poliza.policy_start_date),
+            "nombre": poliza.nombre,
+            "apellido": poliza.apellido,
+            "plan": poliza.plan,
+            # Texto con dos decimales: es dinero y no debe pasar por un float.
+            "prima_anual_gtq": (
+                f"{poliza.prima_anual_gtq:.2f}" if poliza.prima_anual_gtq is not None else None
             ),
+            "fecha_renovacion": _fecha(poliza.fecha_renovacion),
         },
     }
 
@@ -109,6 +118,11 @@ def vincular(request):
             poliza.motivo_rechazo = None
             poliza.birth_date_confirmada = resultado.datos.fecha_nacimiento
             poliza.policy_start_date = resultado.datos.vigencia_inicio
+            poliza.nombre = resultado.datos.nombre
+            poliza.apellido = resultado.datos.apellido
+            poliza.plan = resultado.datos.plan
+            poliza.prima_anual_gtq = resultado.datos.prima_anual_gtq
+            poliza.fecha_renovacion = resultado.datos.vigencia_fin
             # El número oficial de la aseguradora, no como lo escribió el
             # usuario (por ejemplo "pol-100001" en minúsculas).
             poliza.policy_number = resultado.datos.numero_poliza
@@ -121,6 +135,9 @@ def vincular(request):
             poliza.motivo_rechazo = resultado.motivo
             poliza.birth_date_confirmada = None
             poliza.policy_start_date = None
+            poliza.nombre = poliza.apellido = poliza.plan = None
+            poliza.prima_anual_gtq = None
+            poliza.fecha_renovacion = None
             poliza.save()
 
     return Response(
