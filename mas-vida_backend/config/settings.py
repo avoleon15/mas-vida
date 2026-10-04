@@ -77,6 +77,19 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
 ]
 
+# Inicio de sesión con Google y Apple (4 oct 2026). Son los identificadores que
+# el proveedor pone en el token firmado (`aud`): sin ellos el servidor no puede
+# saber si el token se emitió para esta app, así que ese proveedor queda
+# apagado (503). Lista separada por comas.
+#   GOOGLE_CLIENT_IDS: el ID de cliente de iOS de Google (y el de web, si hay).
+#   APPLE_CLIENT_IDS: el bundle id de la app (com.assures.masvida o el real).
+def _lista_de_entorno(nombre):
+    return [v.strip() for v in os.environ.get(nombre, "").split(",") if v.strip()]
+
+
+GOOGLE_CLIENT_IDS = _lista_de_entorno("GOOGLE_CLIENT_IDS")
+APPLE_CLIENT_IDS = _lista_de_entorno("APPLE_CLIENT_IDS")
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
