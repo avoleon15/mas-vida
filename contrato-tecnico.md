@@ -667,9 +667,10 @@ vieja de trimestres.
   siguen la regla nueva.
 - **El reinicio no necesita un proceso aparte.** Antes de leer o mover el saldo
   se asientan las monedas vencidas con una fila `expiracion` negativa (el ledger
-  no se edita). Por eso el orden del lunes en que cambia la season sale solo:
-  como la semana que cerró se paga con la fecha de ese lunes, primero se
-  reinicia y después entra lo nuevo.
+  no se edita). Por eso el orden al cambiar de season sale solo: como la semana
+  que terminó se paga con la fecha de su cierre (el martes 00:00; el lunes es
+  margen de gracia) y las seasons empiezan en lunes, ese martes ya es de la
+  season nueva: primero se reinicia y después entra lo nuevo.
 - Las monedas se acreditan **sin tope**.
 - El servicio calcula cuántos días faltan para el cierre y si ya toca el aviso
   (desde 7 días antes, inclusive el último domingo). La app puede mostrarlo con la
