@@ -1226,7 +1226,8 @@ Vincula y verifica en el mismo paso, contra el registro de la aseguradora.
 | `birth_date` | `YYYY-MM-DD` | la que escribe el usuario; se compara con la de la aseguradora |
 
 Respuesta `200`: `{ "estado_verificacion": "verificada" | "rechazada", "motivo_rechazo": string | null }`.
-Motivos: `no_existe`, `aseguradora_no_coincide`, `no_vigente`,
+Motivos: `no_existe`, `aseguradora_no_coincide`, `no_vigente` (la aseguradora
+la **canceló o la suspendió**; las fechas no se miran),
 `fecha_nacimiento_no_coincide`. Una póliza puede estar vinculada a varios
 usuarios (pólizas familiares). `409` si el usuario ya tiene una póliza
 verificada; `400` por campos faltantes; `403` si la cuenta no tiene perfil.
@@ -1244,39 +1245,51 @@ nunca se edita a mano.
 
 ```json
 { "estado": "sin_poliza" | "pendiente" | "verificada" | "rechazada",
-  "verificada": false,
+  "verificada": true,
   "motivo_rechazo": null,
   "poliza": { "policy_number": "POL-100001", "insurer": "Seguros Demo GT",
-              "policy_start_date": "2026-01-15" } }
+              "policy_start_date": "2026-01-15",
+              "nombre": "Ana", "apellido": "Morales", "plan": "Plan Plus",
+              "prima_anual_gtq": "15000.00",
+              "fecha_renovacion": "2027-01-14" } }
 ```
 
-`poliza` es `null` si no hay póliza; `policy_start_date` es `null` hasta que la
-aseguradora confirma la póliza. `verificada` es el único valor que debe usarse
+`poliza` es `null` si no hay póliza. `policy_start_date`, `nombre`, `apellido`,
+`plan`, `prima_anual_gtq` y `fecha_renovacion` son `null` hasta que la
+aseguradora confirma la póliza (y vuelven a `null` si se rechaza).
+`prima_anual_gtq` viaja como **texto con dos decimales** (es dinero: no debe
+pasar por un número de punto flotante). `fecha_renovacion` es la **próxima**
+renovación anual, no un vencimiento: se guarda la que dio la aseguradora y, si
+ya pasó, se responde la del año siguiente (y así hasta hoy o después; el 29 de
+febrero cae en el 28 los años que no son bisiestos). `verificada` es el único valor que debe usarse
 para habilitar canje, cashback y La Liga.
 
 ### Datos que entrega la aseguradora (decidido 2 oct 2026)
 
 **Nombre, apellido, prima anual, número de póliza, fecha de nacimiento, plan y
 fecha de renovación.** El registro simulado tiene todos (más deducible,
-coaseguro y red), salvo que guarda la prima **mensual**.
+coaseguro y red).
 
 - **La póliza es anual:** se renueva cada año, y la **prima es anual**.
 - La fecha de la aseguradora es la de **renovación**, no un vencimiento: una
   póliza médica no vence. **Solo deja de dar beneficios si la aseguradora la
   cancela o la suspende.**
-- **[PENDIENTE] (código):**
-  - `services/policy_verification.py` rechaza hoy con `no_vigente` si la fecha
-    de hoy queda fuera de inicio y fin de vigencia. Con esta regla, una póliza
-    pasada su fecha de renovación no se debe rechazar; solo una cancelada o
-    suspendida.
-  - El registro simulado tiene un estado `vencida` (póliza `POL-100004`) que con
-    esta regla no existe, y guarda `prima_mensual_gtq` en vez de la prima
-    anual.
-  - La póliza vinculada guarda hoy solo número, aseguradora, fecha de inicio y
-    fecha de nacimiento confirmada. Falta guardar nombre, apellido, plan, prima
-    y fecha de renovación, y devolverlos en `GET /api/v1/polizas/estado`.
-  - Cómo se entera el sistema de que una póliza ya verificada fue cancelada
-    (depende de la integración real con la aseguradora).
+- **Hecho en el código (3 oct):**
+  - La verificación ya no mira fechas: solo rechaza con `no_vigente` una
+    póliza **cancelada o suspendida**. Pasada la fecha de renovación, sigue
+    valiendo.
+  - El registro simulado guarda la **prima anual** (`prima_anual_gtq`; la
+    migración multiplicó por 12 la mensual que hubiera) y ya no tiene el estado
+    `vencida` (las filas que lo tenían pasaron a `vigente`; el comando de carga
+    lo rechaza explicando por qué). `POL-100004`, con la renovación ya pasada,
+    queda como ejemplo de póliza que se verifica igual.
+  - La póliza vinculada guarda nombre, apellido, plan, prima anual y fecha de
+    renovación al verificarse, y los devuelve en `GET /api/v1/polizas/estado`.
+    En el registro, la fecha de renovación sigue en la columna `vigencia_fin`
+    (se dejó el nombre para no romper la carga del CSV).
+- **[PENDIENTE]:** cómo se entera el sistema de que una póliza ya verificada fue
+  cancelada (depende de la integración real con la aseguradora). Si se verifica
+  a mano desde el admin, estos cinco datos no se llenan solos.
 
 ### Cashback en quetzales (decidido 2 oct 2026)
 
@@ -1443,9 +1456,9 @@ verificación" son el mismo momento.
     cambia~~ — **hecho** (2 oct): ver "Monedas y seasons".
   - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
     devuelven los puntos de cada participante pero nunca sus pasos.
-  - Póliza: no rechazar por la fecha de renovación (solo cancelada o
-    suspendida), y guardar y devolver nombre, apellido, plan, prima y fecha de
-    renovación.
+  - ~~Póliza: no rechazar por la fecha de renovación, y guardar y devolver
+    nombre, apellido, plan, prima y fecha de renovación~~ — **hecho** (3 oct):
+    ver "Datos que entrega la aseguradora".
   - Endpoints nuevos: cashback en quetzales, cupones (activos, usados y
     vencidos) y patrocinios.
   - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
