@@ -1346,7 +1346,8 @@ existe en memoria al procesar el payload.
     "fc_promedio": 148,
     "fc_maxima": 162
   },
-  "puntos_dia": 150
+  "puntos_dia": 150,
+  "ritmo_cardiaco": { "minutos_ligero": 310, "minutos_moderado": 42, "minutos_intenso": 18 }
 }
 ```
 
@@ -1357,7 +1358,29 @@ existe en memoria al procesar el payload.
 | `workouts_dia.fc_promedio` | promedio de `sesiones[].fc_promedio` del día — **no** un promedio de las 24h de `frecuencia_cardiaca[]` cruda (eso incluiría horas de reposo y no dice nada) |
 | `workouts_dia.fc_maxima` | máximo de `sesiones[].fc_maxima` del día |
 | `workouts_dia` | `null` si no hubo sesión ese día — no `0`, para no confundir "sin actividad intensa" con "FC de cero" |
+| `ritmo_cardiaco` | minutos del día en cada zona (4 oct 2026); ver "Minutos por zona de ritmo cardíaco" abajo. `null` los días sin lecturas de ritmo cardíaco (casi siempre, sin reloj) — no ceros |
 | `puntos_dia` | mismo valor que ya viaja en el JSON #2, **salvo** un día anulado por retroactivo denegado (ver "Póliza vinculada"), que aquí y en el historial va en `0` |
+
+### Minutos por zona de ritmo cardíaco (hecho 4 oct 2026)
+
+Para la gráfica de ritmo cardíaco de Progreso (ligero, moderado e intenso por
+semana, mes y año). Los totales y la tendencia se suman en la app a partir de las
+filas diarias, igual que los pasos.
+
+- **Zonas** con la misma FCmáx de los puntos (219 − edad, la de la aseguradora
+  si hay póliza verificada): **ligero** por debajo del 60 %, **moderado** del 60 %
+  al 70 % (sin llegar) e **intenso** del 70 % hacia arriba. El reposo cuenta como
+  ligero. Con 36 años: ligero hasta 109 bpm, moderado de 110 a 128, intenso desde 129.
+- **Cuánto vale una lectura:** el tiempo hasta que empieza la siguiente, sin pasar
+  de 15 minutos (un hueco más largo es tiempo sin dato, como al armar las
+  sesiones inferidas). La última lectura vale lo que dura ella misma.
+- **Un dispositivo a la vez:** si dos registran el mismo rato (reloj y pulsera),
+  se usa el que cubre más minutos del día y no se suman.
+- Sale de `frecuencia_cardiaca[]`, no de los workouts: cuenta todo el día.
+- Se recalcula con cada sync del día. Los días anteriores al 4 oct 2026 quedan en
+  `null` hasta que se vuelva a mandar ese día.
+- **[PENDIENTE]:** la edad de una persona cambia con los años y los minutos ya
+  guardados no se recalculan si la aseguradora corrige la fecha de nacimiento.
 
 Mostrar máximo y promedio de FC por workout (no un promedio diario plano) es
 también lo que justifica ante Apple el permiso de `.heartRate`: tiene que
@@ -1413,6 +1436,43 @@ usuario sale del token.
   lo acreditado.
 - Errores: `400` si una fecha no tiene formato `YYYY-MM-DD` o si `fecha_desde`
   es mayor que `fecha_hasta`; `401` sin token; `403` si la cuenta no tiene perfil.
+
+---
+
+## Perfil — `GET /api/v1/perfil` (hecho 4 oct 2026)
+
+Los datos de la propia cuenta para la pantalla de Perfil. Con token; `403` si la
+cuenta no tiene perfil.
+
+```json
+{
+  "usuario_id": "6f1c0e52-…",
+  "correo": "ana@correo.com",
+  "nombre": "Ana Martínez",
+  "fecha_nacimiento": "1990-05-17",
+  "edad": 36,
+  "poliza_verificada": true,
+  "dispositivos": [
+    { "nombre": "Apple Watch de Ana", "modelo": "Watch", "fuente": "Apple Watch", "ultimo_dato": "2026-10-04" }
+  ]
+}
+```
+
+- `correo`: el `username` en las cuentas con contraseña (la app lo guarda así) y
+  `User.email` en las de Google y Apple; `null` si no hay ninguno (un nombre
+  generado como `google-4f2a…`).
+- `nombre`: nombre y apellido que dio la aseguradora; `null` sin póliza
+  verificada (pendiente y rechazada cuentan como sin póliza).
+- `fecha_nacimiento` y `edad` son las **que usa el servidor** para los puntos: la
+  confirmada por la aseguradora si hay póliza verificada y, si no, la del
+  registro. La app no las calcula.
+- `dispositivos`: los que mandaron datos (pasos, ritmo cardíaco o workouts) en
+  los últimos 30 días, el más reciente primero. Es el mismo dispositivo si
+  coinciden fuente, modelo y fabricante (la clave del puntaje); el nombre es el
+  de su dato más nuevo y, si no trae, el de la fuente. No hay un máximo de
+  dispositivos. Un reloj que se deja de usar sale solo.
+- **Lo que no tiene el backend:** el "uso del seguro" del mock depende de lo que
+  mande la aseguradora; no hay endpoint.
 
 ---
 
@@ -1910,6 +1970,32 @@ modelos; los `id` son texto.
 - `season.monedas_ganadas` suma lo ganado en la season (no baja al gastar) y
   `semanas_completas` cuenta las semanas con los dos objetivos cumplidos: son
   los datos de la hoja de la temporada.
+
+### `GET /api/v1/monedas/periodo?desde=&hasta=` (hecho 4 oct 2026)
+
+Qué pasó con las monedas en un período, para los filtros de semana, mes y año.
+`desde` y `hasta` son obligatorios (`AAAA-MM-DD`, `desde` ≤ `hasta`, máximo 366
+días; fuera de eso `400`).
+
+```json
+{
+  "desde": "2026-10-01", "hasta": "2026-10-31",
+  "ganadas": 40, "por_objetivos": 10, "por_liga": 30, "otras": 0,
+  "gastadas": 40, "vencidas": 0, "anuladas": 0
+}
+```
+
+- `ganadas` = `por_objetivos` + `por_liga` + `otras` (lo que se acreditó a mano).
+  `gastadas` son los canjes. `vencidas`, las que caducaron al cerrar la season.
+  `anuladas`, lo que se descontó a mano (por ejemplo, el retroactivo denegado).
+  Todo en positivo.
+- **Cada movimiento cuenta en su fecha**, no en la de la actividad: las ganadas,
+  cuando se pagaron (el cierre del martes o el del día 2 de La Liga); las
+  vencidas, cuando se asentaron, que es la primera vez que se pidió el saldo
+  después del cierre de la season. Antes de contar se asientan las pendientes,
+  igual que en `monedas/saldo`.
+- Sirve para cuadrar: `ganadas − gastadas − vencidas − anuladas` es lo que cambió
+  el saldo en ese período.
 
 ### `GET /api/v1/premios`
 
