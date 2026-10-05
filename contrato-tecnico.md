@@ -175,10 +175,12 @@ Con token, sin cuerpo. Los dos responden `204`; con un token inválido o vencido
 | `POST /api/v1/logout` | **Solo esta sesión** (este teléfono): borra el token con el que se llamó. Los otros teléfonos de la cuenta siguen adentro |
 | `POST /api/v1/logout/todos` | **Todas las sesiones** de la cuenta, en todos sus teléfonos |
 
-La app, al cerrar sesión, llama a `logout` **y** además borra su copia y le entrega
-`null` a Swift con `actualizarSesion(null)`. Si la llamada falla (sin red, o el token
-ya había vencido), igual borra sus copias: el token queda en el servidor hasta que
-venza. `logout/todos` es para "Cerrar sesión en todos los dispositivos" y, más
+La app, al cerrar sesión, manda `logout` **sin esperar la respuesta** y en el momento
+borra su copia y le entrega `null` a Swift con `actualizarSesion(null)`: con la red
+mala, esperar dejaba la pantalla quieta hasta 5 s. La petición sale con el token
+aunque la copia ya se haya borrado. Si no llega (sin red, el token ya había vencido,
+o la app se cerró en ese instante), el token queda en el servidor hasta que venza.
+`logout/todos` es para "Cerrar sesión en todos los dispositivos" y, más
 adelante, para cambiar la contraseña o borrar la cuenta (OWASP; App Store 5.1.1(v)).
 
 ### Inicio de sesión con Google y Apple (decidido 2 oct 2026)

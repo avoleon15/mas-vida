@@ -401,12 +401,17 @@ class ServicioSesionApi extends ServicioSesion {
     );
   }
 
-  /// Cierra la sesión de este teléfono en el servidor y después borra las
-  /// dos copias locales. Si el servidor no contesta, igual se borran: el
-  /// token queda vivo allá hasta que venza.
+  /// Cierra la sesión de este teléfono: avisa al servidor SIN esperar la
+  /// respuesta y borra las dos copias en el momento. Esperarla dejaba la
+  /// pantalla quieta hasta 5 s con la red mala, después de cerrar el diálogo.
+  ///
+  /// La petición ya sale con el token aunque se borre enseguida (ver
+  /// [ClienteApi.cerrarSesionEnServidor]). Si no llega —sin red, el token ya
+  /// había vencido, o la app se cerró en ese instante—, el token queda vivo
+  /// en el servidor hasta que venza.
   @override
   Future<void> cerrarSesion() async {
-    await cliente.cerrarSesionEnServidor();
+    unawaited(cliente.cerrarSesionEnServidor());
     cliente.token = null;
     await super.cerrarSesion();
   }

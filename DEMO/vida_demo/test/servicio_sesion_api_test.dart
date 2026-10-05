@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
@@ -24,7 +25,7 @@ void main() {
   late List<http.Request> pedidos;
 
   /// Lo que contesta el servidor falso a cada ruta.
-  late Map<String, http.Response Function()> respuestas;
+  late Map<String, FutureOr<http.Response> Function()> respuestas;
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
@@ -201,6 +202,29 @@ void main() {
     expect(await AlmacenSesion().leer(), isNull);
     expect(swift.last['token'], isNull);
   });
+
+  test(
+    'cerrar sesión no espera al servidor: borra todo en el momento',
+    () async {
+      // El servidor no contesta hasta que termina la prueba.
+      final colgado = Completer<http.Response>();
+      addTearDown(() => colgado.complete(http.Response('', 204)));
+      respuestas['/api/v1/logout'] = () => colgado.future;
+      final s = servicio();
+      await s.iniciarSesion('ana@correo.gt', 'clave');
+
+      // Si esperara la respuesta, tardaría los 5 s del límite.
+      await s.cerrarSesion().timeout(const Duration(seconds: 1));
+      await pumpEventQueue();
+
+      expect(s.cliente.token, isNull);
+      expect(await AlmacenSesion().leer(), isNull);
+      expect(swift.last['token'], isNull);
+      // Y el aviso salió igual, con el token de la sesión que se cerró.
+      final logout = pedidos.singleWhere((p) => p.url.path == '/api/v1/logout');
+      expect(logout.headers['Authorization'], 'Token tok-1');
+    },
+  );
 
   test('si el servidor no contesta, igual se cierra la sesión', () async {
     respuestas['/api/v1/logout'] = () => throw http.ClientException('sin red');

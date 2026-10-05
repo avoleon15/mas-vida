@@ -242,6 +242,23 @@ void main() {
       expect(pedido.headers['Authorization'], 'Token abc123');
     });
 
+    test('lee el token al llamarla: se puede borrar enseguida', () async {
+      late http.Request pedido;
+      final api = ClienteApi(
+        baseUrl: 'http://api',
+        cliente: MockClient((r) async {
+          pedido = r;
+          return http.Response('', 204);
+        }),
+      )..token = 'abc123';
+
+      final enviado = api.cerrarSesionEnServidor();
+      api.token = null; // lo que hace cerrarSesion, sin esperar
+
+      expect(await enviado, isTrue);
+      expect(pedido.headers['Authorization'], 'Token abc123');
+    });
+
     test('sin red no falla hacia afuera', () async {
       final api = ClienteApi(
         baseUrl: 'http://api',

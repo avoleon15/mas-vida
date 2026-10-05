@@ -69,9 +69,12 @@ class ClienteApi {
 
   /// Cierra la sesión de este teléfono en el servidor (los demás siguen).
   ///
-  /// Nunca falla hacia afuera y no espera más de unos segundos: cerrar
-  /// sesión no puede quedar trabado por la red. Si no llega, el token sigue
-  /// vivo en el servidor hasta que venza. Devuelve si el servidor lo cerró.
+  /// Lee [token] en el momento de llamarla: quien la llama puede borrarlo
+  /// enseguida, sin esperar, y la petición sale igual con el token de antes.
+  ///
+  /// Nunca falla hacia afuera y no espera más de unos segundos. Si no llega,
+  /// el token sigue vivo en el servidor hasta que venza. Devuelve si el
+  /// servidor lo cerró.
   Future<bool> cerrarSesionEnServidor() async {
     final token = this.token;
     if (token == null) return false;
