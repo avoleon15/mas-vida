@@ -456,6 +456,7 @@ class DashboardResumenTests(SyncBase):
                 "fc_maxima": 160,
             },
             "puntos_dia": 150,  # 50 por 12.000 pasos + 100 por 35 min al 70%+
+            "ritmo_cardiaco": None,
         }])
 
     def test_sin_sesion_workouts_dia_es_null_no_cero(self):

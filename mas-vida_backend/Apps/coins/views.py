@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import status
@@ -111,6 +113,48 @@ def saldo_monedas(request):
             "semanas_completas": completas,
         },
     })
+
+
+# Un año completo (con bisiesto): lo más que pide la vista Año.
+MAX_DIAS_PERIODO = 366
+
+
+def _fecha_param(request, nombre):
+    crudo = request.query_params.get(nombre)
+    if not crudo:
+        raise ValueError(f"Falta el parámetro {nombre}.")
+    try:
+        return date.fromisoformat(crudo)
+    except ValueError:
+        raise ValueError(f"{nombre} debe tener formato AAAA-MM-DD.")
+
+
+@api_view(["GET"])
+def monedas_del_periodo(request):
+    """Monedas ganadas, gastadas y vencidas entre `desde` y `hasta` (ambos obligatorios).
+
+    La app lo pide con las fechas de la semana, el mes o el año del filtro. Ver
+    `services.monedas.resumen_de_periodo` para qué fecha lleva cada movimiento.
+    """
+    usuario = _usuario(request)
+    if usuario is None:
+        return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        desde = _fecha_param(request, "desde")
+        hasta = _fecha_param(request, "hasta")
+    except ValueError as error:
+        return Response({"mensaje": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    if desde > hasta:
+        return Response(
+            {"mensaje": "desde no puede ser mayor a hasta."}, status=status.HTTP_400_BAD_REQUEST,
+        )
+    if (hasta - desde).days >= MAX_DIAS_PERIODO:
+        return Response(
+            {"mensaje": f"El rango no puede pasar de {MAX_DIAS_PERIODO} días."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response(monedas.resumen_de_periodo(usuario, desde, hasta, hoy()))
 
 
 @api_view(["GET"])
