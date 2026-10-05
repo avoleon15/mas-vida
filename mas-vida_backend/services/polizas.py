@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from django.db import IntegrityError, transaction
-from django.db.models import Sum
+from django.db.models import Sum, Value
 from django.db.models.functions import Lower, Trim
 from django.utils import timezone
 
@@ -60,13 +60,16 @@ MOTIVO_POLIZA_EN_OTRA_CUENTA = "poliza_en_otra_cuenta"
 
 
 def _verificada_en_otra_cuenta(poliza: PolizaVinculada) -> bool:
+    # Se normaliza en la base y no en Python, para comparar exactamente como la
+    # restricción `uq_poliza_verificada_en_una_cuenta` (por ejemplo, SQLite no pasa
+    # la Ñ a minúscula y Python sí).
     return (
         PolizaVinculada.objects
         .annotate(aseguradora_norm=Lower(Trim("insurer")), numero_norm=Lower(Trim("policy_number")))
         .filter(
             estado_verificacion=VERIFICADA,
-            aseguradora_norm=poliza.insurer.strip().lower(),
-            numero_norm=poliza.policy_number.strip().lower(),
+            aseguradora_norm=Lower(Trim(Value(poliza.insurer))),
+            numero_norm=Lower(Trim(Value(poliza.policy_number))),
         )
         .exclude(pk=poliza.pk)
         .exists()

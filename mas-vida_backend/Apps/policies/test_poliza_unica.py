@@ -104,6 +104,16 @@ class ServicioVerificarTests(TestCase):
         with self.assertRaises(polizas.PolizaEnOtraCuenta):
             polizas.verificar(pendiente)
 
+    def test_la_revision_previa_compara_igual_que_la_base_aun_con_letras_no_ascii(self):
+        # Sin depender del respaldo de la restricción: si la revisión previa la detecta,
+        # nunca se intenta guardar.
+        Ñ = crear_cuenta("ñandu")
+        poliza(Ñ, numero="PÓL-Ñ1", aseguradora="SEGUROS ÑANDÚ")
+        pendiente = self.pendiente_de_beto(numero="PÓL-Ñ1", aseguradora="SEGUROS ÑANDÚ")
+        with mock.patch.object(PolizaVinculada, "save", side_effect=AssertionError("no debía guardar")):
+            with self.assertRaises(polizas.PolizaEnOtraCuenta):
+                polizas.verificar(pendiente)
+
     def test_una_poliza_distinta_se_verifica_normal(self):
         pendiente = self.pendiente_de_beto(numero="POL-Y")
         self.assertEqual(polizas.verificar(pendiente), "aplicado")
