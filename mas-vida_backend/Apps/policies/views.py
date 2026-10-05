@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import cashback as servicio_cashback, polizas
+from services import cashback as servicio_cashback, intentos, polizas
 from services.policy_verification import VERIFICADA, verificar_con_datos
 from .models import PolizaVinculada
 from .serializers import VincularPolizaSerializer
@@ -102,6 +102,16 @@ def vincular(request):
     except Usuario.DoesNotExist:
         return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
 
+    # Sin límite se podría adivinar la fecha de nacimiento del titular de una
+    # póliza probando días. Solo cuentan los rechazos; ver services/intentos.py.
+    clave_poliza = intentos.clave_de_poliza(datos["insurer"], datos["policy_number"])
+    clave_cuenta = str(usuario.pk)
+    try:
+        intentos.revisar(intentos.VINCULAR_POLIZA, clave_poliza)
+        intentos.revisar(intentos.VINCULAR_CUENTA, clave_cuenta)
+    except intentos.Bloqueado as bloqueado:
+        return bloqueado.respuesta()
+
     with transaction.atomic():
         poliza, _ = PolizaVinculada.objects.select_for_update().get_or_create(
             usuario=usuario,
@@ -151,6 +161,10 @@ def vincular(request):
             poliza.prima_anual_gtq = None
             poliza.fecha_renovacion = None
             poliza.save()
+
+    if poliza.estado_verificacion == PolizaVinculada.EstadoVerificacion.RECHAZADA:
+        intentos.registrar(intentos.VINCULAR_POLIZA, clave_poliza)
+        intentos.registrar(intentos.VINCULAR_CUENTA, clave_cuenta)
 
     return Response(
         {
