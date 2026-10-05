@@ -11,6 +11,11 @@ Knox guarda solo el hash, y después se borran los de DRF, que estaban en claro.
 
 Al revertir no se recuperan los tokens de DRF (solo queda el hash): hay que
 volver a iniciar sesión.
+
+Probada en PostgreSQL 16 (5 oct 2026) desplegando sobre una base de `dev` con
+tokens: con uso, sin uso y vencido. Django desaconseja mezclar datos y esquema en
+una migración en PostgreSQL ("pending trigger events"); con esta no pasó, ni hacia
+adelante ni al revertir.
 """
 import hashlib
 

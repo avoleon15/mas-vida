@@ -8,12 +8,15 @@ from datetime import date, datetime, timedelta, timezone as utc
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase, TransactionTestCase
+from knox.auth import TokenAuthentication
 from knox.models import AuthToken
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.test import APIClient, APITestCase
 
+from Apps.users.autenticacion import TokenDeSesion
 from Apps.users.models import Usuario
 from Apps.users.pruebas import token_de
 from services import sesiones
@@ -135,6 +138,40 @@ class VidaDelTokenTests(APITestCase):
         for url in ENDPOINTS_GET:
             with self.subTest(url=url):
                 self.assertNotEqual(self.c.get(url).status_code, 401)
+
+
+class CasosQueKnoxDejaEn500Tests(APITestCase):
+    """Knox 5.1 responde 500 en dos casos que DRF respondía 401 (ver autenticacion.py)."""
+
+    def setUp(self):
+        self.user = crear()
+        token_de(self.user)
+        self.token = AuthToken.objects.get(user=self.user)
+
+    def test_un_encabezado_con_bytes_que_no_son_utf8_da_401(self):
+        c = APIClient(raise_request_exception=False)
+        c.credentials(HTTP_AUTHORIZATION="Token \xe9abc")
+        r = c.get(PERFIL)
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r["WWW-Authenticate"], "Token")
+
+    def test_si_otra_peticion_borro_el_token_mientras_se_renovaba_da_401(self):
+        AuthToken.objects.filter(pk=self.token.pk).delete()      # cerró sesión en paralelo
+        with en(dias=1), self.assertRaises(AuthenticationFailed):
+            TokenDeSesion().renew_token(self.token)
+
+    def test_otro_error_de_la_base_sigue_siendo_500_y_no_saca_a_nadie(self):
+        # Si la base falla y el token sigue ahí, no es un 401: la app sacaría a la persona.
+        falla = mock.patch.object(TokenAuthentication, "renew_token", side_effect=DatabaseError("se cayó"))
+        with falla, self.assertRaises(DatabaseError):
+            TokenDeSesion().renew_token(self.token)
+        self.assertTrue(AuthToken.objects.filter(pk=self.token.pk).exists())
+
+    def test_la_api_usa_esta_autenticacion(self):
+        from django.conf import settings
+        self.assertEqual(
+            settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"], ["Apps.users.autenticacion.TokenDeSesion"],
+        )
 
 
 class GuardadoComoHashTests(APITestCase):

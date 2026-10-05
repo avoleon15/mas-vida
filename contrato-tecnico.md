@@ -248,7 +248,7 @@ fila del usuario y no tiene relación con este campo.
 | Situación | Código | Cuerpo |
 |---|---|---|
 | Falta el encabezado | `401` | `{ "detail": "..." }` y el encabezado `WWW-Authenticate: Token` |
-| Token inválido | `401` | `{ "detail": "..." }` |
+| Token inválido (también un encabezado con caracteres que no son UTF-8, o un token que se cerró mientras se usaba) | `401` | `{ "detail": "..." }` |
 | Token **vencido** (30 días sin uso, o 90 desde que se entró) | `401` | `{ "detail": "..." }` y `WWW-Authenticate: Token`. El mismo texto que un token inválido: la app decide por el código |
 | Token válido pero la cuenta no tiene perfil de usuario | `403` | `{ "mensaje": "..." }` |
 | Demasiados intentos (registro, login o vincular póliza) | `429` | `{ "error": "demasiados_intentos", "mensaje": "...", "reintentar_en": 42 }` y `Retry-After: 42` |

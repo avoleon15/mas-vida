@@ -59,8 +59,9 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-    # Un token por inicio de sesión, guardado como hash, que vence (ver REST_KNOX).
-    "DEFAULT_AUTHENTICATION_CLASSES": ["knox.auth.TokenAuthentication"],
+    # Un token por inicio de sesión, guardado como hash, que vence (ver REST_KNOX). Es el
+    # de Knox con dos casos de 500 convertidos en 401 (Apps/users/autenticacion.py).
+    "DEFAULT_AUTHENTICATION_CLASSES": ["Apps.users.autenticacion.TokenDeSesion"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
 
