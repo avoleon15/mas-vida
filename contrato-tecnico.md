@@ -135,7 +135,8 @@ campo dentro del JSON.
    Authorization: Token <clave>
    ```
 
-   La palabra es `Token` (así la espera Django REST Framework), no `Bearer`.
+   La palabra es `Token` (así la espera django-rest-knox, igual que antes Django REST
+   Framework), no `Bearer`.
 3. El servidor busca a quién pertenece ese token y trabaja con ese usuario.
    Nunca toma la identidad del cuerpo de la petición.
 
@@ -146,8 +147,17 @@ campo dentro del JSON.
 
 | Petición | Cuerpo | Respuesta |
 |---|---|---|
-| `POST /api/v1/registro` | `{ "username": string, "password": string, "birth_date": "YYYY-MM-DD" }` | `201` `{ "token": string, "username": string, "usuario_id": string }` |
-| `POST /api/v1/login` | `{ "username": string, "password": string }` | `200` `{ "token": string }` |
+| `POST /api/v1/registro` | `{ "username": string, "password": string, "birth_date": "YYYY-MM-DD" }` | `201` `{ "token": string, "expiry": string, "usuario_id": string, "username": string }` |
+| `POST /api/v1/login` | `{ "username": string, "password": string }` | `200` `{ "token": string, "expiry": string, "usuario_id": string? }` |
+
+- **Cada login o registro abre una sesión nueva con su propio token** (desde el 4 oct,
+  A35): dos teléfonos de la misma persona tienen tokens distintos.
+- `expiry` es cuándo vence hoy, en ISO 8601 con zona (`2026-11-04T10:15:00.123456-06:00`).
+  Es informativo: cada uso lo corre (ver "Reglas del token"), así que la app no lo
+  usa para decidir nada; decide por el `401`.
+- `usuario_id` es el mismo del registro. Flutter se lo pasa a Swift en
+  `actualizarSesion` para que sepa si cambió la persona. Es `null` solo en una cuenta
+  sin perfil (las que crea el admin), que no usa la app.
 
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
@@ -155,14 +165,21 @@ contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }
 (ver "Límite de intentos" abajo). El login no lee el encabezado `Authorization`:
 un token viejo o inválido no impide iniciar sesión.
 
-### Cerrar sesión: `POST /api/v1/logout` (hecho 4 oct 2026)
+### Cerrar sesión: `POST /api/v1/logout` y `POST /api/v1/logout/todos` (A35, 4 oct 2026)
 
-Con token, sin cuerpo. Responde `204` y **borra el token** de la cuenta. Como hay
-un token por cuenta y lo comparten sus dispositivos, **cierra la sesión en todos**.
-Con un token inválido o vencido responde `401`, como el resto. La app, al cerrar
-sesión, llama a este endpoint **y** además borra su copia y le entrega `null` a
-Swift con `actualizarSesion(null)`; el siguiente inicio de sesión recibe un token
-nuevo.
+Con token, sin cuerpo. Los dos responden `204`; con un token inválido o vencido,
+`401`, como el resto.
+
+| Endpoint | Qué cierra |
+|---|---|
+| `POST /api/v1/logout` | **Solo esta sesión** (este teléfono): borra el token con el que se llamó. Los otros teléfonos de la cuenta siguen adentro |
+| `POST /api/v1/logout/todos` | **Todas las sesiones** de la cuenta, en todos sus teléfonos |
+
+La app, al cerrar sesión, llama a `logout` **y** además borra su copia y le entrega
+`null` a Swift con `actualizarSesion(null)`. Si la llamada falla (sin red, o el token
+ya había vencido), igual borra sus copias: el token queda en el servidor hasta que
+venza. `logout/todos` es para "Cerrar sesión en todos los dispositivos" y, más
+adelante, para cambiar la contraseña o borrar la cuenta (OWASP; App Store 5.1.1(v)).
 
 ### Inicio de sesión con Google y Apple (decidido 2 oct 2026)
 
@@ -183,20 +200,32 @@ ofrecerlo si se ofrece Google (guía 4.8).
   del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
   cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
   cuentas distintas).
+- **Desde A35:** el login con Google o Apple abre la sesión con
+  `sesiones.iniciar_sesion` (no con el `Token` de DRF) y responde también `expiry` y
+  `usuario_id`, como el login con contraseña.
 
 ### Reglas del token
 
-- Hay **un token por cuenta**, compartido por sus dispositivos.
-- **Vence a los 30 días SIN uso y cada uso lo renueva** (decidido y hecho el 4 oct
-  2026): quien abre la app seguido nunca se topa con el vencimiento. El último uso
-  se anota a lo más una vez por hora. Un token vencido responde `401` en **todos**
-  los endpoints (también `sync`), y la app tiene que volver a la pantalla de inicio
-  de sesión. Los días se cambian con `DIAS_DE_VIDA_DEL_TOKEN`.
-- **Al iniciar sesión, un token vencido no se revive**: el servidor entrega uno
-  nuevo (si alguien se llevó la llave vieja, no le sirve aunque la cuenta vuelva a
-  entrar). Uno vigente se devuelve igual y se renueva.
-- Los tokens que ya existían al desplegar arrancan con 30 días de margen desde ese
-  momento.
+Desde A35 (4 oct 2026) los tokens son de **django-rest-knox** (antes, el de Django
+REST Framework: uno por cuenta, en texto plano y sin tope). Ver
+`services/sesiones.py`.
+
+- **Un token por sesión:** cada login o registro crea uno nuevo. Una cuenta tiene
+  **como mucho 10 sesiones**; al entrar la undécima se cierra la más vieja.
+- **Vence a los 30 días SIN uso y cada uso lo renueva:** quien abre la app seguido no
+  se topa con el vencimiento. El vencimiento se escribe a lo más una vez por minuto.
+- **Tope de 90 días:** aunque se use a diario, a los 90 días de iniciar sesión hay que
+  volver a entrar. Así un token robado no sirve para siempre.
+- Un token vencido responde `401` en **todos** los endpoints (también `sync`) y la
+  app vuelve a la pantalla de inicio de sesión. Knox lo borra en ese momento.
+- **En la base de datos solo queda un hash** (SHA-512) del token, como con las
+  contraseñas: quien vea la base no puede usar los tokens. La clave completa se
+  entrega una sola vez, al entrar; no se puede volver a consultar.
+- Los días se cambian con `DIAS_DE_VIDA_DEL_TOKEN` (30) y `DIAS_MAXIMOS_DE_SESION` (90,
+  en `settings.py`).
+- **Al desplegar A35 nadie tiene que volver a entrar:** la migración `users/0006`
+  copia a Knox cada token vigente con la misma clave y el mismo vencimiento, y
+  borra los de texto plano. El tope de 90 días cuenta desde ese momento.
 - Se trata como una contraseña: nunca se escribe en logs ni en mensajes de
   error, y nunca viaja dentro del cuerpo de una petición.
 - Flutter guarda su propia copia para sus llamadas HTTP. A Swift se la entrega
@@ -220,7 +249,7 @@ fila del usuario y no tiene relación con este campo.
 |---|---|---|
 | Falta el encabezado | `401` | `{ "detail": "..." }` y el encabezado `WWW-Authenticate: Token` |
 | Token inválido | `401` | `{ "detail": "..." }` |
-| Token **vencido** (30 días sin uso) | `401` | `{ "detail": "El token venció. Vuelve a iniciar sesión." }` y `WWW-Authenticate: Token` |
+| Token **vencido** (30 días sin uso, o 90 desde que se entró) | `401` | `{ "detail": "..." }` y `WWW-Authenticate: Token`. El mismo texto que un token inválido: la app decide por el código |
 | Token válido pero la cuenta no tiene perfil de usuario | `403` | `{ "mensaje": "..." }` |
 | Demasiados intentos (registro, login o vincular póliza) | `429` | `{ "error": "demasiados_intentos", "mensaje": "...", "reintentar_en": 42 }` y `Retry-After: 42` |
 
@@ -272,10 +301,12 @@ mientras esté bloqueado, ni lo correcto pasa.
 - **Flutter:** trata **cualquier `401`** como "volver a iniciar sesión" (token
   vencido o inválido), muestra "Demasiados intentos, inténtalo más tarde" con un
   `429` (y no reintenta antes de `reintentar_en`), y al cerrar sesión llama a
-  `POST /api/v1/logout`.
+  `POST /api/v1/logout`. Guarda el `usuario_id` del login o el registro y se lo
+  pasa a Swift en `actualizarSesion`.
 - **Swift:** el `401` del `sync` ya es "token rechazado" (falla general: se corta la
-  vuelta y no se pierde nada). Sigue igual; solo cambia que ahora un token puede
-  vencer.
+  vuelta y no se pierde nada). Como cada login trae un token nuevo, Swift ya no
+  decide "cambió la cuenta" por el token sino por el `usuario_id` (ver
+  `actualizarSesion`).
 
 ---
 
@@ -2376,19 +2407,20 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 - **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
   fila por día ya no se lee. No hay datos reales en ese formato; una base de
   pruebas vieja se vuelve a sincronizar.
-- ~~Logout en el servidor~~ — **hecho** (4 oct): `POST /api/v1/logout`. Como hay un
-  token por cuenta, cierra la sesión en **todos** los dispositivos de esa persona.
-  **[PENDIENTE]:** un token por dispositivo, para cerrar solo uno (más trabajo; no
-  está en el plan).
+- ~~Logout en el servidor~~ — **hecho** (4 oct): `POST /api/v1/logout` cierra este
+  teléfono y `POST /api/v1/logout/todos` todos (A35, un token por sesión con Knox).
+  **[PENDIENTE]:** que cambiar la contraseña y borrar la cuenta cierren todas las
+  sesiones (todavía no existen esos endpoints).
 - **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
   Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
 - **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct):**
   Swift vacía la cola y olvida la marca; la cuenta que sigue recibe sus 7 días.
-- ~~Caducidad del token~~ — **hecha** (4 oct): vence a los 30 días sin uso y cada uso
-  lo renueva. Queda abierto exigir HTTPS fuera de pruebas locales (paquete 7) y, más
-  adelante, tokens de vida corta con uno de renovación como las plataformas grandes.
+- ~~Caducidad del token~~ — **hecha** (4 oct; A35 la pasó a Knox): vence a los 30 días
+  sin uso, cada uso la renueva, tope de 90 días y guardado como hash. Queda abierto
+  exigir HTTPS fuera de pruebas locales (paquete 7) y, más adelante, tokens de vida
+  corta con uno de renovación como las plataformas grandes.
 - **`Token` o `Bearer` en el encabezado:** se dejó `Token` porque es lo que espera
-  Django REST Framework; `Bearer` es el estándar de OAuth 2.0 y se puede configurar
+  django-rest-knox (y antes Django REST Framework); `Bearer` es el estándar de OAuth 2.0 y se puede configurar
   más adelante.
 - **Días vacíos:** emparejar los tres caminos de envío frente a un día sin
   actividad (ver "Días sin actividad").
