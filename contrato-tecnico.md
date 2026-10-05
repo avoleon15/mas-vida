@@ -1248,13 +1248,15 @@ Le entrega a Swift el token de la sesión actual, o le avisa que se cerró. Swif
 lo guarda en su propio Keychain y lo manda como `Authorization` en cada envío.
 
 Flutter lo llama:
-1. **Al iniciar sesión o registrarse**, con el token.
+1. **Al iniciar sesión o registrarse**, con el token y el `usuario_id` de la respuesta.
 2. **Al cerrar sesión**, con `null`.
 3. **Cada vez que abre la app**, con el token actual (o `null` si no hay
    sesión). Así la copia de Swift no se desincroniza, ni siquiera después de
    reinstalar: el Keychain sobrevive a desinstalar la app.
 
-Entrada: `{ "token": string? }` — `null` significa "no hay sesión".
+Entrada: `{ "token": string?, "usuario_id": string? }` — `token` en `null` significa
+"no hay sesión". `usuario_id` llega desde A35; una versión de Flutter que no lo manda
+sigue funcionando (ver abajo).
 
 Salida: `{ "estado": string, "detalle": string? }`
 
@@ -1269,10 +1271,18 @@ sesión lo llama sin esperar la respuesta. Un `FlutterError` de Swift
 (`ARGUMENTOS_INVALIDOS`, error de programación) llega como `desconocido`.
 
 - Es **idempotente**: mandar el mismo token dos veces no cambia nada.
-- **Si la cuenta cambia** (otro token, o `null`), Swift olvida hasta qué día se
-  había mandado y **vacía la cola**: la cuenta que sigue empieza como la primera
-  vez (sus 7 días) y no recibe días que esperaban a nombre de la anterior. El
-  mismo token de cada arranque no cambia nada.
+- **Si entra otra persona**, Swift olvida hasta qué día se había mandado y **vacía
+  la cola**: empieza como la primera vez (sus 7 días) y no recibe días que esperaban
+  a nombre de la anterior. **Desde A35 "otra persona" se decide por el
+  `usuario_id`, no por el token** (4 oct 2026), porque cada login trae un token
+  nuevo: si la misma persona vuelve a entrar después de que su token venció, sigue
+  donde iba y no pierde los días de la cola. Es lo que hace el SDK de Rook
+  (`updateUserID` solo reinicia si cambia el usuario).
+  - `token` en `null` (cerró sesión o venció): **solo se borra el token**. La marca y
+    la cola esperan a ver quién entra. Swift recuerda el último `usuario_id`
+    (`UserDefaults`, clave `vida.cuentaDeLosEnvios`; no es secreto).
+  - Sin `usuario_id` se compara el token, como antes: el mismo token no cambia
+    nada; otro token cuenta como otra persona.
 - **Con un token, Swift se pone al día** sin esperar (ver "Cuándo se manda cada
   día").
 - **No hay forma de leer el token desde Flutter** (no existe un método para
@@ -2413,8 +2423,9 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
   sesiones (todavía no existen esos endpoints).
 - **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
   Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
-- **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct):**
-  Swift vacía la cola y olvida la marca; la cuenta que sigue recibe sus 7 días.
+- **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct; cambiado
+  en A35, 4 oct):** se vacían solo si entra **otra persona** (otro `usuario_id`);
+  cerrar sesión solo borra el token. La cuenta que entra nueva recibe sus 7 días.
 - ~~Caducidad del token~~ — **hecha** (4 oct; A35 la pasó a Knox): vence a los 30 días
   sin uso, cada uso la renueva, tope de 90 días y guardado como hash. Queda abierto
   exigir HTTPS fuera de pruebas locales (paquete 7) y, más adelante, tokens de vida

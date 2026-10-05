@@ -1003,8 +1003,9 @@ final class MarcaEnviosTests: XCTestCase {
   }
 }
 
-/// Al cambiar de cuenta se olvida hasta qué día se había mandado: la cuenta
-/// nueva tiene que recibir sus 7 días.
+/// Al entrar otra persona se olvida hasta qué día se había mandado: tiene que
+/// recibir sus 7 días. Desde A35 cada login trae un token nuevo, así que "otra
+/// persona" se decide por el `usuario_id` y la misma persona no pierde la cola.
 final class SesionYMarcaTests: XCTestCase {
 
   private var almacen: AlmacenEnMemoria!
@@ -1012,6 +1013,7 @@ final class SesionYMarcaTests: XCTestCase {
   private var nombre: String!
   private var marca: MarcaEnvios!
   private var cola: SyncQueue!
+  private var cuenta: CuentaDeEnvios!
 
   override func setUp() {
     super.setUp()
@@ -1021,6 +1023,7 @@ final class SesionYMarcaTests: XCTestCase {
     let hoy = { FormatoFechas.diaCalendario.date(from: "2026-10-03")!.addingTimeInterval(15 * 3600) }
     marca = MarcaEnvios(almacen: defaults, hoy: hoy)
     cola = SyncQueue(almacen: defaults, hoy: hoy)
+    cuenta = CuentaDeEnvios(almacen: defaults)
   }
 
   override func tearDown() {
@@ -1028,65 +1031,156 @@ final class SesionYMarcaTests: XCTestCase {
     super.tearDown()
   }
 
-  func testElMismoTokenEnCadaArranque_NoOlvidaLaMarca() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+  @discardableResult
+  private func aplicar(_ token: String?, _ usuarioId: String?) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
+    Sesion.aplicar(token: token, usuarioId: usuarioId, en: almacen, marca: marca, cola: cola, cuenta: cuenta)
+  }
+
+  /// Ana entró, mandó hasta el 2 y le queda el 25 en la cola.
+  private func anaConDiasPendientes() {
+    aplicar("abc", "ana")
     marca.registrarEnviado("2026-10-02")
     cola.encolar(fecha: "2026-09-25")
+  }
 
-    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+  private func nadaSeOlvido(_ mensaje: String = "", file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02", mensaje, file: file, line: line)
+    XCTAssertEqual(cola.pendientes(), ["2026-09-25"], mensaje, file: file, line: line)
+  }
+
+  private func seOlvidoTodo(_ mensaje: String = "", file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertNil(marca.ultimoDiaEnviado, mensaje, file: file, line: line)
+    XCTAssertEqual(cola.pendientes(), [], mensaje, file: file, line: line)
+  }
+
+  func testElMismoTokenEnCadaArranque_NoOlvidaNada() {
+    anaConDiasPendientes()
+
+    let r = aplicar("abc", "ana")
 
     XCTAssertEqual(r.resultado, .ok)
     XCTAssertTrue(r.haySesion)
-    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
-    XCTAssertEqual(cola.pendientes(), ["2026-09-25"], "La cola tampoco se toca")
+    nadaSeOlvido()
   }
 
-  func testOtraCuenta_OlvidaLaMarcaYVaciaLaCola() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
-    marca.registrarEnviado("2026-10-02")
-    cola.encolar(fecha: "2026-09-25")   // esperaba a nombre de la cuenta anterior
+  func testLaMismaPersonaConUnTokenNuevo_NoPierdeLaCola() {
+    // Su token venció (o entró de nuevo): Knox le da otro, pero es Ana.
+    anaConDiasPendientes()
 
-    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca, cola: cola)
+    let r = aplicar("token-nuevo", "ana")
 
     XCTAssertTrue(r.haySesion)
-    XCTAssertNil(marca.ultimoDiaEnviado)
-    XCTAssertEqual(cola.pendientes(), [], "La cuenta nueva no recibe días de la anterior")
+    nadaSeOlvido("Es la misma persona: sigue donde iba")
   }
 
-  func testCerrarSesion_OlvidaLaMarca_YNoHaySesion() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
-    marca.registrarEnviado("2026-10-02")
-    cola.encolar(fecha: "2026-09-25")
+  func testOtraPersona_OlvidaLaMarcaYVaciaLaCola() {
+    anaConDiasPendientes()
 
-    let r = Sesion.aplicar(token: nil, en: almacen, marca: marca, cola: cola)
+    let r = aplicar("otra", "beto")
+
+    XCTAssertTrue(r.haySesion)
+    seOlvidoTodo("Beto no recibe días de Ana")
+    XCTAssertEqual(cuenta.usuarioId, "beto")
+  }
+
+  func testCerrarSesion_SoloBorraElToken() {
+    anaConDiasPendientes()
+
+    let r = aplicar(nil, nil)
 
     XCTAssertEqual(r.resultado, .ok)
     XCTAssertFalse(r.haySesion)
-    XCTAssertNil(marca.ultimoDiaEnviado)
-    XCTAssertEqual(cola.pendientes(), [])
+    XCTAssertNil(almacen.leerToken())
+    nadaSeOlvido("Se decide cuando alguien entre")
+    XCTAssertEqual(cuenta.usuarioId, "ana", "Se recuerda para comparar")
+  }
+
+  func testCerrarSesionYVuelveLaMisma_SigueDondeIba() {
+    anaConDiasPendientes()
+    aplicar(nil, nil)
+
+    aplicar("token-nuevo", "ana")
+
+    nadaSeOlvido()
+  }
+
+  func testCerrarSesionYEntraOtra_SeOlvidaTodo() {
+    anaConDiasPendientes()
+    aplicar(nil, nil)
+
+    aplicar("token-de-beto", "beto")
+
+    seOlvidoTodo()
   }
 
   func testSiFallaElKeychain_NoSeOlvidaNada() {
-    _ = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
-    marca.registrarEnviado("2026-10-02")
-    cola.encolar(fecha: "2026-09-25")
+    anaConDiasPendientes()
     almacen.falla = ErrorAlmacenSesion(operacion: "guardar", estado: -25308)
 
-    let r = Sesion.aplicar(token: "otra", en: almacen, marca: marca, cola: cola)
+    let r = aplicar("otra", "beto")
 
     guard case .errorAlmacenamiento = r.resultado else { return XCTFail("Debió fallar") }
     XCTAssertTrue(r.haySesion, "Sigue el token anterior")
-    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02",
-                   "El token no cambió, así que la cuenta tampoco")
-    XCTAssertEqual(cola.pendientes(), ["2026-09-25"])
+    nadaSeOlvido("El token no cambió, así que la cuenta tampoco")
+    XCTAssertEqual(cuenta.usuarioId, "ana")
   }
 
-  func testElPrimerLogin_NoTeniaMarca_YQuedaSesion() {
-    let r = Sesion.aplicar(token: "abc", en: almacen, marca: marca, cola: cola)
+  func testElPrimerLogin_AnotaLaCuenta_YQuedaSesion() {
+    let r = aplicar("abc", "ana")
 
     XCTAssertEqual(r.resultado, .ok)
     XCTAssertTrue(r.haySesion)
     XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(cuenta.usuarioId, "ana")
+  }
+
+  // MARK: Sin `usuario_id`: se compara el token, como antes de A35
+
+  func testSinUsuarioId_ElMismoToken_NoOlvidaNada() {
+    anaConDiasPendientes()
+
+    aplicar("abc", nil)
+
+    nadaSeOlvido()
+    XCTAssertEqual(cuenta.usuarioId, "ana", "Con el mismo token sigue siendo Ana")
+  }
+
+  func testSinUsuarioId_OtroToken_OlvidaTodo_YYaNoSabeDeQuienEs() {
+    anaConDiasPendientes()
+
+    aplicar("otra", nil)
+
+    seOlvidoTodo("Sin saber quién es, otro token cuenta como otra persona")
+    XCTAssertNil(cuenta.usuarioId)
+  }
+
+  func testUnUsuarioIdVacioOSoloEspacios_CuentaComoQueNoVino() {
+    anaConDiasPendientes()
+
+    aplicar("otra", "  ")
+
+    seOlvidoTodo()
+    XCTAssertNil(cuenta.usuarioId)
+  }
+
+  func testAlActualizarDesdeUnaVersionSinCuentaAnotada_ElMismoToken_NoOlvidaNada() {
+    // La versión anterior guardó el token pero nunca anotó la cuenta.
+    _ = Sesion.aplicar(token: "abc", en: almacen)
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
+    XCTAssertNil(cuenta.usuarioId)
+
+    aplicar("abc", "ana")
+
+    nadaSeOlvido("La migración a Knox conserva la clave del token")
+    XCTAssertEqual(cuenta.usuarioId, "ana")
+  }
+
+  func testLaCuentaSeGuardaDondeSeLeVaABuscar() {
+    aplicar("abc", "ana")
+
+    XCTAssertEqual(defaults.string(forKey: "vida.cuentaDeLosEnvios"), "ana")
+    XCTAssertEqual(CuentaDeEnvios(almacen: defaults).usuarioId, "ana", "Sobrevive a reiniciar la app")
   }
 }
 

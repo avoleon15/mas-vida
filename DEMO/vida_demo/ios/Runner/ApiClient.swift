@@ -229,27 +229,82 @@ enum Sesion {
         }
     }
 
-    /// Lo mismo, y además: si la cuenta cambió (otro token, o se cerró la
-    /// sesión) se olvidan hasta qué día se había mandado y la cola de
-    /// reintentos, para que la cuenta que sigue empiece como la primera vez
-    /// (sus 7 días) y no reciba días que esperaban a nombre de la anterior.
-    /// El mismo token que Flutter manda en cada arranque no cambia nada.
-    /// Devuelve también si quedó una sesión, para saber si ponerse al día.
+    /// Lo mismo, y además: si entró **otra persona** se olvidan hasta qué día
+    /// se había mandado y la cola de reintentos, para que empiece como la
+    /// primera vez (sus 7 días) y no reciba días que esperaban a nombre de la
+    /// anterior. Devuelve también si quedó una sesión, para saber si ponerse
+    /// al día.
+    ///
+    /// Desde A35 (Knox) cada login trae un token nuevo, así que "otra persona"
+    /// se decide por el `usuario_id`, no por el token (como `updateUserID` del
+    /// SDK de Rook): si la misma persona vuelve a entrar después de que su
+    /// token venció, sigue donde iba y no pierde los días de la cola.
+    /// - `nil` (cerró sesión o el token venció): solo se borra el token. La
+    ///   marca y la cola esperan a ver quién entra.
+    /// - Sin `usuario_id` (una versión de Flutter que no lo manda, o la primera
+    ///   vez después de actualizar) se compara el token, como antes.
     static func aplicar(
         token: String?,
+        usuarioId: String?,
         en almacen: AlmacenSesion,
         marca: MarcaEnvios,
-        cola: SyncQueue
+        cola: SyncQueue,
+        cuenta: CuentaDeEnvios
     ) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
         let anterior = almacen.leerToken()
         let resultado = aplicar(token: token, en: almacen)
         let actual = almacen.leerToken()
         // Si falló el Keychain, el token anterior sigue ahí: no cambió nada.
-        if resultado == .ok && actual != anterior {
+        // Sin sesión no hay a quién comparar: se decide cuando alguien entre.
+        guard resultado == .ok, let actual else { return (resultado, actual != nil) }
+
+        let id = usuarioId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nuevoId = (id?.isEmpty ?? true) ? nil : id
+        let otraPersona: Bool
+        if let nuevoId, let dueno = cuenta.usuarioId {
+            otraPersona = nuevoId != dueno
+        } else {
+            otraPersona = actual != anterior
+        }
+        if otraPersona {
             marca.olvidar()
             cola.vaciar()
         }
-        return (resultado, actual != nil)
+        if let nuevoId {
+            cuenta.anotar(nuevoId)
+        } else if otraPersona {
+            // Los días que sigan ya no son de quien estaba anotado.
+            cuenta.olvidar()
+        }
+        return (resultado, true)
+    }
+}
+
+/// A nombre de qué cuenta (`usuario_id`) están la marca de envíos y la cola.
+///
+/// Sobrevive al cierre de sesión a propósito: así, al volver a entrar, se sabe
+/// si es la misma persona. No es secreto (es el nombre público que genera el
+/// servidor), por eso vive en `UserDefaults` y no en el Keychain.
+final class CuentaDeEnvios {
+    private static let clave = "vida.cuentaDeLosEnvios"
+
+    private let almacen: UserDefaults
+
+    init(almacen: UserDefaults = .standard) {
+        self.almacen = almacen
+    }
+
+    var usuarioId: String? {
+        guard let id = almacen.string(forKey: Self.clave), !id.isEmpty else { return nil }
+        return id
+    }
+
+    func anotar(_ usuarioId: String) {
+        almacen.set(usuarioId, forKey: Self.clave)
+    }
+
+    func olvidar() {
+        almacen.removeObject(forKey: Self.clave)
     }
 }
 

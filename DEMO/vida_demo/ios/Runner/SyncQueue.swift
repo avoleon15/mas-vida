@@ -93,7 +93,7 @@ final class SyncQueue {
     }
 
     /// Al cambiar de cuenta: lo que esperaba era de la cuenta anterior. La
-    /// nueva empieza como la primera vez (ver `Sesion.aplicar(token:en:marca:cola:)`).
+    /// nueva empieza como la primera vez (ver `Sesion.aplicar(token:usuarioId:en:marca:cola:cuenta:)`).
     func vaciar() {
         almacen.removeObject(forKey: Self.clave)
     }
@@ -220,9 +220,8 @@ final class MarcaEnvios {
         almacen.set(fecha, forKey: Self.clave)
     }
 
-    /// Al cerrar sesión o cambiar de cuenta: la próxima cuenta empieza como
-    /// la primera vez. Si vuelve a entrar la misma, se reenvían 7 días y el
-    /// servidor ignora lo que ya tenía.
+    /// Al entrar otra persona: empieza como la primera vez. Cerrar sesión no
+    /// la borra; si vuelve a entrar la misma persona, sigue donde iba.
     func olvidar() {
         almacen.removeObject(forKey: Self.clave)
     }
