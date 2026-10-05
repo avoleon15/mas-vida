@@ -5,11 +5,11 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
 
 from Apps.policies.models import PolizaVinculada, RegistroAseguradora
 from Apps.users.models import IntentoFallido, Usuario
+from Apps.users.pruebas import token_de
 from services import intentos
 
 User = get_user_model()
@@ -180,7 +180,7 @@ class LoginConLimiteTests(APITestCase):
     def test_sigue_respondiendo_igual_cuando_todo_sale_bien_o_mal(self):
         ok = self.entrar()
         self.assertEqual(ok.status_code, 200)
-        self.assertEqual(set(ok.json()), {"token"})
+        self.assertEqual(set(ok.json()), {"token", "expiry", "usuario_id"})
         malo = self.entrar("mala")
         self.assertEqual(malo.status_code, 400)
         self.assertIn("non_field_errors", malo.json())
@@ -308,7 +308,7 @@ class VincularConLimiteTests(APITestCase):
         user = User.objects.create_user(f"{nombre}@correo.com", password="Clave-segura-2026")
         usuario = Usuario.objects.create(user=user, usuario_id=f"id-{nombre}", birth_date=date(1990, 5, 17))
         cliente = APIClient()
-        cliente.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        cliente.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
         usuario.cliente = cliente
         return usuario
 

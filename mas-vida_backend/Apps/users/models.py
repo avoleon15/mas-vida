@@ -38,21 +38,3 @@ class IntentoFallido(ModeloBase):
 
     def __str__(self):
         return f"{self.tipo} {self.clave[:12]} {self.creado_en:%Y-%m-%d %H:%M}"
-
-
-class UsoDeToken(ModeloBase):
-    """Cuándo se usó por última vez el token de una cuenta.
-
-    El token vence a los 30 días SIN uso y cada uso lo renueva (decidido el 4 oct
-    2026). DRF solo guarda cuándo se creó, así que el último uso vive aquí. Se
-    escribe a lo más una vez por hora para no tocar la base en cada petición.
-    Ver services/sesiones.py.
-    """
-
-    token = models.OneToOneField(
-        "authtoken.Token", on_delete=models.CASCADE, related_name="uso",
-    )
-    ultimo_uso = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return f"{self.token.user_id}: {self.ultimo_uso:%Y-%m-%d %H:%M}"

@@ -10,13 +10,13 @@ from django.contrib.auth.models import User
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.policies.admin import PolizaVinculadaAdmin
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import monedas, polizas
 
 NACIMIENTO = date(1990, 1, 1)
@@ -33,8 +33,8 @@ class PolizaTests(APITestCase):
             user=self.user, usuario_id="ana-1", birth_date=NACIMIENTO
         )
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
-        token = Token.objects.get(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         self.datos = {
             "policy_number": "POL-123",
             "insurer": "Seguros Demo GT",
@@ -282,8 +282,8 @@ class VinculacionYRetroactivoTests(APITestCase):
         self.usuario = Usuario.objects.create(
             user=user, usuario_id="ana-1", birth_date=nacimiento
         )
-        token = Token.objects.get(user=user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def _vincular(self, numero=POLIZA_ANA, nacimiento="1994-03-12"):
         return self.client.post(
@@ -339,6 +339,6 @@ class VinculacionYRetroactivoTests(APITestCase):
 
     def test_el_estado_de_una_cuenta_sin_perfil_da_403(self):
         sin_perfil = User.objects.create_user(username="admin2", password="clave-segura-2")
-        token = Token.objects.get(user=sin_perfil)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(sin_perfil)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         self.assertEqual(self.client.get("/api/v1/polizas/estado").status_code, 403)

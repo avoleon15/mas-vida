@@ -4,12 +4,12 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import cashback, polizas
 
 NACIMIENTO = date(1990, 1, 1)
@@ -123,8 +123,8 @@ class TechoAnualPorAnioDePolizaTests(APITestCase):
         self.inicio = self.hoy - timedelta(days=30)
         poliza(self.usuario, self.inicio - timedelta(days=365))
         version()
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def _sync_hoy(self, pasos):
         dia = self.hoy.isoformat()
@@ -255,8 +255,8 @@ class CashbackEndpointTests(APITestCase):
     def test_devuelve_el_resumen_del_usuario(self):
         usuario = crear_usuario()
         poliza(usuario, timezone.localdate() + timedelta(days=100))
-        token = Token.objects.get(user=usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         r = self.client.get(CASHBACK)
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["con_poliza"])
@@ -264,6 +264,6 @@ class CashbackEndpointTests(APITestCase):
 
     def test_cuenta_sin_perfil_da_403(self):
         user = User.objects.create_user(username="sinperfil", password="clave-segura-1")
-        token = Token.objects.get(user=user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         self.assertEqual(self.client.get(CASHBACK).status_code, 403)

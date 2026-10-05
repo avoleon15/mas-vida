@@ -17,11 +17,11 @@ from django.core.management.base import CommandError
 from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.policies.models import PolizaVinculada, RegistroAseguradora
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import policy_verification as pv
 from services import polizas
 
@@ -49,10 +49,10 @@ class VincularPolizaTests(APITestCase):
         usuario = Usuario.objects.create(
             user=user, usuario_id=f"id-{nombre}", birth_date=nacimiento
         )
-        return usuario, Token.objects.get(user=user)
+        return usuario, token_de(user)
 
     def vincular(self, token, numero, nacimiento, aseguradora=ASEGURADORA, **extra):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         cuerpo = {"policy_number": numero, "insurer": aseguradora, "birth_date": nacimiento}
         cuerpo.update(extra)
         return self.client.post(self.url, cuerpo, format="json")
@@ -265,7 +265,7 @@ class VincularPolizaTests(APITestCase):
 
     def test_cuenta_sin_perfil_de_usuario_da_403(self):
         user = get_user_model().objects.create_user("suelto", password="x")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
 
         respuesta = self.client.post(
             self.url,
@@ -277,7 +277,7 @@ class VincularPolizaTests(APITestCase):
 
     def test_faltan_datos_da_400(self):
         _, token = self.nuevo_usuario()
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
         respuesta = self.client.post(self.url, {"policy_number": "POL-100001"}, format="json")
 
@@ -295,7 +295,7 @@ class VincularPolizaTests(APITestCase):
 
     def test_solo_acepta_post(self):
         _, token = self.nuevo_usuario()
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
         self.assertEqual(self.client.get(self.url).status_code, 405)
 

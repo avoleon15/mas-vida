@@ -54,16 +54,31 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final _navegador = GlobalKey<NavigatorState>();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    sesionRechazada.addListener(_volverAlIngreso);
   }
 
   @override
   void dispose() {
+    sesionRechazada.removeListener(_volverAlIngreso);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// El servidor rechazó la sesión (`401`: venció o se cerró desde otro
+  /// lado) y ya se borró. Se vuelve al arranque igual que al cerrar sesión:
+  /// sin sesión, muestra el ingreso, y la pila queda vacía para que el gesto
+  /// de volver no traiga pantallas de la sesión que se fue.
+  ///
+  /// [PENDIENTE] (Daniel): si se le avisa al usuario por qué ("Tu sesión
+  /// venció. Vuelve a entrar") y con qué diseño.
+  void _volverAlIngreso() {
+    _navegador.currentState?.pushNamedAndRemoveUntil('/', (_) => false);
   }
 
   @override
@@ -85,6 +100,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navegador,
       title: '+Vida',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.temaClaro,

@@ -5,11 +5,11 @@ from django.apps import apps as apps_reales
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.poincs.models import VersionRegla
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 
 migracion = import_module("Apps.poincs.migrations.0007_version_regla_inicial")
 migracion_v2 = import_module("Apps.poincs.migrations.0008_version_regla_2_oct")
@@ -54,8 +54,8 @@ class SyncConBaseRecienCreadaTests(APITestCase):
     def test_el_primer_sync_funciona_sin_cargar_nada(self):
         user = User.objects.create_user(username="ana", password="clave-segura-1")
         Usuario.objects.create(user=user, usuario_id="ana-1", birth_date=date(1990, 1, 1))
-        token = Token.objects.get(user=user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
         hoy = timezone.localdate().isoformat()
         r = self.client.post("/api/v1/sync", {

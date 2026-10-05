@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'healthkit_bridge.dart';
@@ -34,6 +35,7 @@ class Sesion {
     required this.token,
     required this.correo,
     required this.nombre,
+    this.usuarioId,
     this.fechaNacimiento,
     this.polizaPendiente = false,
     this.compartirConAseguradora = false,
@@ -45,6 +47,11 @@ class Sesion {
   final String token;
   final String correo;
   final String nombre;
+
+  /// El nombre público que generó el servidor (login y registro). Swift lo
+  /// usa para saber si entró otra persona. Null en las sesiones locales y
+  /// en las guardadas antes de A35.
+  final String? usuarioId;
 
   /// Autoreportada en el registro. Con ella el servidor calcula la FCmáx
   /// desde el primer día; la aseguradora la confirma al vincular la
@@ -71,6 +78,7 @@ class Sesion {
     'token': token,
     'correo': correo,
     'nombre': nombre,
+    if (usuarioId != null) 'usuario_id': usuarioId,
     if (fechaNacimiento != null)
       'fecha_nacimiento': fechaNacimiento!.toIso8601String(),
     'poliza_pendiente': polizaPendiente,
@@ -83,6 +91,7 @@ class Sesion {
     token: j['token'] as String,
     correo: j['correo'] as String,
     nombre: j['nombre'] as String,
+    usuarioId: j['usuario_id'] as String?,
     fechaNacimiento: j['fecha_nacimiento'] == null
         ? null
         : DateTime.parse(j['fecha_nacimiento'] as String),
@@ -171,7 +180,7 @@ class AlmacenSesion {
       sesion = null;
     }
     // Al abrir la app: Swift recibe el token de ahora, o null.
-    _avisarASwift(sesion?.token);
+    _avisarASwift(sesion);
     return sesion;
   }
 
@@ -181,7 +190,7 @@ class AlmacenSesion {
     } catch (_) {
       // Sin llavero la sesión dura lo que dure la app abierta.
     }
-    _avisarASwift(sesion.token);
+    _avisarASwift(sesion);
   }
 
   Future<void> borrar() async {
@@ -195,9 +204,16 @@ class AlmacenSesion {
   /// Sin esperar la respuesta: entrar o salir no puede quedar colgado de
   /// Swift. Si el Keychain falla, el próximo arranque lo vuelve a mandar
   /// (la llamada es idempotente).
-  void _avisarASwift(String? token) =>
-      unawaited(_puente.actualizarSesion(token));
+  void _avisarASwift(Sesion? sesion) => unawaited(
+    _puente.actualizarSesion(sesion?.token, usuarioId: sesion?.usuarioId),
+  );
 }
+
+/// Sube en uno cada vez que el servidor rechaza la sesión (`401`): venció
+/// (30 días sin uso, o 90 desde que se entró) o se cerró desde otro lado.
+/// Para entonces la sesión ya se borró; `main.dart` escucha esto y vuelve al
+/// arranque, que muestra el ingreso.
+final ValueNotifier<int> sesionRechazada = ValueNotifier<int>(0);
 
 /// Entrar, crear cuenta, recuperar la contraseña y salir.
 abstract class ServicioSesion {
@@ -285,19 +301,29 @@ class ServicioSesionLocal extends ServicioSesion {
 
 /// Sesión contra la API de Django.
 ///
+/// Cualquier `401` del servidor cierra la sesión y avisa en
+/// [sesionRechazada] (contrato, "Qué hacen las apps").
+///
 /// OJO, lo que falta del lado del servidor antes de poder usarla:
-///   · `POST /api/v1/registro` pide la póliza como obligatoria
-///     (`policy_number`, `insurer`, `policy_start_date`). Según
-///     `arquitectura-cuentas-vivo.md` la cuenta base va sin póliza y
-///     vincularla es un paso aparte: hay que volverlos opcionales.
-///   · Pide también `usuario_id`. Lo debería generar el servidor; hasta
-///     entonces se manda uno armado acá.
+///   · La póliza del registro se ignora: va aparte, con `polizas/vincular`.
 ///   · No existe el endpoint para recuperar la contraseña.
 ///   · No hay dónde guardar los consentimientos (términos y aseguradora).
 class ServicioSesionApi extends ServicioSesion {
-  ServicioSesionApi({required this.cliente, super.almacen});
+  ServicioSesionApi({required this.cliente, super.almacen}) {
+    cliente.alRechazarToken = _alRechazarToken;
+  }
 
   final ClienteApi cliente;
+
+  /// El servidor rechazó [rechazado]. Si sigue siendo el de la sesión, se
+  /// cierra; si no, es la respuesta tardía de una sesión anterior y la de
+  /// ahora no se toca.
+  Future<void> _alRechazarToken(String rechazado) async {
+    if (cliente.token != rechazado) return;
+    cliente.token = null;
+    await almacen.borrar();
+    sesionRechazada.value++;
+  }
 
   @override
   Future<Sesion?> actual() async {
@@ -309,40 +335,44 @@ class ServicioSesionApi extends ServicioSesion {
   @override
   Future<Sesion> iniciarSesion(String correo, String contrasena) async {
     try {
-      final token = await cliente.iniciarSesion(correo, contrasena);
+      final inicio = await cliente.iniciarSesion(correo, contrasena);
       final sesion = Sesion(
-        token: token,
+        token: inicio.token,
+        usuarioId: inicio.usuarioId,
         correo: correo,
         nombre: nombreDesdeCorreo(correo),
       );
       await almacen.guardar(sesion);
       return sesion;
-    } on ErrorApi {
-      throw const ErrorSesion(
-        'El correo o la contraseña no coinciden. Revísalos e intenta de '
-        'nuevo.',
-      );
+    } on ErrorApi catch (e) {
+      throw ErrorSesion(switch (e.codigo) {
+        400 =>
+          'El correo o la contraseña no coinciden. Revísalos e intenta de '
+              'nuevo.',
+        // Demasiados intentos: el texto del servidor. Decir "no coinciden"
+        // haría que la persona siguiera probando mientras está bloqueada.
+        429 => e.mensaje,
+        _ => _algoSalioMal,
+      });
     } catch (_) {
-      throw const ErrorSesion(
-        'No pudimos conectarnos. Revisa tu internet e intenta de nuevo.',
-      );
+      throw const ErrorSesion(_sinConexion);
     }
   }
 
   @override
   Future<Sesion> registrar(DatosRegistro datos) async {
     try {
-      final token = await cliente.registrar(
+      final inicio = await cliente.registrar(
         correo: datos.correo,
         contrasena: datos.contrasena,
-        usuarioId: 'app-${DateTime.now().microsecondsSinceEpoch}',
         fechaNacimiento: datos.fechaNacimiento,
         numeroPoliza: datos.poliza?.numero,
         aseguradora: datos.poliza?.aseguradora,
         inicioVigencia: datos.poliza?.inicioVigencia,
       );
       final sesion = Sesion(
-        token: token,
+        token: inicio.token,
+        usuarioId: inicio.usuarioId,
         correo: datos.correo,
         nombre: datos.nombre,
         fechaNacimiento: datos.fechaNacimiento,
@@ -353,11 +383,13 @@ class ServicioSesionApi extends ServicioSesion {
       await almacen.guardar(sesion);
       return sesion;
     } on ErrorApi catch (e) {
-      throw ErrorSesion(e.mensaje);
-    } catch (_) {
-      throw const ErrorSesion(
-        'No pudimos conectarnos. Revisa tu internet e intenta de nuevo.',
+      // 400: el problema de un campo (correo repetido, contraseña débil);
+      // 429: demasiados intentos. Los dos traen un texto para mostrar.
+      throw ErrorSesion(
+        e.codigo == 400 || e.codigo == 429 ? e.mensaje : _algoSalioMal,
       );
+    } catch (_) {
+      throw const ErrorSesion(_sinConexion);
     }
   }
 
@@ -369,12 +401,28 @@ class ServicioSesionApi extends ServicioSesion {
     );
   }
 
+  /// Cierra la sesión de este teléfono: avisa al servidor SIN esperar la
+  /// respuesta y borra las dos copias en el momento. Esperarla dejaba la
+  /// pantalla quieta hasta 5 s con la red mala, después de cerrar el diálogo.
+  ///
+  /// La petición ya sale con el token aunque se borre enseguida (ver
+  /// [ClienteApi.cerrarSesionEnServidor]). Si no llega —sin red, el token ya
+  /// había vencido, o la app se cerró en ese instante—, el token queda vivo
+  /// en el servidor hasta que venza.
   @override
   Future<void> cerrarSesion() async {
+    unawaited(cliente.cerrarSesionEnServidor());
     cliente.token = null;
     await super.cerrarSesion();
   }
 }
+
+const _sinConexion =
+    'No pudimos conectarnos. Revisa tu internet e intenta de nuevo.';
+
+/// Un error del servidor que no es culpa de lo que escribió la persona.
+const _algoSalioMal =
+    'Algo salió mal de nuestro lado. Intenta de nuevo en un momento.';
 
 /// "ana.lopez@gmail.com" → "Ana". Para saludar a alguien que entró con
 /// correo y contraseña cuando el servidor todavía no manda el nombre.
