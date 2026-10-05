@@ -240,9 +240,15 @@ REST Framework: uno por cuenta, en texto plano y sin tope). Ver
 ### `usuario_id`
 
 Identificador **público** de la persona: un UUID que genera el servidor al
-registrarse y que devuelve en la respuesta del registro. Sirve para mostrar y
-compartir (hoy la app lo muestra en Perfil y lo usa como código para agregar
-amigos). **No identifica a quien manda datos y no viaja en ninguna petición.**
+registrarse y que devuelve en la respuesta del registro y, desde A35, también en
+la del login. Sirve para mostrar y compartir (hoy la app lo muestra en Perfil y
+lo usa como código para agregar amigos). **No identifica a quien manda datos y no
+viaja en ninguna petición al servidor.**
+
+En el teléfono, Swift lo usa para saber si entró otra persona: Flutter se lo pasa
+en `actualizarSesion` y Swift lo guarda en `UserDefaults` (clave
+`vida.cuentaDeLosEnvios`; no es secreto). Si llega uno distinto, vacía la cola y
+la marca de envíos (ver `actualizarSesion`).
 
 No confundir con la columna interna `usuario_id` de las tablas del servidor
 (`(usuario_id, external_id)`, `(usuario_id, fecha)`), que es la referencia a la
