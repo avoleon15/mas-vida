@@ -344,15 +344,18 @@ class ServicioSesionApi extends ServicioSesion {
       );
       await almacen.guardar(sesion);
       return sesion;
-    } on ErrorApi {
-      throw const ErrorSesion(
-        'El correo o la contraseña no coinciden. Revísalos e intenta de '
-        'nuevo.',
-      );
+    } on ErrorApi catch (e) {
+      throw ErrorSesion(switch (e.codigo) {
+        400 =>
+          'El correo o la contraseña no coinciden. Revísalos e intenta de '
+              'nuevo.',
+        // Demasiados intentos: el texto del servidor. Decir "no coinciden"
+        // haría que la persona siguiera probando mientras está bloqueada.
+        429 => e.mensaje,
+        _ => _algoSalioMal,
+      });
     } catch (_) {
-      throw const ErrorSesion(
-        'No pudimos conectarnos. Revisa tu internet e intenta de nuevo.',
-      );
+      throw const ErrorSesion(_sinConexion);
     }
   }
 
@@ -380,11 +383,13 @@ class ServicioSesionApi extends ServicioSesion {
       await almacen.guardar(sesion);
       return sesion;
     } on ErrorApi catch (e) {
-      throw ErrorSesion(e.mensaje);
-    } catch (_) {
-      throw const ErrorSesion(
-        'No pudimos conectarnos. Revisa tu internet e intenta de nuevo.',
+      // 400: el problema de un campo (correo repetido, contraseña débil);
+      // 429: demasiados intentos. Los dos traen un texto para mostrar.
+      throw ErrorSesion(
+        e.codigo == 400 || e.codigo == 429 ? e.mensaje : _algoSalioMal,
       );
+    } catch (_) {
+      throw const ErrorSesion(_sinConexion);
     }
   }
 
@@ -406,6 +411,13 @@ class ServicioSesionApi extends ServicioSesion {
     await super.cerrarSesion();
   }
 }
+
+const _sinConexion =
+    'No pudimos conectarnos. Revisa tu internet e intenta de nuevo.';
+
+/// Un error del servidor que no es culpa de lo que escribió la persona.
+const _algoSalioMal =
+    'Algo salió mal de nuestro lado. Intenta de nuevo en un momento.';
 
 /// "ana.lopez@gmail.com" → "Ana". Para saludar a alguien que entró con
 /// correo y contraseña cuando el servidor todavía no manda el nombre.

@@ -302,8 +302,10 @@ mientras esté bloqueado, ni lo correcto pasa.
 ### Qué hacen las apps (etapa 10)
 
 - **Flutter:** trata **cualquier `401`** como "volver a iniciar sesión" (token
-  vencido o inválido), muestra "Demasiados intentos, inténtalo más tarde" con un
-  `429` (y no reintenta antes de `reintentar_en`), y al cerrar sesión llama a
+  vencido o inválido), con un `429` muestra el `mensaje` del servidor ("Demasiados
+  intentos...", nunca "la contraseña no coincide") y no reintenta antes de
+  `reintentar_en`; un `500` en el login o el registro es "algo salió mal", no un
+  problema de lo que se escribió. Al cerrar sesión llama a
   `POST /api/v1/logout`. Guarda el `usuario_id` del login o el registro y se lo
   pasa a Swift en `actualizarSesion`.
 - **Swift:** el `401` del `sync` ya es "token rechazado" (falla general: se corta la

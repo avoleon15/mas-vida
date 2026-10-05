@@ -67,6 +67,88 @@ void main() {
     ),
   );
 
+  group('qué ve la persona cuando algo sale mal', () {
+    http.Response json(Object cuerpo, int codigo) => http.Response(
+      jsonEncode(cuerpo),
+      codigo,
+      headers: {'content-type': 'application/json'},
+    );
+    const mensajeBloqueo = 'Demasiados intentos. Inténtalo de nuevo más tarde.';
+    final bloqueado = json({
+      'error': 'demasiados_intentos',
+      'mensaje': mensajeBloqueo,
+      'reintentar_en': 42,
+    }, 429);
+    final caido = http.Response('<html>Server Error</html>', 500);
+
+    Future<String> alEntrar() async {
+      try {
+        await servicio().iniciarSesion('ana@correo.gt', 'clave');
+        return 'entró';
+      } on ErrorSesion catch (e) {
+        return e.mensaje;
+      }
+    }
+
+    Future<String> alRegistrarse() async {
+      try {
+        await servicio().registrar(
+          DatosRegistro(
+            nombre: 'Ana',
+            correo: 'ana@correo.gt',
+            contrasena: 'Clave-segura-2026',
+            fechaNacimiento: DateTime(1990, 5, 17),
+          ),
+        );
+        return 'entró';
+      } on ErrorSesion catch (e) {
+        return e.mensaje;
+      }
+    }
+
+    test('login con la contraseña mal (400): no coinciden', () async {
+      respuestas['/api/v1/login'] = () => json({
+        'non_field_errors': ['Unable to log in with provided credentials.'],
+      }, 400);
+      expect(
+        await alEntrar(),
+        startsWith('El correo o la contraseña no coinciden'),
+      );
+    });
+
+    test('login bloqueado (429): el mensaje del servidor', () async {
+      respuestas['/api/v1/login'] = () => bloqueado;
+      expect(await alEntrar(), mensajeBloqueo);
+    });
+
+    test('login con el servidor caído (500): algo salió mal', () async {
+      respuestas['/api/v1/login'] = () => caido;
+      expect(await alEntrar(), startsWith('Algo salió mal'));
+    });
+
+    test('login sin red: no pudimos conectarnos', () async {
+      respuestas['/api/v1/login'] = () => throw http.ClientException('sin red');
+      expect(await alEntrar(), startsWith('No pudimos conectarnos'));
+    });
+
+    test('registro con un campo mal (400): el mensaje del campo', () async {
+      respuestas['/api/v1/registro'] = () => json({
+        'username': ['Este nombre de usuario ya existe.'],
+      }, 400);
+      expect(await alRegistrarse(), 'Este nombre de usuario ya existe.');
+    });
+
+    test('registro bloqueado (429): el mensaje del servidor', () async {
+      respuestas['/api/v1/registro'] = () => bloqueado;
+      expect(await alRegistrarse(), mensajeBloqueo);
+    });
+
+    test('registro con el servidor caído (500): algo salió mal', () async {
+      respuestas['/api/v1/registro'] = () => caido;
+      expect(await alRegistrarse(), startsWith('Algo salió mal'));
+    });
+  });
+
   test('al entrar se guarda el usuario_id y Swift lo recibe', () async {
     final s = servicio();
 

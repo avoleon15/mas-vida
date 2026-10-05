@@ -25,6 +25,20 @@ const _historial = {
   ],
 };
 
+/// Como contesta Django: JSON en UTF-8.
+http.Response _json(Object cuerpo, int codigo) => http.Response(
+  jsonEncode(cuerpo),
+  codigo,
+  headers: {'content-type': 'application/json'},
+);
+
+/// El `429` de `services/intentos.py`.
+final _bloqueado = _json({
+  'error': 'demasiados_intentos',
+  'mensaje': 'Demasiados intentos. Inténtalo de nuevo más tarde.',
+  'reintentar_en': 42,
+}, 429);
+
 void main() {
   test('el login manda usuario y contraseña y guarda el token', () async {
     late http.Request pedido;
@@ -92,6 +106,86 @@ void main() {
       expect(api.token, 'abc123');
     },
   );
+
+  group('errores de login y registro', () {
+    ClienteApi con(http.Response respuesta) => ClienteApi(
+      baseUrl: 'http://api',
+      cliente: MockClient((_) async => respuesta),
+    );
+
+    Future<void> registrarCon(ClienteApi api) => api.registrar(
+      correo: 'ana@correo.gt',
+      contrasena: 'Clave-segura-2026',
+      fechaNacimiento: DateTime(1990, 5, 17),
+    );
+
+    test('un login bloqueado (429) trae el mensaje del servidor', () async {
+      await expectLater(
+        con(_bloqueado).iniciarSesion('ana', 'x'),
+        throwsA(
+          isA<ErrorApi>()
+              .having((e) => e.codigo, 'codigo', 429)
+              .having(
+                (e) => e.mensaje,
+                'mensaje',
+                'Demasiados intentos. Inténtalo de nuevo más tarde.',
+              ),
+        ),
+      );
+    });
+
+    test(
+      'un registro bloqueado (429) trae el mensaje, no el código del error',
+      () async {
+        await expectLater(
+          registrarCon(con(_bloqueado)),
+          throwsA(
+            isA<ErrorApi>().having(
+              (e) => e.mensaje,
+              'mensaje',
+              'Demasiados intentos. Inténtalo de nuevo más tarde.',
+            ),
+          ),
+        );
+      },
+    );
+
+    test('un registro rechazado (400) trae el mensaje del campo', () async {
+      await expectLater(
+        registrarCon(
+          con(
+            _json({
+              'username': ['Este nombre de usuario ya existe.'],
+            }, 400),
+          ),
+        ),
+        throwsA(
+          isA<ErrorApi>()
+              .having((e) => e.codigo, 'codigo', 400)
+              .having(
+                (e) => e.mensaje,
+                'mensaje',
+                'Este nombre de usuario ya existe.',
+              ),
+        ),
+      );
+    });
+
+    test(
+      'un 500 con una página HTML no revienta: llega como ErrorApi',
+      () async {
+        final caido = http.Response('<html>Server Error</html>', 500);
+        await expectLater(
+          registrarCon(con(caido)),
+          throwsA(isA<ErrorApi>().having((e) => e.codigo, 'codigo', 500)),
+        );
+        await expectLater(
+          con(caido).iniciarSesion('ana', 'x'),
+          throwsA(isA<ErrorApi>().having((e) => e.codigo, 'codigo', 500)),
+        );
+      },
+    );
+  });
 
   group('401: la sesión venció o la cerraron', () {
     test('avisa con el token que se mandó', () async {

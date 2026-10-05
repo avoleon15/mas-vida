@@ -53,9 +53,11 @@ class ClienteApi {
       body: jsonEncode({'username': usuario, 'password': contrasena}),
     );
     if (respuesta.statusCode != 200) {
-      throw ErrorApi(
-        respuesta.statusCode,
-        'No se pudo iniciar sesión. Revisa el usuario y la contraseña.',
+      throw _errorDe(
+        respuesta,
+        respuesta.statusCode == 400
+            ? 'No se pudo iniciar sesión. Revisa el usuario y la contraseña.'
+            : 'El servidor respondió ${respuesta.statusCode}.',
       );
     }
     final inicio = InicioDeSesion.desdeJson(
@@ -114,15 +116,45 @@ class ClienteApi {
           'policy_start_date': _soloFecha(inicioVigencia),
       }),
     );
-    final cuerpo = respuesta.body.isEmpty
-        ? const <String, dynamic>{}
-        : jsonDecode(utf8.decode(respuesta.bodyBytes)) as Map<String, dynamic>;
+    final cuerpo = _cuerpoDe(respuesta);
     if (respuesta.statusCode != 201) {
-      throw ErrorApi(respuesta.statusCode, _primerError(cuerpo));
+      throw _errorDe(
+        respuesta,
+        respuesta.statusCode == 400
+            ? _primerError(cuerpo)
+            : 'El servidor respondió ${respuesta.statusCode}.',
+      );
     }
     final inicio = InicioDeSesion.desdeJson(cuerpo);
     token = inicio.token;
     return inicio;
+  }
+
+  /// El cuerpo como JSON. Uno vacío, o que no es JSON (la página de error de
+  /// un 500 o de un proxy caído), da un mapa vacío en vez de reventar.
+  static Map<String, dynamic> _cuerpoDe(http.Response respuesta) {
+    if (respuesta.bodyBytes.isEmpty) return const {};
+    try {
+      final json = jsonDecode(utf8.decode(respuesta.bodyBytes));
+      return json is Map<String, dynamic> ? json : const {};
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  /// El error de una respuesta que no salió bien. Con `429` (demasiados
+  /// intentos en login o registro, contrato "Límite de intentos") el texto es
+  /// el `mensaje` del servidor, que ya viene listo para mostrar; si no,
+  /// [porDefecto].
+  static ErrorApi _errorDe(http.Response respuesta, String porDefecto) {
+    if (respuesta.statusCode == 429) {
+      return ErrorApi(
+        429,
+        _cuerpoDe(respuesta)['mensaje'] as String? ??
+            'Demasiados intentos. Inténtalo de nuevo más tarde.',
+      );
+    }
+    return ErrorApi(respuesta.statusCode, porDefecto);
   }
 
   /// El primer mensaje de un 400 de DRF, que llega como
