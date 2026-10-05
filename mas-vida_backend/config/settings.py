@@ -103,7 +103,20 @@ def _limites_de_entorno():
 LIMITES_DE_INTENTOS = _limites_de_entorno()
 
 # Días SIN uso después de los cuales el token vence; cada uso lo renueva.
-DIAS_DE_VIDA_DEL_TOKEN = int(os.environ.get("DIAS_DE_VIDA_DEL_TOKEN", "30"))
+def _dias_de_vida_del_token():
+    crudo = os.environ.get("DIAS_DE_VIDA_DEL_TOKEN", "30").strip()
+    try:
+        dias = int(crudo)
+    except ValueError:
+        dias = 0
+    if dias < 1:
+        raise ImproperlyConfigured(
+            f"DIAS_DE_VIDA_DEL_TOKEN tiene que ser un número entero de días, 1 o más (llegó {crudo!r})."
+        )
+    return dias
+
+
+DIAS_DE_VIDA_DEL_TOKEN = _dias_de_vida_del_token()
 
 ROOT_URLCONF = 'config.urls'
 

@@ -235,6 +235,30 @@ class CerrarSesionTests(APITestCase):
         self.assertEqual(self.c.get(LOGOUT).status_code, 405)
 
 
+class DiasDeVidaDeEntornoTests(TestCase):
+    def leer(self, valor):
+        from config import settings as ajustes
+        with mock.patch.dict("os.environ", {"DIAS_DE_VIDA_DEL_TOKEN": valor}):
+            return ajustes._dias_de_vida_del_token()
+
+    def test_sin_variable_son_30_dias(self):
+        from config import settings as ajustes
+        with mock.patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("DIAS_DE_VIDA_DEL_TOKEN", None)
+            self.assertEqual(ajustes._dias_de_vida_del_token(), 30)
+
+    def test_lee_un_numero_de_dias(self):
+        self.assertEqual(self.leer(" 45 "), 45)
+
+    def test_un_valor_que_no_sirve_detiene_el_arranque_con_un_mensaje_claro(self):
+        from django.core.exceptions import ImproperlyConfigured
+        for malo in ("treinta", "", "0", "-5", "2.5"):
+            with self.subTest(malo=malo), self.assertRaises(ImproperlyConfigured) as contexto:
+                self.leer(malo)
+            self.assertIn("DIAS_DE_VIDA_DEL_TOKEN", str(contexto.exception))
+
+
 class MigracionDeTokensExistentesTests(TestCase):
     def test_los_tokens_que_ya_existian_arrancan_con_30_dias_desde_migrar(self):
         migracion = import_module("Apps.users.migrations.0005_uso_de_token")
