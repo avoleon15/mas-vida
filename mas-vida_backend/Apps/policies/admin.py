@@ -47,6 +47,14 @@ class PolizaVinculadaAdmin(admin.ModelAdmin):
                     messages.ERROR,
                 )
                 continue
+            except polizas.PolizaEnOtraCuenta:
+                self.message_user(
+                    request,
+                    f"{poliza.policy_number}: ya está verificada en otra cuenta. "
+                    "Una cuenta verificada por póliza.",
+                    messages.ERROR,
+                )
+                continue
             if resultado == "denegado":
                 self.message_user(
                     request,

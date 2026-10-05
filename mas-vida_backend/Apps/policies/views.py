@@ -1,17 +1,11 @@
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.decorators import (
-    api_view,
-    authentication_classes,
-    permission_classes,
-)
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import cashback as servicio_cashback, polizas
+from services import cashback as servicio_cashback, intentos, polizas
 from services.policy_verification import VERIFICADA, verificar_con_datos
 from .models import PolizaVinculada
 from .serializers import VincularPolizaSerializer
@@ -25,6 +19,18 @@ SIN_PERFIL = {"mensaje": "El usuario autenticado no tiene un perfil asociado."}
 
 def _fecha(valor):
     return valor.isoformat() if valor else None
+
+
+def _dejar_rechazada(poliza, motivo):
+    """Rechazada y sin ninguno de los datos que entregó la aseguradora."""
+    poliza.estado_verificacion = PolizaVinculada.EstadoVerificacion.RECHAZADA
+    poliza.motivo_rechazo = motivo
+    poliza.birth_date_confirmada = None
+    poliza.policy_start_date = None
+    poliza.nombre = poliza.apellido = poliza.plan = None
+    poliza.prima_anual_gtq = None
+    poliza.fecha_renovacion = None
+    poliza.save()
 
 
 def _estado(poliza):
@@ -80,13 +86,13 @@ def cashback(request):
 
 
 @api_view(["POST"])
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated])
 def vincular(request):
     """Vincula y verifica la póliza del usuario autenticado.
 
-    La póliza queda `verificada` o `rechazada` (con su motivo). Una póliza sí
-    puede estar vinculada a más de un usuario (pólizas familiares).
+    La póliza queda `verificada` o `rechazada` (con su motivo). Una póliza solo
+    puede estar verificada en una cuenta (4 oct 2026; las pólizas familiares se
+    hablan con las aseguradoras): la segunda queda `rechazada` con el motivo
+    `poliza_en_otra_cuenta`.
 
     Al verificar se aplica la regla de retroactividad (services.polizas): si
     la fecha de nacimiento del registro no coincide con la que confirma la
@@ -101,6 +107,16 @@ def vincular(request):
         usuario = request.user.usuario
     except Usuario.DoesNotExist:
         return Response(SIN_PERFIL, status=status.HTTP_403_FORBIDDEN)
+
+    # Sin límite se podría adivinar la fecha de nacimiento del titular de una
+    # póliza probando días. Solo cuentan los rechazos; ver services/intentos.py.
+    clave_poliza = intentos.clave_de_poliza(datos["insurer"], datos["policy_number"])
+    clave_cuenta = str(usuario.pk)
+    try:
+        intentos.revisar(intentos.VINCULAR_POLIZA, clave_poliza)
+        intentos.revisar(intentos.VINCULAR_CUENTA, clave_cuenta)
+    except intentos.Bloqueado as bloqueado:
+        return bloqueado.respuesta()
 
     with transaction.atomic():
         poliza, _ = PolizaVinculada.objects.select_for_update().get_or_create(
@@ -140,17 +156,23 @@ def vincular(request):
             poliza.policy_number = resultado.datos.numero_poliza
             poliza.estado_verificacion = PolizaVinculada.EstadoVerificacion.PENDIENTE
             poliza.save()
-            # Pasa a verificada y aplica o deniega el retroactivo.
-            polizas.verificar(poliza)
+            try:
+                # Pasa a verificada y aplica o deniega el retroactivo.
+                polizas.verificar(poliza)
+            except polizas.PolizaEnOtraCuenta:
+                # Ya es de otra cuenta verificada: no se verifica ni se toca el historial.
+                _dejar_rechazada(poliza, polizas.MOTIVO_POLIZA_EN_OTRA_CUENTA)
         else:
-            poliza.estado_verificacion = PolizaVinculada.EstadoVerificacion.RECHAZADA
-            poliza.motivo_rechazo = resultado.motivo
-            poliza.birth_date_confirmada = None
-            poliza.policy_start_date = None
-            poliza.nombre = poliza.apellido = poliza.plan = None
-            poliza.prima_anual_gtq = None
-            poliza.fecha_renovacion = None
-            poliza.save()
+            _dejar_rechazada(poliza, resultado.motivo)
+
+    # Solo cuentan los rechazos de la aseguradora: quien ya acertó con el número y
+    # la fecha, y se topa con que la póliza es de otra cuenta, no está adivinando.
+    if (
+        poliza.estado_verificacion == PolizaVinculada.EstadoVerificacion.RECHAZADA
+        and poliza.motivo_rechazo != polizas.MOTIVO_POLIZA_EN_OTRA_CUENTA
+    ):
+        intentos.registrar(intentos.VINCULAR_POLIZA, clave_poliza)
+        intentos.registrar(intentos.VINCULAR_CUENTA, clave_cuenta)
 
     return Response(
         {

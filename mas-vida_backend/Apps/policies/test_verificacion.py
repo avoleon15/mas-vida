@@ -196,9 +196,9 @@ class VincularPolizaTests(APITestCase):
 
         self.assertEqual(respuesta.status_code, 401)
 
-    # --- Una póliza puede estar en más de un usuario (pólizas familiares) --
+    # --- Una cuenta verificada por póliza (4 oct 2026; sin pólizas familiares por ahora) --
 
-    def test_la_misma_poliza_se_vincula_a_dos_usuarios(self):
+    def test_la_misma_poliza_solo_se_verifica_en_una_cuenta(self):
         _, token_ana = self.nuevo_usuario("ana")
         _, token_beto = self.nuevo_usuario("beto")
 
@@ -206,8 +206,16 @@ class VincularPolizaTests(APITestCase):
         r2 = self.vincular(token_beto, "POL-100001", "1994-03-12")
 
         self.assertEqual(r1.json()["estado_verificacion"], "verificada")
-        self.assertEqual(r2.json()["estado_verificacion"], "verificada")
-        self.assertEqual(PolizaVinculada.objects.filter(policy_number="POL-100001").count(), 2)
+        self.assertEqual(
+            r2.json(),
+            {"estado_verificacion": "rechazada", "motivo_rechazo": "poliza_en_otra_cuenta"},
+        )
+        self.assertEqual(
+            PolizaVinculada.objects.filter(
+                policy_number="POL-100001", estado_verificacion="verificada",
+            ).count(),
+            1,
+        )
 
     def test_rechazar_a_un_usuario_no_afecta_al_otro(self):
         ana, token_ana = self.nuevo_usuario("ana")

@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from Apps.policies.models import PolizaVinculada
-from .models import Usuario
+from .models import IntentoFallido, Usuario
 
 
 class PolizaVinculadaInline(admin.StackedInline):
@@ -45,3 +45,18 @@ class UsuarioAdmin(admin.ModelAdmin):
             and poliza.estado_verificacion
             == PolizaVinculada.EstadoVerificacion.VERIFICADA
         )
+
+
+@admin.register(IntentoFallido)
+class IntentoFallidoAdmin(admin.ModelAdmin):
+    """Solo lectura: lo escribe el servidor al limitar intentos."""
+
+    list_display = ("tipo", "clave", "creado_en")
+    list_filter = ("tipo",)
+    ordering = ("-creado_en",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

@@ -19,8 +19,9 @@ services.monedas.anular_ganadas_antes_de).
 from collections import defaultdict
 from datetime import date, timedelta
 
-from django.db import transaction
-from django.db.models import Sum
+from django.db import IntegrityError, transaction
+from django.db.models import Sum, Value
+from django.db.models.functions import Lower, Trim
 from django.utils import timezone
 
 from Apps.activities.models import ResumenDiario
@@ -49,6 +50,30 @@ class PolizaYaVinculada(Exception):
 
 class FaltaFechaConfirmada(Exception):
     """No se puede verificar sin la fecha de nacimiento que dio la aseguradora."""
+
+
+class PolizaEnOtraCuenta(Exception):
+    """Esa póliza ya está verificada en otra cuenta: una cuenta verificada por póliza."""
+
+
+MOTIVO_POLIZA_EN_OTRA_CUENTA = "poliza_en_otra_cuenta"
+
+
+def _verificada_en_otra_cuenta(poliza: PolizaVinculada) -> bool:
+    # Se normaliza en la base y no en Python, para comparar exactamente como la
+    # restricción `uq_poliza_verificada_en_una_cuenta` (por ejemplo, SQLite no pasa
+    # la Ñ a minúscula y Python sí).
+    return (
+        PolizaVinculada.objects
+        .annotate(aseguradora_norm=Lower(Trim("insurer")), numero_norm=Lower(Trim("policy_number")))
+        .filter(
+            estado_verificacion=VERIFICADA,
+            aseguradora_norm=Lower(Trim(Value(poliza.insurer))),
+            numero_norm=Lower(Trim(Value(poliza.policy_number))),
+        )
+        .exclude(pk=poliza.pk)
+        .exists()
+    )
 
 
 def _mismo_dia_otro_anio(fecha: date, anio: int) -> date:
@@ -184,17 +209,25 @@ def vincular(usuario, policy_number: str, insurer: str, policy_start_date: date)
 def verificar(poliza: PolizaVinculada, ahora=None) -> str:
     """Marca la póliza como verificada y aplica la regla de retroactividad.
 
-    Devuelve "aplicado", "denegado" o "sin_cambios" (ya estaba verificada).
+    Devuelve "aplicado", "denegado" o "sin_cambios" (ya estaba verificada). Lanza
+    PolizaEnOtraCuenta si otra cuenta ya la tiene verificada (no cambia nada).
     """
     if poliza.estado_verificacion == VERIFICADA:
         return "sin_cambios"
     if poliza.birth_date_confirmada is None:
         raise FaltaFechaConfirmada()
+    if _verificada_en_otra_cuenta(poliza):
+        raise PolizaEnOtraCuenta()
 
     ahora = ahora or timezone.now()
     poliza.estado_verificacion = VERIFICADA
     poliza.fecha_verificacion = ahora
-    poliza.save()
+    try:
+        # Si dos cuentas la verifican a la vez, la restricción de la base deja pasar a una.
+        with transaction.atomic():
+            poliza.save()
+    except IntegrityError:
+        raise PolizaEnOtraCuenta()
 
     usuario = poliza.usuario
     if poliza.birth_date_confirmada == usuario.birth_date:
