@@ -200,6 +200,39 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
     )
 
 
+def dias_que_tocan(pasos, sesiones, ritmo, desde: date, hasta: date) -> set[date]:
+    """Los días (hora de Guatemala) a los que pertenecen las muestras de un sync, dentro de [desde, hasta].
+
+    Cada día se recalcula con todo lo guardado, pero el sync solo nombra UN día. Si
+    en el paquete viaja una muestra de otro día (un tramo que cruza la medianoche,
+    un teléfono en otra zona horaria, un dato que el reloj subió tarde), ese día
+    tiene que recalcularse también o se queda con sus puntos viejos hasta que
+    alguien vuelva a mandarlo.
+
+    - Pasos: todos los días que cubre la muestra (una larga puede cubrir varios).
+    - Workouts y ritmo cardíaco: el día en que empiezan (así los calcula `calcular_dia`).
+    Lo que cae fuera de [desde, hasta] se guarda pero no se recalcula.
+    """
+    un_dia = timedelta(days=1)
+    dias = set()
+
+    def agregar(dia):
+        if desde <= dia <= hasta:
+            dias.add(dia)
+
+    for muestra in pasos:
+        inicio = timezone.localtime(muestra["inicio"]).date()
+        fin = muestra["fin"]
+        ultimo = timezone.localtime(fin - timedelta(microseconds=1)).date() if fin > muestra["inicio"] else inicio
+        dia = max(inicio, desde)            # no se recorre más allá de la ventana
+        while dia <= min(ultimo, hasta):
+            agregar(dia)
+            dia += un_dia
+    for muestra in (*sesiones, *ritmo):
+        agregar(timezone.localtime(muestra["inicio"]).date())
+    return dias
+
+
 def _suma(queryset) -> int:
     return queryset.aggregate(total=Sum("puntos"))["total"] or 0
 

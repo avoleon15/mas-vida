@@ -94,9 +94,18 @@ def sync(request):
                 ignore_conflicts=True,
             )
 
-            dia = daily_scoring.calcular_dia(usuario, fecha)
-            anual = daily_scoring.asentar(usuario, dia)
-            daily_scoring.guardar_resumen(usuario, dia)
+            # El día del sync y también los demás a los que pertenecen sus muestras,
+            # del más viejo al más nuevo. La respuesta es la del día del sync.
+            dias = {fecha} | daily_scoring.dias_que_tocan(
+                datos["pasos"], datos["sesiones"], datos["frecuencia_cardiaca"],
+                desde=hoy - timedelta(days=VENTANA_DIAS), hasta=hoy,
+            )
+            for dia_a_recalcular in sorted(dias):
+                resultado_dia = daily_scoring.calcular_dia(usuario, dia_a_recalcular)
+                resultado_anual = daily_scoring.asentar(usuario, resultado_dia)
+                daily_scoring.guardar_resumen(usuario, resultado_dia)
+                if dia_a_recalcular == fecha:
+                    dia, anual = resultado_dia, resultado_anual
     except daily_scoring.SinVersionRegla:
         logger.error("Sync sin VersionRegla vigente: fecha=%s", fecha)
         return Response(
