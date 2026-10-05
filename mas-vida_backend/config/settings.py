@@ -55,7 +55,8 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
+    # El token de siempre, pero vence a los 30 días sin uso (services/sesiones.py).
+    "DEFAULT_AUTHENTICATION_CLASSES": ["Apps.users.autenticacion.TokenConCaducidad"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
 
@@ -100,6 +101,9 @@ def _limites_de_entorno():
 
 
 LIMITES_DE_INTENTOS = _limites_de_entorno()
+
+# Días SIN uso después de los cuales el token vence; cada uso lo renueva.
+DIAS_DE_VIDA_DEL_TOKEN = int(os.environ.get("DIAS_DE_VIDA_DEL_TOKEN", "30"))
 
 ROOT_URLCONF = 'config.urls'
 
