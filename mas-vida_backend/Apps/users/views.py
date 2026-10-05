@@ -3,6 +3,9 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from services import perfil as servicio_perfil
+from .models import Usuario
 from .serializers import RegistroSerializer
 
 
@@ -24,3 +27,16 @@ def registro(request):
         },
         status=status.HTTP_201_CREATED,
     )
+
+
+@api_view(["GET"])
+def perfil(request):
+    """Los datos de la propia cuenta para la pantalla de Perfil."""
+    try:
+        usuario = request.user.usuario
+    except Usuario.DoesNotExist:
+        return Response(
+            {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return Response(servicio_perfil.resumen(usuario))
