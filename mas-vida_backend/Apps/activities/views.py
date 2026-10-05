@@ -186,6 +186,16 @@ def resumen_dashboard(request):
                 }
             ),
             "puntos_dia": fila.puntos_dia,
+            # null el día que no hubo ritmo cardíaco (no es lo mismo que 0 minutos).
+            "ritmo_cardiaco": (
+                None
+                if fila.minutos_ligero is None
+                else {
+                    "minutos_ligero": fila.minutos_ligero,
+                    "minutos_moderado": fila.minutos_moderado,
+                    "minutos_intenso": fila.minutos_intenso,
+                }
+            ),
         }
         for fila in filas
     ])

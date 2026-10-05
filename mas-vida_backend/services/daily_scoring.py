@@ -41,6 +41,7 @@ from services.device import (
 from services.hearth_rate import (
     calculate_age,
     calculate_intensity_from_heart_rate,
+    minutos_por_zona,
     sesiones_se_traslapan,
 )
 from services.niveles import TOPE_ANUAL, nivel_para
@@ -73,6 +74,8 @@ class ResultadoDia:
     workouts_duracion_total: int
     workouts_fc_promedio: int | None
     workouts_fc_maxima: int | None
+    # {"minutos_ligero", "minutos_moderado", "minutos_intenso"} o None sin ritmo cardíaco.
+    ritmo_cardiaco: dict | None = None
 
 
 @dataclass
@@ -187,6 +190,7 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
             if sesiones else None
         ),
         workouts_fc_maxima=max((s["fc_maxima"] for s in sesiones), default=None),
+        ritmo_cardiaco=minutos_por_zona(ritmo_por, edad),
     )
 
 
@@ -275,5 +279,9 @@ def guardar_resumen(usuario, dia: ResultadoDia) -> None:
             "workouts_fc_promedio": dia.workouts_fc_promedio,
             "workouts_fc_maxima": dia.workouts_fc_maxima,
             "puntos_dia": 0 if anulado else dia.puntos_dia,
+            **{
+                zona: (dia.ritmo_cardiaco or {}).get(zona)
+                for zona in ("minutos_ligero", "minutos_moderado", "minutos_intenso")
+            },
         },
     )
