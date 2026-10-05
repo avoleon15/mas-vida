@@ -1,15 +1,21 @@
-"""El token vence a los 30 días sin uso y se puede cerrar sesión (etapa 10, 4 oct 2026)."""
+"""Sesiones con django-rest-knox (A35, 4 oct 2026).
+
+El token vence a los 30 días sin uso con un tope de 90 días, se guarda como hash,
+cada inicio de sesión tiene el suyo y se puede cerrar una sesión o todas.
+"""
+import secrets
 from datetime import date, datetime, timedelta, timezone as utc
-from importlib import import_module
 from unittest import mock
 
-from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
-from rest_framework.authtoken.models import Token
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TestCase, TransactionTestCase
+from knox.models import AuthToken
 from rest_framework.test import APIClient, APITestCase
 
-from Apps.users.models import UsoDeToken, Usuario
+from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import sesiones
 
 User = get_user_model()
@@ -17,7 +23,9 @@ User = get_user_model()
 PERFIL = "/api/v1/perfil"
 LOGIN = "/api/v1/login"
 LOGOUT = "/api/v1/logout"
+LOGOUT_TODOS = "/api/v1/logout/todos"
 REGISTRO = "/api/v1/registro"
+CLAVE = "Clave-segura-2026"
 
 ENDPOINTS_GET = (
     "/api/v1/perfil", "/api/v1/cashback", "/api/v1/polizas/estado", "/api/v1/monedas/saldo",
@@ -35,99 +43,93 @@ def en(dias=0, horas=0, minutos=0):
 
 
 def crear(nombre="ana", **extra):
-    user = User.objects.create_user(f"{nombre}@correo.com", password="Clave-segura-2026", **extra)
+    user = User.objects.create_user(f"{nombre}@correo.com", password=CLAVE, **extra)
     Usuario.objects.create(user=user, usuario_id=f"id-{nombre}", birth_date=date(1990, 5, 17))
     return user
 
 
-def cliente(token):
+def cliente(clave):
     c = APIClient()
-    c.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    c.credentials(HTTP_AUTHORIZATION=f"Token {clave}")
     return c
+
+
+def entrar(nombre="ana", password=CLAVE):
+    return APIClient().post(LOGIN, {"username": f"{nombre}@correo.com", "password": password}, format="json")
 
 
 class VidaDelTokenTests(APITestCase):
     def setUp(self):
         self.user = crear()
-        self.token = Token.objects.get(user=self.user)
-        self.c = cliente(self.token)
-
-    def uso(self):
-        return UsoDeToken.objects.get(token=self.token).ultimo_uso
+        self.c = cliente(token_de(self.user))
 
     def test_un_token_recien_creado_funciona(self):
         self.assertEqual(self.c.get(PERFIL).status_code, 200)
 
     def test_sin_uso_funciona_hasta_los_30_dias_y_vence_despues(self):
-        self.c.get(PERFIL)
         with en(dias=29, horas=23):
             self.assertEqual(self.c.get(PERFIL).status_code, 200)
 
-    def test_pasados_30_dias_sin_uso_da_401_con_su_mensaje(self):
-        self.c.get(PERFIL)
+    def test_pasados_30_dias_sin_uso_da_401(self):
         with en(dias=31):
             r = self.c.get(PERFIL)
         self.assertEqual(r.status_code, 401)
-        self.assertIn("venció", r.json()["detail"])
         self.assertEqual(r["WWW-Authenticate"], "Token")
 
     def test_cada_uso_renueva_el_plazo(self):
-        self.c.get(PERFIL)
         with en(dias=29):
             self.assertEqual(self.c.get(PERFIL).status_code, 200)       # renueva
         with en(dias=58):
             self.assertEqual(self.c.get(PERFIL).status_code, 200)       # 29 días después: sigue
-            self.assertEqual(self.c.get(PERFIL).status_code, 200)
-        with en(dias=90):
-            self.assertEqual(self.c.get(PERFIL).status_code, 401)       # 32 días sin usar
+        with en(dias=89):
+            self.assertEqual(self.c.get(PERFIL).status_code, 401)       # 31 días sin usar
 
-    def test_el_ultimo_uso_se_escribe_a_lo_mas_una_vez_por_hora(self):
-        self.c.get(PERFIL)
-        primero = self.uso()
-        with en(minutos=30):
+    def test_aunque_se_use_a_diario_vence_a_los_90_dias(self):
+        for dia in range(1, 90):
+            with en(dias=dia):
+                self.assertEqual(self.c.get(PERFIL).status_code, 200, f"día {dia}")
+        with en(dias=90, minutos=1):
+            self.assertEqual(self.c.get(PERFIL).status_code, 401)
+
+    def test_el_vencimiento_se_escribe_a_lo_mas_una_vez_por_minuto(self):
+        token = AuthToken.objects.get(user=self.user)
+        with en(dias=1):
             self.c.get(PERFIL)
-        self.assertEqual(self.uso(), primero)
-        with en(horas=2):
+        token.refresh_from_db()
+        primero = token.expiry
+        with en(dias=1, minutos=0.5):
             self.c.get(PERFIL)
-        self.assertGreater(self.uso(), primero + timedelta(hours=1))
+        token.refresh_from_db()
+        self.assertEqual(token.expiry, primero)
+        with en(dias=1, minutos=2):
+            self.c.get(PERFIL)
+        token.refresh_from_db()
+        self.assertGreater(token.expiry, primero)
 
-    def test_un_token_sin_registro_de_uso_cuenta_desde_que_se_creo(self):
-        UsoDeToken.objects.filter(token=self.token).delete()
-        Token.objects.filter(pk=self.token.pk).update(created=datetime.now(utc.utc) - timedelta(days=40))
-        self.assertEqual(self.c.get(PERFIL).status_code, 401)
+    def test_un_token_vencido_se_borra_de_la_base(self):
+        with en(dias=31):
+            self.c.get(PERFIL)
+        self.assertFalse(AuthToken.objects.filter(user=self.user).exists())
 
-    def test_un_token_reciente_sin_registro_funciona_y_queda_anotado(self):
-        UsoDeToken.objects.filter(token=self.token).delete()
-        self.assertEqual(self.c.get(PERFIL).status_code, 200)
-        self.assertTrue(UsoDeToken.objects.filter(token=self.token).exists())
-
-    def test_un_token_inexistente_sigue_dando_401(self):
-        c = APIClient()
-        c.credentials(HTTP_AUTHORIZATION="Token no-existe")
-        self.assertEqual(c.get(PERFIL).status_code, 401)
+    def test_un_token_inexistente_da_401(self):
+        self.assertEqual(cliente("no-existe").get(PERFIL).status_code, 401)
 
     def test_una_cuenta_desactivada_da_401(self):
         User.objects.filter(pk=self.user.pk).update(is_active=False)
         self.assertEqual(self.c.get(PERFIL).status_code, 401)
 
-    @override_settings(DIAS_DE_VIDA_DEL_TOKEN=10)
-    def test_los_dias_se_pueden_cambiar_en_la_configuracion(self):
-        self.c.get(PERFIL)
-        with en(dias=9):
-            self.assertEqual(self.c.get(PERFIL).status_code, 200)
-        with en(dias=30):
-            self.assertEqual(self.c.get(PERFIL).status_code, 401)
-
     def test_todos_los_endpoints_rechazan_un_token_vencido(self):
-        self.c.get(PERFIL)
         with en(dias=31):
             for url in ENDPOINTS_GET:
                 with self.subTest(url=url):
                     self.assertEqual(self.c.get(url).status_code, 401)
+        # Knox borra el token vencido al primer intento; los POST se prueban con otro.
+        c = cliente(token_de(self.user))
+        with en(dias=31):
             for url in ("/api/v1/sync", "/api/v1/polizas/vincular", "/api/v1/ligas", "/api/v1/ligas/unirse",
-                        "/api/v1/premios/1/canjear", LOGOUT):
+                        "/api/v1/premios/1/canjear", LOGOUT, LOGOUT_TODOS):
                 with self.subTest(url=url):
-                    self.assertEqual(self.c.post(url, {}, format="json").status_code, 401)
+                    self.assertEqual(c.post(url, {}, format="json").status_code, 401)
 
     def test_los_endpoints_aceptan_el_token_vigente(self):
         for url in ENDPOINTS_GET:
@@ -135,104 +137,134 @@ class VidaDelTokenTests(APITestCase):
                 self.assertNotEqual(self.c.get(url).status_code, 401)
 
 
+class GuardadoComoHashTests(APITestCase):
+    def test_en_la_base_no_queda_la_clave_del_token(self):
+        clave = entrar_y_clave()
+        token = AuthToken.objects.get()
+        self.assertNotIn(clave, (token.digest, token.token_key))
+        self.assertEqual(len(token.digest), 128)            # SHA-512
+        self.assertEqual(len(clave), 64)
+
+    def test_el_token_viejo_de_drf_ya_no_sirve(self):
+        from rest_framework.authtoken.models import Token
+        viejo = Token.objects.create(user=crear("beto"))
+        self.assertEqual(cliente(viejo.key).get(PERFIL).status_code, 401)
+
+
+def entrar_y_clave():
+    crear()
+    return entrar().json()["token"]
+
+
 class IniciarSesionTests(APITestCase):
     def setUp(self):
         self.user = crear()
-        self.token = Token.objects.get(user=self.user)
 
-    def entrar(self, **extra):
-        return self.client.post(
-            LOGIN, {"username": "ana@correo.com", "password": "Clave-segura-2026"}, format="json", **extra,
+    def test_responde_token_vencimiento_y_usuario_id(self):
+        r = entrar()
+        self.assertEqual(r.status_code, 200)
+        datos = r.json()
+        self.assertEqual(set(datos), {"token", "expiry", "usuario_id"})
+        self.assertEqual(datos["usuario_id"], "id-ana")
+        vence = datetime.fromisoformat(datos["expiry"])
+        self.assertAlmostEqual(
+            (vence - datetime.now(utc.utc)).total_seconds(), timedelta(days=30).total_seconds(), delta=60,
         )
+        self.assertEqual(cliente(datos["token"]).get(PERFIL).status_code, 200)
 
-    def test_con_un_token_vigente_devuelve_el_mismo_y_lo_renueva(self):
-        UsoDeToken.objects.update_or_create(
-            token=self.token, defaults={"ultimo_uso": datetime.now(utc.utc) - timedelta(days=20)},
-        )
-        r = self.entrar()
-        self.assertEqual((r.status_code, r.json()["token"]), (200, self.token.key))
-        self.assertGreater(UsoDeToken.objects.get(token=self.token).ultimo_uso, datetime.now(utc.utc) - timedelta(minutes=1))
+    def test_cada_login_es_una_sesion_distinta_y_las_dos_funcionan(self):
+        primero, segundo = entrar().json()["token"], entrar().json()["token"]
+        self.assertNotEqual(primero, segundo)
+        self.assertEqual(cliente(primero).get(PERFIL).status_code, 200)
+        self.assertEqual(cliente(segundo).get(PERFIL).status_code, 200)
 
-    def test_un_token_vencido_nunca_se_revive_se_entrega_uno_nuevo(self):
+    def test_una_cuenta_sin_perfil_recibe_usuario_id_null(self):
+        User.objects.create_user("sinperfil@correo.com", password=CLAVE)
+        r = entrar("sinperfil")
+        self.assertEqual((r.status_code, r.json()["usuario_id"]), (200, None))
+
+    def test_con_mas_de_10_sesiones_se_cierra_la_mas_vieja(self):
+        claves = [token_de(self.user) for _ in range(sesiones.MAXIMO_DE_SESIONES + 1)]
+        self.assertEqual(AuthToken.objects.filter(user=self.user).count(), sesiones.MAXIMO_DE_SESIONES)
+        self.assertEqual(cliente(claves[0]).get(PERFIL).status_code, 401)
+        self.assertEqual(cliente(claves[1]).get(PERFIL).status_code, 200)
+        self.assertEqual(cliente(claves[-1]).get(PERFIL).status_code, 200)
+
+    def test_el_limite_de_sesiones_no_toca_otras_cuentas(self):
+        beto = cliente(token_de(crear("beto")))
+        for _ in range(sesiones.MAXIMO_DE_SESIONES + 1):
+            token_de(self.user)
+        self.assertEqual(beto.get(PERFIL).status_code, 200)
+
+    def test_despues_de_vencer_se_vuelve_a_entrar_con_uno_nuevo(self):
+        viejo = entrar().json()["token"]
         with en(dias=31):
-            r = self.entrar()
-            nuevo = r.json()["token"]
-            self.assertEqual(r.status_code, 200)
-            self.assertNotEqual(nuevo, self.token.key)
-            # La llave vieja no sirve ni siquiera ahora que la cuenta volvió a entrar...
-            self.assertEqual(cliente(self.token).get(PERFIL).status_code, 401)
-            # ...y la nueva sí.
-            self.assertEqual(APIClient(HTTP_AUTHORIZATION=f"Token {nuevo}").get(PERFIL).status_code, 200)
-        self.assertEqual(Token.objects.filter(user=self.user).count(), 1)
-
-    def test_el_token_nuevo_arranca_con_su_propio_plazo(self):
-        with en(dias=31):
-            nuevo = Token.objects.get(key=self.entrar().json()["token"])
+            nuevo = entrar().json()["token"]
+            self.assertEqual(cliente(viejo).get(PERFIL).status_code, 401)
+            self.assertEqual(cliente(nuevo).get(PERFIL).status_code, 200)
         with en(dias=60):
             self.assertEqual(cliente(nuevo).get(PERFIL).status_code, 200)    # 29 días después
 
-    def test_el_registro_anota_el_uso_y_devuelve_un_token_que_funciona(self):
-        r = self.client.post(REGISTRO, {
-            "username": "nueva@correo.com", "password": "Clave-segura-2026", "birth_date": "1992-01-01",
-        }, format="json")
-        self.assertEqual(r.status_code, 201, r.content)
-        token = Token.objects.get(key=r.json()["token"])
-        self.assertTrue(UsoDeToken.objects.filter(token=token).exists())
-        self.assertEqual(cliente(token).get(PERFIL).status_code, 200)
-
-    def test_el_login_sigue_respondiendo_con_la_forma_de_siempre(self):
-        r = self.entrar()
-        self.assertEqual(set(r.json()), {"token"})
-        malo = self.client.post(LOGIN, {"username": "ana@correo.com", "password": "mala"}, format="json")
+    def test_contrasena_mala_da_400(self):
+        malo = entrar(password="mala")
         self.assertEqual(malo.status_code, 400)
         self.assertIn("non_field_errors", malo.json())
+        self.assertFalse(AuthToken.objects.exists())
+
+    def test_el_registro_devuelve_una_sesion_que_funciona(self):
+        r = self.client.post(REGISTRO, {
+            "username": "nueva@correo.com", "password": CLAVE, "birth_date": "1992-01-01",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        datos = r.json()
+        self.assertEqual(set(datos), {"token", "expiry", "usuario_id", "username"})
+        self.assertEqual(datos["usuario_id"], Usuario.objects.get(user__username="nueva@correo.com").usuario_id)
+        self.assertEqual(cliente(datos["token"]).get(PERFIL).status_code, 200)
 
 
 class CerrarSesionTests(APITestCase):
     def setUp(self):
         self.user = crear()
-        self.token = Token.objects.get(user=self.user)
-        self.c = cliente(self.token)
+        self.este = cliente(token_de(self.user))
+        self.otro_telefono = cliente(token_de(self.user))
 
-    def test_cerrar_sesion_borra_el_token_y_ya_no_sirve(self):
-        self.assertEqual(self.c.post(LOGOUT).status_code, 204)
-        self.assertFalse(Token.objects.filter(user=self.user).exists())
-        self.assertEqual(self.c.get(PERFIL).status_code, 401)
+    def test_cierra_solo_este_telefono(self):
+        self.assertEqual(self.este.post(LOGOUT).status_code, 204)
+        self.assertEqual(self.este.get(PERFIL).status_code, 401)
+        self.assertEqual(self.otro_telefono.get(PERFIL).status_code, 200)
 
-    def test_responde_204_sin_cuerpo(self):
-        r = self.c.post(LOGOUT)
-        self.assertEqual((r.status_code, r.content), (204, b""))
+    def test_cerrar_todas_cierra_todos_los_telefonos(self):
+        self.assertEqual(self.este.post(LOGOUT_TODOS).status_code, 204)
+        self.assertEqual(self.este.get(PERFIL).status_code, 401)
+        self.assertEqual(self.otro_telefono.get(PERFIL).status_code, 401)
+        self.assertFalse(AuthToken.objects.filter(user=self.user).exists())
+
+    def test_responden_204_sin_cuerpo(self):
+        for url in (LOGOUT, LOGOUT_TODOS):
+            with self.subTest(url=url):
+                r = cliente(token_de(self.user)).post(url)
+                self.assertEqual((r.status_code, r.content), (204, b""))
 
     def test_sin_token_o_con_uno_vencido_da_401(self):
-        self.assertEqual(APIClient().post(LOGOUT).status_code, 401)
+        for url in (LOGOUT, LOGOUT_TODOS):
+            with self.subTest(url=url):
+                self.assertEqual(APIClient().post(url).status_code, 401)
         with en(dias=31):
-            self.assertEqual(self.c.post(LOGOUT).status_code, 401)
-
-    def test_cierra_la_sesion_en_todos_los_dispositivos_de_la_cuenta(self):
-        otro_telefono = cliente(self.token)       # el mismo token en otro aparato
-        self.c.post(LOGOUT)
-        self.assertEqual(otro_telefono.get(PERFIL).status_code, 401)
-
-    def test_despues_de_cerrar_sesion_se_puede_volver_a_entrar_con_un_token_nuevo(self):
-        viejo = self.token.key
-        self.c.post(LOGOUT)
-        r = self.client.post(LOGIN, {"username": "ana@correo.com", "password": "Clave-segura-2026"}, format="json")
-        self.assertEqual(r.status_code, 200)
-        self.assertNotEqual(r.json()["token"], viejo)
-        self.assertEqual(APIClient(HTTP_AUTHORIZATION=f"Token {r.json()['token']}").get(PERFIL).status_code, 200)
+            self.assertEqual(self.este.post(LOGOUT).status_code, 401)
 
     def test_no_toca_las_sesiones_de_otras_cuentas(self):
-        beto = crear("beto")
-        token_beto = Token.objects.get(user=beto)
-        self.c.post(LOGOUT)
-        self.assertEqual(cliente(token_beto).get(PERFIL).status_code, 200)
+        beto = cliente(token_de(crear("beto")))
+        self.este.post(LOGOUT_TODOS)
+        self.assertEqual(beto.get(PERFIL).status_code, 200)
 
     def test_una_cuenta_sin_perfil_tambien_puede_cerrar_sesion(self):
-        sin_perfil = User.objects.create_user("sinperfil", password="Clave-segura-2026")
-        self.assertEqual(cliente(Token.objects.get(user=sin_perfil)).post(LOGOUT).status_code, 204)
+        sin_perfil = User.objects.create_user("sinperfil", password=CLAVE)
+        self.assertEqual(cliente(token_de(sin_perfil)).post(LOGOUT).status_code, 204)
 
-    def test_solo_acepta_post(self):
-        self.assertEqual(self.c.get(LOGOUT).status_code, 405)
+    def test_solo_aceptan_post(self):
+        for url in (LOGOUT, LOGOUT_TODOS):
+            with self.subTest(url=url):
+                self.assertEqual(self.este.get(url).status_code, 405)
 
 
 class DiasDeVidaDeEntornoTests(TestCase):
@@ -258,24 +290,72 @@ class DiasDeVidaDeEntornoTests(TestCase):
                 self.leer(malo)
             self.assertIn("DIAS_DE_VIDA_DEL_TOKEN", str(contexto.exception))
 
+    def test_la_configuracion_de_knox_usa_los_dias(self):
+        from django.conf import settings
+        self.assertEqual(settings.REST_KNOX["TOKEN_TTL"], timedelta(days=settings.DIAS_DE_VIDA_DEL_TOKEN))
+        self.assertEqual(settings.REST_KNOX["AUTO_REFRESH_MAX_TTL"], timedelta(days=90))
+        self.assertTrue(settings.REST_KNOX["AUTO_REFRESH"])
+        self.assertNotIn("TOKEN_LIMIT_PER_USER", settings.REST_KNOX)
 
-class MigracionDeTokensExistentesTests(TestCase):
-    def test_los_tokens_que_ya_existian_arrancan_con_30_dias_desde_migrar(self):
-        migracion = import_module("Apps.users.migrations.0005_uso_de_token")
-        user = crear()
-        viejo = Token.objects.get(user=user)
-        Token.objects.filter(pk=viejo.pk).update(created=datetime.now(utc.utc) - timedelta(days=90))
-        UsoDeToken.objects.all().delete()          # como estaba la base antes de la migración
 
-        migracion.crear_usos_de_los_tokens_existentes(apps, None)
+class MigracionATokensDeKnoxTests(TransactionTestCase):
+    """La migración 0006 pasa los tokens de DRF a Knox sin sacar a nadie de su sesión."""
 
-        uso = UsoDeToken.objects.get(token=viejo)
-        self.assertGreater(uso.ultimo_uso, datetime.now(utc.utc) - timedelta(minutes=1))
-        self.assertEqual(cliente(viejo).get(PERFIL).status_code, 200)    # no se vence de golpe
+    antes = [("users", "0005_uso_de_token"), ("knox", "0009_extend_authtoken_field")]
+    despues = [("users", "0006_tokens_a_knox")]
 
-    def test_correrla_dos_veces_no_duplica(self):
-        migracion = import_module("Apps.users.migrations.0005_uso_de_token")
-        crear()
-        migracion.crear_usos_de_los_tokens_existentes(apps, None)
-        migracion.crear_usos_de_los_tokens_existentes(apps, None)
-        self.assertEqual(UsoDeToken.objects.count(), 1)
+    def setUp(self):
+        self.executor = MigrationExecutor(connection)
+        self.executor.migrate(self.antes)
+        self.executor.loader.build_graph()
+        viejas = self.executor.loader.project_state(self.antes).apps
+        self.Token = viejas.get_model("authtoken", "Token")
+        self.UsoDeToken = viejas.get_model("users", "UsoDeToken")
+        self.User = viejas.get_model("auth", "User")
+
+    def tearDown(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+    def token_viejo(self, nombre, ultimo_uso=None, creado=None):
+        user = self.User.objects.create(username=nombre)
+        # El modelo histórico no genera la clave como el de DRF: se pone a mano.
+        token = self.Token.objects.create(user=user, key=secrets.token_hex(20))
+        if creado is not None:
+            self.Token.objects.filter(pk=token.pk).update(created=creado)
+        if ultimo_uso is not None:
+            self.UsoDeToken.objects.create(token=token, ultimo_uso=ultimo_uso)
+        return token.key
+
+    def migrar(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.despues)
+
+    def test_un_token_vigente_sigue_funcionando_con_la_misma_clave(self):
+        ahora = datetime.now(utc.utc)
+        clave = self.token_viejo("ana", ultimo_uso=ahora - timedelta(days=10))
+        self.migrar()
+
+        token = AuthToken.objects.get()
+        self.assertAlmostEqual(
+            (token.expiry - ahora).total_seconds(), timedelta(days=20).total_seconds(), delta=60,
+        )
+        self.assertEqual(cliente(clave).post(LOGOUT).status_code, 204)
+
+    def test_los_tokens_de_drf_se_borran(self):
+        self.token_viejo("ana", ultimo_uso=datetime.now(utc.utc))
+        self.migrar()
+        from rest_framework.authtoken.models import Token
+        self.assertFalse(Token.objects.exists())
+
+    def test_uno_ya_vencido_no_se_copia(self):
+        self.token_viejo("ana", ultimo_uso=datetime.now(utc.utc) - timedelta(days=31))
+        self.migrar()
+        self.assertFalse(AuthToken.objects.exists())
+
+    def test_sin_registro_de_uso_cuenta_desde_que_se_creo(self):
+        ahora = datetime.now(utc.utc)
+        self.token_viejo("ana", creado=ahora - timedelta(days=40))
+        self.token_viejo("beto", creado=ahora - timedelta(days=5))
+        self.migrar()
+        self.assertEqual(list(AuthToken.objects.values_list("user__username", flat=True)), ["beto"])

@@ -2,12 +2,12 @@ from datetime import date, timedelta
 
 from django.contrib.auth.models import User
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import Muestra, ResumenDiario
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 
 URL = "/api/v1/sync"
 APPLE = {"fuente_bundle": "com.apple.health", "fuente_nombre": "Salud"}
@@ -45,8 +45,8 @@ class SyncBase(APITestCase):
             user=self.user, usuario_id="ana-1", birth_date=date(1990, 1, 1)
         )
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
-        token = Token.objects.get(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def _payload(self, pasos=(), sesiones=(), bpm=(), fecha=None, **extra):
         return {

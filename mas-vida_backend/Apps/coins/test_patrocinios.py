@@ -4,7 +4,6 @@ from datetime import date, timedelta
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.coins.models import Canje, Patrocinio
@@ -17,6 +16,7 @@ from Apps.coins.test_premios import (
 from Apps.liga.test_ligas import puntos
 from Apps.objetivos.tests import dia
 from Apps.policies.models import PolizaVinculada
+from Apps.users.pruebas import token_de
 from services import goals, ligas, monedas, patrocinios, premios
 from services.tiempo import hoy, inicio_semana, lunes_de_la_season, numero_semana_en_season
 
@@ -54,8 +54,8 @@ class _ConToken:
     def setUp(self):
         preparar_version_de_reglas()
         self.usuario = crear_usuario()
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def get(self):
         r = self.client.get(self.url)
@@ -282,7 +282,7 @@ class PatrociniosVigentesTests(_ConToken, APITestCase):
     def test_sin_perfil_da_403(self):
         from django.contrib.auth.models import User
         user = User.objects.create_user(username="sinperfil", password="clave-segura-1")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
         self.assertEqual(self.client.get(self.url).status_code, 403)
 
     def test_sin_patrocinios_las_tres_listas_vienen_vacias(self):

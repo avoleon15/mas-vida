@@ -6,7 +6,6 @@ from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import ResumenDiario

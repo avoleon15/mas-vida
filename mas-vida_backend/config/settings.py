@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
 
@@ -40,7 +41,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Ya no autentica (ver REST_KNOX); queda instalada para sus migraciones y para
+    # el formulario del login.
     'rest_framework.authtoken',
+    'knox',
 
     "rest_framework",
     "corsheaders",
@@ -55,8 +59,8 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-    # El token de siempre, pero vence a los 30 días sin uso (services/sesiones.py).
-    "DEFAULT_AUTHENTICATION_CLASSES": ["Apps.users.autenticacion.TokenConCaducidad"],
+    # Un token por inicio de sesión, guardado como hash, que vence (ver REST_KNOX).
+    "DEFAULT_AUTHENTICATION_CLASSES": ["knox.auth.TokenAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
 
@@ -117,6 +121,23 @@ def _dias_de_vida_del_token():
 
 
 DIAS_DE_VIDA_DEL_TOKEN = _dias_de_vida_del_token()
+
+# Aunque se use a diario, a los 90 días de iniciar sesión hay que volver a entrar:
+# un token robado no sirve para siempre. Si DIAS_DE_VIDA_DEL_TOKEN es mayor, manda este.
+DIAS_MAXIMOS_DE_SESION = 90
+
+# Tokens de django-rest-knox (decidido el 4 oct 2026, ver services/sesiones.py).
+# El encabezado sigue siendo `Authorization: Token <clave>`.
+REST_KNOX = {
+    "TOKEN_TTL": timedelta(days=DIAS_DE_VIDA_DEL_TOKEN),
+    # Cada uso corre el vencimiento, sin pasar del tope.
+    "AUTO_REFRESH": True,
+    "AUTO_REFRESH_MAX_TTL": timedelta(days=DIAS_MAXIMOS_DE_SESION),
+    # El vencimiento se escribe en la base a lo más una vez por minuto.
+    "MIN_REFRESH_INTERVAL": 60,
+    # Sin TOKEN_LIMIT_PER_USER: con el límite lleno, Knox rechaza el login (403) y la
+    # persona queda afuera. Las sesiones de más se borran al entrar (sesiones.py).
+}
 
 ROOT_URLCONF = 'config.urls'
 
