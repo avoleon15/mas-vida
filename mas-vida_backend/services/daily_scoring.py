@@ -8,7 +8,9 @@ Elección de fuente (decidido 30 sep, cambia la sección 7 de las reglas de
 puntaje): cada métrica elige por separado el dispositivo que más aporta, sin
 importar si es reloj, anillo o teléfono, y nunca se suma la misma actividad
 dos veces.
-- Pasos: en cada hora gana el dispositivo con más pasos; las horas se suman.
+- Pasos: en cada bloque (una hora, o varias si una muestra de más de una hora las
+  cubre) gana el dispositivo con más pasos; los bloques se suman. Una muestra que
+  cruza la medianoche se reparte entre los dos días según el tiempo en cada uno.
 - Workouts: un entrenamiento que dos dispositivos registran al mismo tiempo
   cuenta una vez (el más largo); los que no se cruzan cuentan todos. Un
   workout necesita ritmo cardíaco: sin eso el serializer lo descarta.
@@ -27,7 +29,7 @@ import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from Apps.activities.models import Muestra, MuestraBPM, ResumenDiario, Sesion
@@ -36,7 +38,7 @@ from Apps.poincs.models import Ledger
 from services.device import (
     agrupar_por_dispositivo,
     clave_dispositivo,
-    pasos_ganadores_por_hora,
+    pasos_ganadores_por_bloque,
 )
 from services.hearth_rate import (
     calculate_age,
@@ -136,8 +138,12 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
     inicio, fin = _rango_del_dia(fecha)
     dispositivo = ("fuente_bundle", "dispositivo_modelo", "dispositivo_fabricante")
 
+    # Pasos: las que empiezan en el día y también las que empezaron antes y siguen
+    # dentro (una muestra larga que cruza la medianoche cuenta en los dos días).
     pasos = _dicts(
-        Muestra.objects.filter(usuario=usuario, inicio__gte=inicio, inicio__lt=fin),
+        Muestra.objects.filter(usuario=usuario).filter(
+            Q(inicio__gte=inicio, inicio__lt=fin) | Q(inicio__lt=inicio, fin__gt=inicio),
+        ),
         ("inicio", "fin", "cantidad", *dispositivo),
     )
     sesiones = _dicts(
@@ -149,7 +155,7 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         ("inicio", "fin", "bpm", *dispositivo),
     )
 
-    pasos = pasos_ganadores_por_hora(pasos)
+    pasos = pasos_ganadores_por_bloque(pasos, inicio, fin)
 
     pasos_totales = sum(m["cantidad"] for m in pasos)
     edad = calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
