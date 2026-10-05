@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from pathlib import Path
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -76,6 +78,28 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
 ]
+
+# Límites de intentos (registro, login y vincular póliza). Los de por defecto viven
+# en services/intentos.py; esto los cambia sin tocar código, por ejemplo para
+# probar en local donde todas las peticiones llegan con la misma IP:
+#   LIMITES_DE_INTENTOS=login_ip=300/60,registro_ip=300/3600   (máximo/segundos)
+def _limites_de_entorno():
+    limites = {}
+    for parte in (p.strip() for p in os.environ.get("LIMITES_DE_INTENTOS", "").split(",")):
+        if not parte:
+            continue
+        try:
+            tipo, valor = parte.split("=")
+            maximo, segundos = valor.split("/")
+            limites[tipo.strip()] = (int(maximo), int(segundos))
+        except ValueError:
+            raise ImproperlyConfigured(
+                f"LIMITES_DE_INTENTOS: no entiendo {parte!r}. Formato: tipo=máximo/segundos"
+            )
+    return limites
+
+
+LIMITES_DE_INTENTOS = _limites_de_entorno()
 
 ROOT_URLCONF = 'config.urls'
 

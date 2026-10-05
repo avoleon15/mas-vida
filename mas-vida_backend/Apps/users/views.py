@@ -43,22 +43,27 @@ def registro(request):
 class LoginView(ObtainAuthToken):
     """Igual que el login de siempre (`200 {"token"}` o `400 non_field_errors`), con límite.
 
-    Después de 5 contraseñas malas en un minuto desde la misma IP responde `429`,
-    aunque la siguiente sea la correcta. Las que salen bien no cuentan. No lee el
-    encabezado `Authorization`: un token viejo no impide iniciar sesión.
+    Después de 5 contraseñas malas en un minuto para el mismo usuario (o 30 desde la
+    misma IP) responde `429`, aunque la siguiente sea la correcta. Las que salen
+    bien no cuentan. No lee el encabezado `Authorization`: un token viejo no
+    impide iniciar sesión.
     """
 
     authentication_classes = ()
 
     def post(self, request, *args, **kwargs):
         ip = intentos.ip_de(request)
+        datos = request.data if hasattr(request.data, "get") else {}
+        cuenta = intentos.clave_de_usuario(datos.get("username"))
         try:
+            intentos.revisar(intentos.LOGIN_CUENTA, cuenta)
             intentos.revisar(intentos.LOGIN_IP, ip)
         except intentos.Bloqueado as bloqueado:
             return bloqueado.respuesta()
         try:
             return super().post(request, *args, **kwargs)
         except ValidationError:
+            intentos.registrar(intentos.LOGIN_CUENTA, cuenta)
             intentos.registrar(intentos.LOGIN_IP, ip)
             raise
 

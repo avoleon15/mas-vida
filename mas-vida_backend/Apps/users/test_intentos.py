@@ -26,55 +26,56 @@ class ServicioDeIntentosTests(TestCase):
             intentos.registrar(tipo, clave, ahora=desde + i * cada)
 
     def test_por_debajo_del_limite_no_bloquea(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 4)
-        intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=5))
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 4)
+        intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=5))
 
     def test_al_llegar_al_limite_bloquea_y_dice_cuanto_esperar(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 5)      # a las 12:00:00 ... 12:00:04
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 5)      # a las 12:00:00 ... 12:00:04
         with self.assertRaises(intentos.Bloqueado) as contexto:
-            intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=10))
+            intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=10))
         # El primero sale de la ventana de 60 s a las 12:01:00: faltan 50 s.
         self.assertEqual(contexto.exception.reintentar_en, 50)
 
     def test_pasada_la_ventana_se_puede_volver_a_intentar(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 5)
-        intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=61))
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 5)
+        intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=61))
 
     def test_un_intento_viejo_que_sale_de_la_ventana_libera_un_lugar(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 5, cada=timedelta(seconds=10))   # 0, 10, 20, 30, 40 s
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 5, cada=timedelta(seconds=10))   # 0, 10, 20, 30, 40 s
         with self.assertRaises(intentos.Bloqueado):
-            intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=50))
-        intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=61))   # salió el de 0 s
+            intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=50))
+        intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=61))   # salió el de 0 s
 
     def test_pasarse_del_limite_alarga_la_espera(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 8)       # 0..7 s: 8 intentos, máximo 5
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 8)       # 0..7 s: 8 intentos, máximo 5
         with self.assertRaises(intentos.Bloqueado) as contexto:
-            intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=10))
+            intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=10))
         # Para bajar de 8 a 4 tienen que salir 4: el cuarto (3 s) sale a los 63 s.
         self.assertEqual(contexto.exception.reintentar_en, 53)
 
     def test_cada_clave_y_cada_tipo_llevan_su_cuenta(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 5)
-        intentos.revisar(intentos.LOGIN_IP, "5.6.7.8", ahora=AHORA)
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 5)
+        intentos.revisar(intentos.LOGIN_CUENTA, "5.6.7.8", ahora=AHORA)
         intentos.revisar(intentos.REGISTRO_IP, "1.2.3.4", ahora=AHORA)
 
     def test_los_limites_de_cada_tipo(self):
         self.assertEqual(intentos.limite_de(intentos.VINCULAR_POLIZA), (5, 86_400))
         self.assertEqual(intentos.limite_de(intentos.VINCULAR_CUENTA), (5, 3_600))
-        self.assertEqual(intentos.limite_de(intentos.LOGIN_IP), (5, 60))
-        self.assertEqual(intentos.limite_de(intentos.REGISTRO_IP), (10, 3_600))
+        self.assertEqual(intentos.limite_de(intentos.LOGIN_CUENTA), (5, 60))
+        self.assertEqual(intentos.limite_de(intentos.LOGIN_IP), (30, 60))
+        self.assertEqual(intentos.limite_de(intentos.REGISTRO_IP), (30, 3_600))
 
-    @override_settings(LIMITES_DE_INTENTOS={"login_ip": (2, 60)})
+    @override_settings(LIMITES_DE_INTENTOS={"login_cuenta": (2, 60)})
     def test_los_limites_se_pueden_cambiar_en_la_configuracion(self):
-        self.registrar_n(intentos.LOGIN_IP, "1.2.3.4", 2)
+        self.registrar_n(intentos.LOGIN_CUENTA, "1.2.3.4", 2)
         with self.assertRaises(intentos.Bloqueado):
-            intentos.revisar(intentos.LOGIN_IP, "1.2.3.4", ahora=AHORA + timedelta(seconds=5))
-        self.assertEqual(intentos.limite_de(intentos.REGISTRO_IP), (10, 3_600))   # el resto sigue igual
+            intentos.revisar(intentos.LOGIN_CUENTA, "1.2.3.4", ahora=AHORA + timedelta(seconds=5))
+        self.assertEqual(intentos.limite_de(intentos.REGISTRO_IP), (30, 3_600))   # el resto sigue igual
 
     def test_los_intentos_de_mas_de_dos_dias_se_borran(self):
-        intentos.registrar(intentos.LOGIN_IP, "viejo", ahora=AHORA - timedelta(days=3))
-        intentos.registrar(intentos.LOGIN_IP, "reciente", ahora=AHORA - timedelta(days=1))
-        intentos.registrar(intentos.LOGIN_IP, "nuevo", ahora=AHORA)
+        intentos.registrar(intentos.LOGIN_CUENTA, "viejo", ahora=AHORA - timedelta(days=3))
+        intentos.registrar(intentos.LOGIN_CUENTA, "reciente", ahora=AHORA - timedelta(days=1))
+        intentos.registrar(intentos.LOGIN_CUENTA, "nuevo", ahora=AHORA)
         self.assertEqual(
             set(IntentoFallido.objects.values_list("clave", flat=True)), {"reciente", "nuevo"},
         )
@@ -138,27 +139,27 @@ class RegistroConLimiteTests(APITestCase):
             "username": f"persona{n}@correo.com", "password": "Clave-segura-2026", "birth_date": "1990-05-17",
         }, format="json", REMOTE_ADDR=ip)
 
-    def test_el_registro_11_en_una_hora_desde_la_misma_ip_da_429(self):
-        for n in range(10):
+    def test_el_registro_31_en_una_hora_desde_la_misma_ip_da_429(self):
+        for n in range(30):
             self.assertEqual(self.registrar(n).status_code, 201)
-        r = self.registrar(10)
+        r = self.registrar(30)
         self.assertEqual(r.status_code, 429)
         self.assertEqual(r.json()["error"], "demasiados_intentos")
         self.assertGreater(int(r["Retry-After"]), 0)
-        self.assertFalse(User.objects.filter(username="persona10@correo.com").exists())
+        self.assertFalse(User.objects.filter(username="persona30@correo.com").exists())
 
     def test_cuentan_tambien_los_intentos_que_salen_mal(self):
-        for _ in range(10):
+        for _ in range(30):
             self.client.post(REGISTRO, {"username": "x"}, format="json", REMOTE_ADDR="10.0.0.1")
         self.assertEqual(self.registrar(1).status_code, 429)
 
     def test_otra_ip_no_se_ve_afectada(self):
-        for n in range(10):
+        for n in range(30):
             self.registrar(n)
         self.assertEqual(self.registrar(99, ip="10.0.0.2").status_code, 201)
 
     def test_pasada_la_hora_se_puede_registrar_otra_vez(self):
-        for n in range(10):
+        for n in range(30):
             self.registrar(n)
         siguiente = datetime.now(utc.utc) + timedelta(hours=1, minutes=1)
         with mock.patch("django.utils.timezone.now", return_value=siguiente):
@@ -168,10 +169,11 @@ class RegistroConLimiteTests(APITestCase):
 class LoginConLimiteTests(APITestCase):
     def setUp(self):
         User.objects.create_user("ana@correo.com", password="Clave-segura-2026")
+        User.objects.create_user("beto@correo.com", password="Clave-segura-2026")
 
-    def entrar(self, clave="Clave-segura-2026", ip="10.0.0.1", **extra):
+    def entrar(self, clave="Clave-segura-2026", ip="10.0.0.1", usuario="ana@correo.com", **extra):
         return self.client.post(
-            LOGIN, {"username": "ana@correo.com", "password": clave}, format="json",
+            LOGIN, {"username": usuario, "password": clave}, format="json",
             REMOTE_ADDR=ip, **extra,
         )
 
@@ -183,7 +185,7 @@ class LoginConLimiteTests(APITestCase):
         self.assertEqual(malo.status_code, 400)
         self.assertIn("non_field_errors", malo.json())
 
-    def test_la_sexta_contrasena_mala_en_un_minuto_da_429(self):
+    def test_la_sexta_contrasena_mala_para_la_misma_cuenta_en_un_minuto_da_429(self):
         for _ in range(5):
             self.assertEqual(self.entrar("mala").status_code, 400)
         r = self.entrar("mala")
@@ -191,19 +193,52 @@ class LoginConLimiteTests(APITestCase):
         self.assertEqual(r.json()["error"], "demasiados_intentos")
         self.assertEqual(r["Retry-After"], str(r.json()["reintentar_en"]))
 
-    def test_bloqueada_la_ip_ni_la_contrasena_correcta_pasa(self):
+    def test_bloqueada_la_cuenta_ni_la_contrasena_correcta_pasa(self):
         for _ in range(5):
             self.entrar("mala")
         self.assertEqual(self.entrar().status_code, 429)
 
-    def test_los_logins_que_salen_bien_no_cuentan(self):
-        for _ in range(20):
-            self.assertEqual(self.entrar().status_code, 200)
-
-    def test_otra_ip_puede_entrar_mientras_una_esta_bloqueada(self):
+    def test_con_la_misma_ip_otra_cuenta_puede_entrar(self):
+        # Docker o una red de celular: mucha gente con la misma IP. Una cuenta
+        # bloqueada no deja afuera a las demas.
         for _ in range(5):
             self.entrar("mala")
-        self.assertEqual(self.entrar(ip="10.0.0.2").status_code, 200)
+        self.assertEqual(self.entrar(usuario="beto@correo.com").status_code, 200)
+
+    def test_la_misma_cuenta_desde_otra_ip_tambien_esta_bloqueada(self):
+        for _ in range(5):
+            self.entrar("mala", ip="10.0.0.1")
+        self.assertEqual(self.entrar(ip="10.0.0.2").status_code, 429)
+
+    def test_un_usuario_que_no_existe_cuenta_igual_y_responde_lo_mismo(self):
+        # Asi el limite no sirve para saber que usuarios existen.
+        for _ in range(5):
+            self.assertEqual(self.entrar("x", usuario="fantasma@correo.com").status_code, 400)
+        fantasma = self.entrar("x", usuario="fantasma@correo.com")
+        for _ in range(5):
+            self.entrar("mala")
+        real = self.entrar("mala")
+        self.assertEqual((fantasma.status_code, real.status_code), (429, 429))
+        self.assertEqual(set(fantasma.json()), set(real.json()))
+
+    def test_el_usuario_no_distingue_mayusculas_ni_espacios(self):
+        for escrito in ("ana@correo.com", "ANA@correo.com", " Ana@Correo.com ", "ana@correo.com", "ANA@CORREO.COM"):
+            self.entrar("mala", usuario=escrito)
+        self.assertEqual(self.entrar("mala").status_code, 429)
+
+    def test_la_ip_se_bloquea_con_30_fallos_repartidos_entre_muchas_cuentas(self):
+        for n in range(30):
+            self.assertEqual(self.entrar("mala", usuario=f"intruso{n}@correo.com").status_code, 400)
+        r = self.entrar("mala", usuario="intruso99@correo.com")
+        self.assertEqual(r.status_code, 429)
+        # Con la IP bloqueada, ni una cuenta limpia entra desde ahi...
+        self.assertEqual(self.entrar(usuario="beto@correo.com").status_code, 429)
+        # ...pero desde otra IP si.
+        self.assertEqual(self.entrar(usuario="beto@correo.com", ip="10.0.0.2").status_code, 200)
+
+    def test_los_logins_que_salen_bien_no_cuentan(self):
+        for _ in range(40):
+            self.assertEqual(self.entrar().status_code, 200)
 
     def test_pasado_el_minuto_se_puede_volver_a_intentar(self):
         for _ in range(5):
@@ -215,6 +250,47 @@ class LoginConLimiteTests(APITestCase):
     def test_un_token_viejo_en_el_encabezado_no_impide_entrar(self):
         r = self.entrar(HTTP_AUTHORIZATION="Token basura")
         self.assertEqual(r.status_code, 200)
+
+    def test_un_cuerpo_que_no_es_un_objeto_no_rompe_el_servidor(self):
+        r = self.client.post(LOGIN, ["ana", "clave"], format="json", REMOTE_ADDR="10.0.0.1")
+        self.assertEqual(r.status_code, 400)
+
+    def test_no_se_guarda_el_usuario_en_claro(self):
+        self.entrar("mala")
+        claves = list(IntentoFallido.objects.values_list("clave", flat=True))
+        self.assertTrue(claves)
+        for clave in claves:
+            self.assertNotIn("ana", clave)
+        cuenta = IntentoFallido.objects.get(tipo="login_cuenta")
+        self.assertEqual(len(cuenta.clave), 64)
+
+    @override_settings(LIMITES_DE_INTENTOS={"login_cuenta": (100, 60), "login_ip": (100, 60)})
+    def test_los_limites_se_pueden_subir_para_probar_en_local(self):
+        for _ in range(50):
+            self.assertEqual(self.entrar("mala").status_code, 400)
+
+
+class LimitesDeEntornoTests(SimpleTestCase):
+    def leer(self, valor):
+        from config import settings as ajustes
+        with mock.patch.dict("os.environ", {"LIMITES_DE_INTENTOS": valor}):
+            return ajustes._limites_de_entorno()
+
+    def test_sin_variable_no_cambia_nada(self):
+        self.assertEqual(self.leer(""), {})
+
+    def test_lee_varios_limites(self):
+        self.assertEqual(
+            self.leer("login_ip=300/60, registro_ip=100/3600"),
+            {"login_ip": (300, 60), "registro_ip": (100, 3600)},
+        )
+
+    def test_un_formato_roto_detiene_el_arranque_con_un_mensaje_claro(self):
+        from django.core.exceptions import ImproperlyConfigured
+        for roto in ("login_ip", "login_ip=300", "login_ip=a/60", "login_ip=300/60/1"):
+            with self.subTest(roto=roto), self.assertRaises(ImproperlyConfigured) as contexto:
+                self.leer(roto)
+            self.assertIn("Formato", str(contexto.exception))
 
 
 class VincularConLimiteTests(APITestCase):

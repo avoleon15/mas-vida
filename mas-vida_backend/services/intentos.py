@@ -4,21 +4,26 @@ Sin límite, quien tiene un número de póliza (son correlativos) puede adivinar
 fecha de nacimiento del titular probando días, y al acertar ve su nombre, plan y
 prima. Lo mismo con las contraseñas del login.
 
-Límites, todos configurables en `settings.LIMITES_DE_INTENTOS` (tipo -> (máximo, segundos)):
+Límites, todos configurables en `settings.LIMITES_DE_INTENTOS` (tipo -> (máximo, segundos)),
+que sale de la variable de entorno `LIMITES_DE_INTENTOS` con el formato
+`login_ip=300/60,registro_ip=300/3600` (útil para probar en local):
 
 | Tipo              | Qué se cuenta                               | Límite             |
 |-------------------|---------------------------------------------|--------------------|
 | vincular_poliza   | vinculaciones rechazadas de ese número      | 5 al día, sumando todas las cuentas |
 | vincular_cuenta   | vinculaciones rechazadas de esa cuenta      | 5 por hora         |
-| login_ip          | logins con contraseña mala desde esa IP     | 5 por minuto       |
-| registro_ip       | registros intentados desde esa IP           | 10 por hora        |
+| login_cuenta      | contraseñas malas para ese usuario          | 5 por minuto       |
+| login_ip          | contraseñas malas desde esa IP              | 30 por minuto      |
+| registro_ip       | registros intentados desde esa IP           | 30 por hora        |
 
 Solo cuentan los intentos que fallan (salvo el registro, que cuenta todos): quien
-acierta a la primera nunca se topa con el límite. El número de póliza se guarda
-como un hash, no en claro.
+acierta a la primera nunca se topa con el límite. El número de póliza y el
+usuario se guardan como un hash, no en claro.
 
-Aviso: una IP puede ser de mucha gente a la vez (redes de celular), así que los
-límites por IP son holgados a propósito; por eso son ajustables.
+Una IP puede ser de mucha gente a la vez (redes de celular, o Docker, donde todas
+las peticiones llegan con la misma): por eso el login se limita sobre todo por
+CUENTA, y los límites por IP son holgados. Un usuario inexistente cuenta igual
+que uno real, así el límite no sirve para saber qué usuarios existen.
 """
 import hashlib
 import math
@@ -33,6 +38,7 @@ from Apps.users.models import IntentoFallido
 
 VINCULAR_POLIZA = "vincular_poliza"
 VINCULAR_CUENTA = "vincular_cuenta"
+LOGIN_CUENTA = "login_cuenta"
 LOGIN_IP = "login_ip"
 REGISTRO_IP = "registro_ip"
 
@@ -42,8 +48,9 @@ DIA = 24 * HORA
 LIMITES = {
     VINCULAR_POLIZA: (5, DIA),
     VINCULAR_CUENTA: (5, HORA),
-    LOGIN_IP: (5, 60),
-    REGISTRO_IP: (10, HORA),
+    LOGIN_CUENTA: (5, 60),
+    LOGIN_IP: (30, 60),
+    REGISTRO_IP: (30, HORA),
 }
 
 # Los intentos se guardan el doble de la ventana más larga y después se borran.
@@ -77,6 +84,12 @@ def clave_de_poliza(aseguradora: str, numero: str) -> str:
     """Hash del número de póliza (sin distinguir mayúsculas ni espacios) y su aseguradora."""
     normalizado = f"{aseguradora.strip().casefold()}|{numero.strip().casefold()}"
     return hashlib.sha256(normalizado.encode()).hexdigest()
+
+
+def clave_de_usuario(nombre) -> str:
+    """Hash del nombre de usuario tal como lo escribió quien intenta entrar (sin distinguir mayúsculas)."""
+    normalizado = nombre.strip().casefold() if isinstance(nombre, str) else ""
+    return hashlib.sha256(f"usuario|{normalizado}".encode()).hexdigest()
 
 
 def ip_de(request) -> str:
