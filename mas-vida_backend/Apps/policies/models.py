@@ -1,6 +1,7 @@
 from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.functions import Lower, Trim
 from Apps.core.models import ModeloBase
 
 
@@ -76,6 +77,21 @@ class PolizaVinculada(ModeloBase):
         max_digits=10, decimal_places=2, null=True, blank=True,
     )
     fecha_renovacion = models.DateField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            # Una póliza pertenece a una sola cuenta verificada (4 oct 2026): dos
+            # cuentas de la misma persona cobrarían el cashback dos veces y
+            # competirían dos veces en La Liga. Solo cuentan las verificadas:
+            # pendientes y rechazadas pueden repetirse. No distingue mayúsculas
+            # ni espacios en el número ni en la aseguradora.
+            models.UniqueConstraint(
+                Lower(Trim("insurer")),
+                Lower(Trim("policy_number")),
+                condition=Q(estado_verificacion="verificada"),
+                name="uq_poliza_verificada_en_una_cuenta",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.insurer} {self.policy_number} - {self.estado_verificacion}"
