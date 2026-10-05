@@ -151,7 +151,18 @@ campo dentro del JSON.
 
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
-(credenciales incorrectas en el login).
+(credenciales incorrectas en el login). `429` si se pasó el límite de intentos
+(ver "Límite de intentos" abajo). El login no lee el encabezado `Authorization`:
+un token viejo o inválido no impide iniciar sesión.
+
+### Cerrar sesión: `POST /api/v1/logout` (hecho 4 oct 2026)
+
+Con token, sin cuerpo. Responde `204` y **borra el token** de la cuenta. Como hay
+un token por cuenta y lo comparten sus dispositivos, **cierra la sesión en todos**.
+Con un token inválido o vencido responde `401`, como el resto. La app, al cerrar
+sesión, llama a este endpoint **y** además borra su copia y le entrega `null` a
+Swift con `actualizarSesion(null)`; el siguiente inicio de sesión recibe un token
+nuevo.
 
 ### Inicio de sesión con Google y Apple (decidido 2 oct 2026)
 
@@ -175,8 +186,17 @@ ofrecerlo si se ofrece Google (guía 4.8).
 
 ### Reglas del token
 
-- Hay **un token por cuenta** y **no caduca** por ahora (ver "Puntos
-  abiertos").
+- Hay **un token por cuenta**, compartido por sus dispositivos.
+- **Vence a los 30 días SIN uso y cada uso lo renueva** (decidido y hecho el 4 oct
+  2026): quien abre la app seguido nunca se topa con el vencimiento. El último uso
+  se anota a lo más una vez por hora. Un token vencido responde `401` en **todos**
+  los endpoints (también `sync`), y la app tiene que volver a la pantalla de inicio
+  de sesión. Los días se cambian con `DIAS_DE_VIDA_DEL_TOKEN`.
+- **Al iniciar sesión, un token vencido no se revive**: el servidor entrega uno
+  nuevo (si alguien se llevó la llave vieja, no le sirve aunque la cuenta vuelva a
+  entrar). Uno vigente se devuelve igual y se renueva.
+- Los tokens que ya existían al desplegar arrancan con 30 días de margen desde ese
+  momento.
 - Se trata como una contraseña: nunca se escribe en logs ni en mensajes de
   error, y nunca viaja dentro del cuerpo de una petición.
 - Flutter guarda su propia copia para sus llamadas HTTP. A Swift se la entrega
@@ -200,12 +220,62 @@ fila del usuario y no tiene relación con este campo.
 |---|---|---|
 | Falta el encabezado | `401` | `{ "detail": "..." }` y el encabezado `WWW-Authenticate: Token` |
 | Token inválido | `401` | `{ "detail": "..." }` |
+| Token **vencido** (30 días sin uso) | `401` | `{ "detail": "El token venció. Vuelve a iniciar sesión." }` y `WWW-Authenticate: Token` |
 | Token válido pero la cuenta no tiene perfil de usuario | `403` | `{ "mensaje": "..." }` |
+| Demasiados intentos (registro, login o vincular póliza) | `429` | `{ "error": "demasiados_intentos", "mensaje": "...", "reintentar_en": 42 }` y `Retry-After: 42` |
 
 Los textos pueden salir en inglés (los mensajes estándar de Django REST
 Framework, como los de `401` o "This field is required.") o en español (los
 propios del proyecto, como el de `403`), y pueden cambiar: los clientes deciden
 **siempre por el código de estado**, nunca por el texto.
+
+### Límite de intentos (hecho 4 oct 2026)
+
+Sin límite, quien tiene un número de póliza (son correlativos) puede adivinar la
+fecha de nacimiento del titular probando días, y al acertar ve su nombre, plan y
+prima. Los intentos fallidos se guardan en la base de datos (no en memoria: valen
+igual con varios procesos del servidor y sobreviven a un reinicio). Al pasarse
+responde `429` con `reintentar_en` (segundos) y el encabezado `Retry-After`;
+mientras esté bloqueado, ni lo correcto pasa.
+
+| Dónde | Qué se cuenta | Límite |
+|---|---|---|
+| `polizas/vincular` | vinculaciones **rechazadas** de ese número de póliza, sumando todas las cuentas | 5 al día |
+| `polizas/vincular` | vinculaciones rechazadas de esa cuenta | 5 por hora |
+| `login` | contraseñas malas para ese usuario (existente o no) | 5 por minuto |
+| `login` | contraseñas malas desde esa IP | 30 por minuto |
+| `registro` | intentos desde esa IP, salgan bien o mal | 30 por hora |
+
+- Solo cuentan los **rechazos** (el registro cuenta todos): quien acierta a la
+  primera nunca se topa con el límite. Los datos mal formados (`400`) no cuentan.
+- Un usuario que no existe cuenta igual y responde lo mismo, así el límite no sirve
+  para saber qué usuarios existen. El usuario y el número de póliza se guardan como
+  un hash, nunca en claro.
+- **Por qué el login se limita sobre todo por cuenta:** muchas personas pueden llegar
+  con la misma IP (redes de celular, o Docker, donde todas las peticiones llegan
+  con la misma). Una cuenta bloqueada no deja afuera a las demás.
+- Se pueden cambiar sin tocar código con la variable de entorno
+  `LIMITES_DE_INTENTOS=login_ip=300/60,registro_ip=300/3600` (máximo/segundos; tipos:
+  `vincular_poliza`, `vincular_cuenta`, `login_cuenta`, `login_ip`, `registro_ip`),
+  por ejemplo para probar en local. Un formato roto detiene el arranque.
+- Detrás de un servidor web, la IP real viene en `X-Forwarded-For`: solo se lee con
+  `NUM_PROXIES_CONFIABLES` configurado (cuántos proxies propios hay delante), porque
+  cualquiera puede falsear ese encabezado. **Mientras no esté configurado, todas las
+  peticiones parecen venir de la IP del proxy** (paquete 7).
+- **Costo conocido:** quien conozca un número de póliza puede bloquear a su titular
+  durante un día con 5 intentos malos, y quien conozca un usuario, bloquear su login
+  por un minuto. Por eso el panel de administración tendrá que poder desbloquear
+  (ver `panel-admin.md`).
+
+### Qué hacen las apps (etapa 10)
+
+- **Flutter:** trata **cualquier `401`** como "volver a iniciar sesión" (token
+  vencido o inválido), muestra "Demasiados intentos, inténtalo más tarde" con un
+  `429` (y no reintenta antes de `reintentar_en`), y al cerrar sesión llama a
+  `POST /api/v1/logout`.
+- **Swift:** el `401` del `sync` ya es "token rechazado" (falla general: se corta la
+  vuelta y no se pierde nada). Sigue igual; solo cambia que ahora un token puede
+  vencer.
 
 ---
 
@@ -1497,10 +1567,23 @@ Vincula y verifica en el mismo paso, contra el registro de la aseguradora.
 Respuesta `200`: `{ "estado_verificacion": "verificada" | "rechazada", "motivo_rechazo": string | null }`.
 Motivos: `no_existe`, `aseguradora_no_coincide`, `no_vigente` (la aseguradora
 la **canceló o la suspendió**; las fechas no se miran),
-`fecha_nacimiento_no_coincide`. Una póliza puede estar vinculada a varios
-usuarios (pólizas familiares). `409` si el usuario ya tiene una póliza
-verificada; `400` por campos faltantes; `403` si la cuenta no tiene perfil.
-Una rechazada se puede volver a enviar.
+`fecha_nacimiento_no_coincide` y `poliza_en_otra_cuenta`.
+
+**Una sola cuenta verificada por póliza** (decidido y hecho el 4 oct 2026; sin
+pólizas familiares hasta hablarlo con las aseguradoras). Si el número y la fecha
+son correctos pero la póliza ya está verificada en otra cuenta, la segunda queda
+`rechazada` con el motivo `poliza_en_otra_cuenta`: sugerencia de texto, "Esta
+póliza ya está vinculada a otra cuenta. Si es tuya, escríbenos." No se aplica
+retroactivo ni se toca su historial, y **ese rechazo no gasta intentos** del límite.
+La regla está en la base de datos (no distingue mayúsculas ni espacios en el número
+ni en la aseguradora), así que dos verificaciones a la vez no la burlan. Pendientes
+y rechazadas sí pueden repetirse; solo cuentan las verificadas. **Hoy no hay forma de
+liberar una póliza desde el admin** (no deja rechazar una verificada): lo hará el
+panel (ver `panel-admin.md`).
+
+`409` si el usuario ya tiene una póliza verificada; `400` por campos faltantes;
+`403` si la cuenta no tiene perfil; `429` si se pasó el límite de intentos (ver
+"Límite de intentos"). Una rechazada se puede volver a enviar.
 
 *Hoy la aseguradora es un registro simulado cargado desde un CSV (comando
 `cargar_registro_aseguradora`); cuando haya integración real se reemplaza sin
@@ -1573,8 +1656,9 @@ regulatoria, ver `CLAUDE.md`). Se muestra en Mi Plan, debajo de las gráficas.
 renovación hasta el día antes del siguiente, no del 1 de enero al 31 de
 diciembre. El ancla es `fecha_renovacion` (la que dio la aseguradora; si ya
 pasó se proyecta un año tras otro) o, si falta, `policy_start_date`. El día de
-la renovación ya es del año nuevo. Con varias personas en la misma póliza
-(pólizas familiares), todas comparten esas fechas.
+la renovación ya es del año nuevo. Por ahora una póliza tiene una sola cuenta
+verificada (sin pólizas familiares); si más adelante hay varias, compartirían esas
+fechas.
 
 **Cada año de póliza arranca en cero** (decidido 4 oct 2026): los puntos de
 antes de su inicio no cuentan para él ni gastan su techo de 12.000, y al
@@ -2292,17 +2376,17 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 - **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
   fila por día ya no se lee. No hay datos reales en ese formato; una base de
   pruebas vieja se vuelve a sincronizar.
-- **Logout en el servidor:** hoy no existe un endpoint que borre el token. Como
-  hay un token por cuenta, borrarlo cerraría la sesión en **todos** los
-  dispositivos de esa persona. Mientras tanto, cerrar sesión en la app solo borra
-  las copias locales (`actualizarSesion(null)`).
+- ~~Logout en el servidor~~ — **hecho** (4 oct): `POST /api/v1/logout`. Como hay un
+  token por cuenta, cierra la sesión en **todos** los dispositivos de esa persona.
+  **[PENDIENTE]:** un token por dispositivo, para cerrar solo uno (más trabajo; no
+  está en el plan).
 - **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
   Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
 - **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct):**
   Swift vacía la cola y olvida la marca; la cuenta que sigue recibe sus 7 días.
-- **Caducidad y renovación del token:** hoy no caduca. Las plataformas grandes usan
-  tokens de vida corta con uno de renovación. Conviene también exigir HTTPS fuera
-  de pruebas locales.
+- ~~Caducidad del token~~ — **hecha** (4 oct): vence a los 30 días sin uso y cada uso
+  lo renueva. Queda abierto exigir HTTPS fuera de pruebas locales (paquete 7) y, más
+  adelante, tokens de vida corta con uno de renovación como las plataformas grandes.
 - **`Token` o `Bearer` en el encabezado:** se dejó `Token` porque es lo que espera
   Django REST Framework; `Bearer` es el estándar de OAuth 2.0 y se puede configurar
   más adelante.
