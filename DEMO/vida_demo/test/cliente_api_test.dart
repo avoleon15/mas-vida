@@ -32,11 +32,18 @@ void main() {
       baseUrl: 'http://api',
       cliente: MockClient((r) async {
         pedido = r;
-        return http.Response(jsonEncode({'token': 'abc123'}), 200);
+        return http.Response(
+          jsonEncode({
+            'token': 'abc123',
+            'expiry': '2026-11-04T10:15:00-06:00',
+            'usuario_id': 'u-1',
+          }),
+          200,
+        );
       }),
     );
 
-    final token = await api.iniciarSesion('prueba', 'masvida123');
+    final inicio = await api.iniciarSesion('prueba', 'masvida123');
 
     expect(pedido.method, 'POST');
     expect(pedido.url.toString(), 'http://api/api/v1/login');
@@ -44,8 +51,134 @@ void main() {
       'username': 'prueba',
       'password': 'masvida123',
     });
-    expect(token, 'abc123');
+    expect(inicio.token, 'abc123');
+    expect(inicio.usuarioId, 'u-1');
     expect(api.token, 'abc123');
+  });
+
+  test(
+    'el registro no inventa el usuario_id: lo lee de la respuesta',
+    () async {
+      late http.Request pedido;
+      final api = ClienteApi(
+        baseUrl: 'http://api',
+        cliente: MockClient((r) async {
+          pedido = r;
+          return http.Response(
+            jsonEncode({
+              'token': 'abc123',
+              'expiry': '2026-11-04T10:15:00-06:00',
+              'usuario_id': 'u-del-servidor',
+              'username': 'ana@correo.gt',
+            }),
+            201,
+          );
+        }),
+      );
+
+      final inicio = await api.registrar(
+        correo: 'ana@correo.gt',
+        contrasena: 'Clave-segura-2026',
+        fechaNacimiento: DateTime(1990, 5, 17),
+      );
+
+      expect(pedido.url.path, '/api/v1/registro');
+      expect(jsonDecode(pedido.body), {
+        'username': 'ana@correo.gt',
+        'password': 'Clave-segura-2026',
+        'birth_date': '1990-05-17',
+      });
+      expect(inicio.usuarioId, 'u-del-servidor');
+      expect(api.token, 'abc123');
+    },
+  );
+
+  group('401: la sesión venció o la cerraron', () {
+    test('avisa con el token que se mandó', () async {
+      final rechazados = <String>[];
+      final api =
+          ClienteApi(
+              baseUrl: 'http://api',
+              cliente: MockClient(
+                (_) async => http.Response(
+                  jsonEncode({'detail': 'Invalid token.'}),
+                  401,
+                ),
+              ),
+            )
+            ..token = 'abc123'
+            ..alRechazarToken = rechazados.add;
+
+      await expectLater(
+        api.historialDePuntos(),
+        throwsA(isA<ErrorApi>().having((e) => e.codigo, 'codigo', 401)),
+      );
+      expect(rechazados, ['abc123']);
+    });
+
+    test('otro error no avisa', () async {
+      final rechazados = <String>[];
+      final api =
+          ClienteApi(
+              baseUrl: 'http://api',
+              cliente: MockClient((_) async => http.Response('{}', 500)),
+            )
+            ..token = 'abc123'
+            ..alRechazarToken = rechazados.add;
+
+      await expectLater(api.historialDePuntos(), throwsA(isA<ErrorApi>()));
+      expect(rechazados, isEmpty);
+    });
+  });
+
+  group('cerrar sesión en el servidor', () {
+    test('manda el token a /logout y dice si se cerró', () async {
+      late http.Request pedido;
+      final api = ClienteApi(
+        baseUrl: 'http://api',
+        cliente: MockClient((r) async {
+          pedido = r;
+          return http.Response('', 204);
+        }),
+      )..token = 'abc123';
+
+      expect(await api.cerrarSesionEnServidor(), isTrue);
+      expect(pedido.method, 'POST');
+      expect(pedido.url.path, '/api/v1/logout');
+      expect(pedido.headers['Authorization'], 'Token abc123');
+    });
+
+    test('sin red no falla hacia afuera', () async {
+      final api = ClienteApi(
+        baseUrl: 'http://api',
+        cliente: MockClient((_) async => throw http.ClientException('sin red')),
+      )..token = 'abc123';
+
+      expect(await api.cerrarSesionEnServidor(), isFalse);
+    });
+
+    test('con el token ya vencido (401) tampoco', () async {
+      final api = ClienteApi(
+        baseUrl: 'http://api',
+        cliente: MockClient((_) async => http.Response('{}', 401)),
+      )..token = 'abc123';
+
+      expect(await api.cerrarSesionEnServidor(), isFalse);
+    });
+
+    test('sin sesión no llama al servidor', () async {
+      var llamadas = 0;
+      final api = ClienteApi(
+        baseUrl: 'http://api',
+        cliente: MockClient((_) async {
+          llamadas++;
+          return http.Response('', 204);
+        }),
+      );
+
+      expect(await api.cerrarSesionEnServidor(), isFalse);
+      expect(llamadas, 0);
+    });
   });
 
   test('un login rechazado tira ErrorApi', () async {

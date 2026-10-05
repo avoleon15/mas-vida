@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'healthkit_bridge.dart';
@@ -34,6 +35,7 @@ class Sesion {
     required this.token,
     required this.correo,
     required this.nombre,
+    this.usuarioId,
     this.fechaNacimiento,
     this.polizaPendiente = false,
     this.compartirConAseguradora = false,
@@ -45,6 +47,11 @@ class Sesion {
   final String token;
   final String correo;
   final String nombre;
+
+  /// El nombre público que generó el servidor (login y registro). Swift lo
+  /// usa para saber si entró otra persona. Null en las sesiones locales y
+  /// en las guardadas antes de A35.
+  final String? usuarioId;
 
   /// Autoreportada en el registro. Con ella el servidor calcula la FCmáx
   /// desde el primer día; la aseguradora la confirma al vincular la
@@ -71,6 +78,7 @@ class Sesion {
     'token': token,
     'correo': correo,
     'nombre': nombre,
+    if (usuarioId != null) 'usuario_id': usuarioId,
     if (fechaNacimiento != null)
       'fecha_nacimiento': fechaNacimiento!.toIso8601String(),
     'poliza_pendiente': polizaPendiente,
@@ -83,6 +91,7 @@ class Sesion {
     token: j['token'] as String,
     correo: j['correo'] as String,
     nombre: j['nombre'] as String,
+    usuarioId: j['usuario_id'] as String?,
     fechaNacimiento: j['fecha_nacimiento'] == null
         ? null
         : DateTime.parse(j['fecha_nacimiento'] as String),
@@ -171,7 +180,7 @@ class AlmacenSesion {
       sesion = null;
     }
     // Al abrir la app: Swift recibe el token de ahora, o null.
-    _avisarASwift(sesion?.token);
+    _avisarASwift(sesion);
     return sesion;
   }
 
@@ -181,7 +190,7 @@ class AlmacenSesion {
     } catch (_) {
       // Sin llavero la sesión dura lo que dure la app abierta.
     }
-    _avisarASwift(sesion.token);
+    _avisarASwift(sesion);
   }
 
   Future<void> borrar() async {
@@ -195,9 +204,16 @@ class AlmacenSesion {
   /// Sin esperar la respuesta: entrar o salir no puede quedar colgado de
   /// Swift. Si el Keychain falla, el próximo arranque lo vuelve a mandar
   /// (la llamada es idempotente).
-  void _avisarASwift(String? token) =>
-      unawaited(_puente.actualizarSesion(token));
+  void _avisarASwift(Sesion? sesion) => unawaited(
+    _puente.actualizarSesion(sesion?.token, usuarioId: sesion?.usuarioId),
+  );
 }
+
+/// Sube en uno cada vez que el servidor rechaza la sesión (`401`): venció
+/// (30 días sin uso, o 90 desde que se entró) o se cerró desde otro lado.
+/// Para entonces la sesión ya se borró; `main.dart` escucha esto y vuelve al
+/// arranque, que muestra el ingreso.
+final ValueNotifier<int> sesionRechazada = ValueNotifier<int>(0);
 
 /// Entrar, crear cuenta, recuperar la contraseña y salir.
 abstract class ServicioSesion {
@@ -285,19 +301,29 @@ class ServicioSesionLocal extends ServicioSesion {
 
 /// Sesión contra la API de Django.
 ///
+/// Cualquier `401` del servidor cierra la sesión y avisa en
+/// [sesionRechazada] (contrato, "Qué hacen las apps").
+///
 /// OJO, lo que falta del lado del servidor antes de poder usarla:
-///   · `POST /api/v1/registro` pide la póliza como obligatoria
-///     (`policy_number`, `insurer`, `policy_start_date`). Según
-///     `arquitectura-cuentas-vivo.md` la cuenta base va sin póliza y
-///     vincularla es un paso aparte: hay que volverlos opcionales.
-///   · Pide también `usuario_id`. Lo debería generar el servidor; hasta
-///     entonces se manda uno armado acá.
+///   · La póliza del registro se ignora: va aparte, con `polizas/vincular`.
 ///   · No existe el endpoint para recuperar la contraseña.
 ///   · No hay dónde guardar los consentimientos (términos y aseguradora).
 class ServicioSesionApi extends ServicioSesion {
-  ServicioSesionApi({required this.cliente, super.almacen});
+  ServicioSesionApi({required this.cliente, super.almacen}) {
+    cliente.alRechazarToken = _alRechazarToken;
+  }
 
   final ClienteApi cliente;
+
+  /// El servidor rechazó [rechazado]. Si sigue siendo el de la sesión, se
+  /// cierra; si no, es la respuesta tardía de una sesión anterior y la de
+  /// ahora no se toca.
+  Future<void> _alRechazarToken(String rechazado) async {
+    if (cliente.token != rechazado) return;
+    cliente.token = null;
+    await almacen.borrar();
+    sesionRechazada.value++;
+  }
 
   @override
   Future<Sesion?> actual() async {
@@ -309,9 +335,10 @@ class ServicioSesionApi extends ServicioSesion {
   @override
   Future<Sesion> iniciarSesion(String correo, String contrasena) async {
     try {
-      final token = await cliente.iniciarSesion(correo, contrasena);
+      final inicio = await cliente.iniciarSesion(correo, contrasena);
       final sesion = Sesion(
-        token: token,
+        token: inicio.token,
+        usuarioId: inicio.usuarioId,
         correo: correo,
         nombre: nombreDesdeCorreo(correo),
       );
@@ -332,17 +359,17 @@ class ServicioSesionApi extends ServicioSesion {
   @override
   Future<Sesion> registrar(DatosRegistro datos) async {
     try {
-      final token = await cliente.registrar(
+      final inicio = await cliente.registrar(
         correo: datos.correo,
         contrasena: datos.contrasena,
-        usuarioId: 'app-${DateTime.now().microsecondsSinceEpoch}',
         fechaNacimiento: datos.fechaNacimiento,
         numeroPoliza: datos.poliza?.numero,
         aseguradora: datos.poliza?.aseguradora,
         inicioVigencia: datos.poliza?.inicioVigencia,
       );
       final sesion = Sesion(
-        token: token,
+        token: inicio.token,
+        usuarioId: inicio.usuarioId,
         correo: datos.correo,
         nombre: datos.nombre,
         fechaNacimiento: datos.fechaNacimiento,
@@ -369,8 +396,12 @@ class ServicioSesionApi extends ServicioSesion {
     );
   }
 
+  /// Cierra la sesión de este teléfono en el servidor y después borra las
+  /// dos copias locales. Si el servidor no contesta, igual se borran: el
+  /// token queda vivo allá hasta que venza.
   @override
   Future<void> cerrarSesion() async {
+    await cliente.cerrarSesionEnServidor();
     cliente.token = null;
     await super.cerrarSesion();
   }

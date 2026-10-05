@@ -6,9 +6,14 @@ import 'package:http/http.dart' as http;
 ///
 /// Por ahora habla con tres endpoints, los que ya funcionan de punta a
 /// punta:
-///   - `POST /api/v1/registro`  → crea la cuenta y devuelve su token.
-///   - `POST /api/v1/login`     → devuelve el token del usuario.
+///   - `POST /api/v1/registro`  → crea la cuenta y abre una sesión.
+///   - `POST /api/v1/login`     → abre una sesión.
+///   - `POST /api/v1/logout`    → cierra la sesión de este teléfono.
 ///   - `GET  /api/v1/historial` → los puntos acreditados día por día.
+///
+/// Cada login trae un token nuevo que vence a los 30 días sin uso (90 como
+/// máximo). Cualquier `401` con token avisa a [alRechazarToken]: la sesión
+/// venció o la cerraron desde otro lado, y hay que volver a entrar.
 ///
 /// Todavía NO lo usa ninguna pantalla del producto: la app sigue leyendo
 /// del mock (ver `fuente_datos.dart`). Lo que devuelve el historial del
@@ -32,8 +37,16 @@ class ClienteApi {
   /// (CLAUDE.md, "Token en almacenamiento seguro").
   String? token;
 
-  /// Pide el token con usuario y contraseña, y lo guarda en [token].
-  Future<String> iniciarSesion(String usuario, String contrasena) async {
+  /// Se llama cuando el servidor rechaza un token con `401`, con el token
+  /// que se mandó. Quien la recibe decide si cerrar la sesión: puede que
+  /// ya haya entrado de nuevo con otro token mientras esta llamada volvía.
+  void Function(String tokenRechazado)? alRechazarToken;
+
+  /// Abre una sesión con usuario y contraseña, y guarda el token en [token].
+  Future<InicioDeSesion> iniciarSesion(
+    String usuario,
+    String contrasena,
+  ) async {
     final respuesta = await _http.post(
       Uri.parse('$baseUrl/api/v1/login'),
       headers: {'Content-Type': 'application/json'},
@@ -45,8 +58,32 @@ class ClienteApi {
         'No se pudo iniciar sesión. Revisa el usuario y la contraseña.',
       );
     }
-    final json = jsonDecode(respuesta.body) as Map<String, dynamic>;
-    return token = json['token'] as String;
+    final inicio = InicioDeSesion.desdeJson(
+      jsonDecode(respuesta.body) as Map<String, dynamic>,
+    );
+    token = inicio.token;
+    return inicio;
+  }
+
+  /// Cierra la sesión de este teléfono en el servidor (los demás siguen).
+  ///
+  /// Nunca falla hacia afuera y no espera más de unos segundos: cerrar
+  /// sesión no puede quedar trabado por la red. Si no llega, el token sigue
+  /// vivo en el servidor hasta que venza. Devuelve si el servidor lo cerró.
+  Future<bool> cerrarSesionEnServidor() async {
+    final token = this.token;
+    if (token == null) return false;
+    try {
+      final respuesta = await _http
+          .post(
+            Uri.parse('$baseUrl/api/v1/logout'),
+            headers: {'Authorization': 'Token $token'},
+          )
+          .timeout(const Duration(seconds: 5));
+      return respuesta.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Crea la cuenta y guarda el token que devuelve en [token].
@@ -54,12 +91,11 @@ class ClienteApi {
   /// El correo va como `username`: el backend usa el `User` de Django,
   /// y así el login de después es con el mismo correo.
   ///
-  /// La póliza es opcional acá porque la cuenta base va sin ella, pero
-  /// hoy el servidor la pide obligatoria (ver `ServicioSesionApi`).
-  Future<String> registrar({
+  /// El `usuario_id` lo genera el servidor y llega en la respuesta. La
+  /// póliza va aparte (`polizas/vincular`); el registro hoy la ignora.
+  Future<InicioDeSesion> registrar({
     required String correo,
     required String contrasena,
-    required String usuarioId,
     required DateTime fechaNacimiento,
     String? numeroPoliza,
     String? aseguradora,
@@ -71,7 +107,6 @@ class ClienteApi {
       body: jsonEncode({
         'username': correo,
         'password': contrasena,
-        'usuario_id': usuarioId,
         'birth_date': _soloFecha(fechaNacimiento),
         'policy_number': ?numeroPoliza,
         'insurer': ?aseguradora,
@@ -85,7 +120,9 @@ class ClienteApi {
     if (respuesta.statusCode != 201) {
       throw ErrorApi(respuesta.statusCode, _primerError(cuerpo));
     }
-    return token = cuerpo['token'] as String;
+    final inicio = InicioDeSesion.desdeJson(cuerpo);
+    token = inicio.token;
+    return inicio;
   }
 
   /// El primer mensaje de un 400 de DRF, que llega como
@@ -123,6 +160,7 @@ class ClienteApi {
       uri,
       headers: {'Authorization': 'Token $token'},
     );
+    if (respuesta.statusCode == 401) alRechazarToken?.call(token);
     final cuerpo = respuesta.body.isEmpty
         ? const <String, dynamic>{}
         : jsonDecode(utf8.decode(respuesta.bodyBytes)) as Map<String, dynamic>;
@@ -144,6 +182,22 @@ class ClienteApi {
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+}
+
+/// Lo que devuelven el login y el registro.
+class InicioDeSesion {
+  const InicioDeSesion({required this.token, this.usuarioId});
+
+  final String token;
+
+  /// El nombre público que genera el servidor. Se le pasa a Swift para que
+  /// sepa si entró otra persona. Null solo en cuentas sin perfil.
+  final String? usuarioId;
+
+  factory InicioDeSesion.desdeJson(Map<String, dynamic> j) => InicioDeSesion(
+    token: j['token'] as String,
+    usuarioId: j['usuario_id'] as String?,
+  );
 }
 
 /// Un día del historial de puntos, tal como lo manda el backend.
