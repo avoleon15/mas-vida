@@ -179,6 +179,55 @@ def gastar(usuario, cantidad: int, fecha: date | None = None) -> int:
     return disponible - cantidad
 
 
+def resumen_de_periodo(usuario, desde: date, hasta: date, hoy: date | None = None) -> dict:
+    """Qué pasó con las monedas entre `desde` y `hasta` (inclusive), por la fecha de cada movimiento.
+
+    - ganadas: todo lo acreditado; `por_objetivos` y `por_liga` dicen de dónde, y
+      `otras` es lo que se acreditó a mano. Siempre suman `ganadas`.
+    - gastadas: canjes. vencidas: las que caducaron al cerrar la season.
+      anuladas: lo que se descontó a mano (por ejemplo, el retroactivo denegado).
+
+    Las ganadas llevan la fecha en que se pagaron (el cierre de la semana o de
+    La Liga), no la de la actividad. Las vencidas llevan la fecha en que se
+    asentaron, que es la primera vez que se consultó el saldo después del cierre
+    de la season: antes de contar se asientan las pendientes.
+    """
+    hoy = hoy or hoy_guatemala()
+    with transaction.atomic():
+        _bloquear(usuario)
+        expirar_vencidas(usuario, hoy)
+        filas = list(
+            MonedaLedger.objects.filter(usuario=usuario, fecha__range=(desde, hasta))
+            .values_list("tipo", "cantidad")
+        )
+
+    tipos = MonedaLedger.Tipo
+    totales = {
+        "por_objetivos": 0, "por_liga": 0, "otras": 0,
+        "gastadas": 0, "vencidas": 0, "anuladas": 0,
+    }
+    for tipo, cantidad in filas:
+        if tipo == tipos.OBJETIVO_CUMPLIDO:
+            totales["por_objetivos"] += cantidad
+        elif tipo == tipos.LIGA_MENSUAL:
+            totales["por_liga"] += cantidad
+        elif tipo == tipos.CANJE:
+            totales["gastadas"] -= cantidad
+        elif tipo == tipos.EXPIRACION:
+            totales["vencidas"] -= cantidad
+        elif cantidad > 0:      # ajuste manual a favor
+            totales["otras"] += cantidad
+        else:                   # ajuste manual en contra
+            totales["anuladas"] -= cantidad
+
+    return {
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "ganadas": totales["por_objetivos"] + totales["por_liga"] + totales["otras"],
+        **totales,
+    }
+
+
 def anular_ganadas_antes_de(usuario, corte: date, hoy: date | None = None) -> int:
     """Anula las monedas ganadas antes de `corte` que sigan sin gastar.
 
