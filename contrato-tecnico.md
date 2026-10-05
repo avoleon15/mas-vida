@@ -211,7 +211,10 @@ REST Framework: uno por cuenta, en texto plano y sin tope). Ver
 `services/sesiones.py`.
 
 - **Un token por sesión:** cada login o registro crea uno nuevo. Una cuenta tiene
-  **como mucho 10 sesiones**; al entrar la undécima se cierra la más vieja.
+  **como mucho 10 sesiones**; al entrar la undécima se cierra **la que lleva más tiempo
+  sin usarse** (nunca la que se acaba de abrir). Como Knox no guarda el último uso, se
+  mide por el vencimiento, que cada uso corre; una sesión que ya llegó al tope de 90
+  días (se usó después del día 60) cuenta como usada hace poco.
 - **Vence a los 30 días SIN uso y cada uso lo renueva:** quien abre la app seguido no
   se topa con el vencimiento. El vencimiento se escribe a lo más una vez por minuto.
 - **Tope de 90 días:** aunque se use a diario, a los 90 días de iniciar sesión hay que

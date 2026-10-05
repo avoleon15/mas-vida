@@ -220,19 +220,6 @@ class IniciarSesionTests(APITestCase):
         r = entrar("sinperfil")
         self.assertEqual((r.status_code, r.json()["usuario_id"]), (200, None))
 
-    def test_con_mas_de_10_sesiones_se_cierra_la_mas_vieja(self):
-        claves = [token_de(self.user) for _ in range(sesiones.MAXIMO_DE_SESIONES + 1)]
-        self.assertEqual(AuthToken.objects.filter(user=self.user).count(), sesiones.MAXIMO_DE_SESIONES)
-        self.assertEqual(cliente(claves[0]).get(PERFIL).status_code, 401)
-        self.assertEqual(cliente(claves[1]).get(PERFIL).status_code, 200)
-        self.assertEqual(cliente(claves[-1]).get(PERFIL).status_code, 200)
-
-    def test_el_limite_de_sesiones_no_toca_otras_cuentas(self):
-        beto = cliente(token_de(crear("beto")))
-        for _ in range(sesiones.MAXIMO_DE_SESIONES + 1):
-            token_de(self.user)
-        self.assertEqual(beto.get(PERFIL).status_code, 200)
-
     def test_despues_de_vencer_se_vuelve_a_entrar_con_uno_nuevo(self):
         viejo = entrar().json()["token"]
         with en(dias=31):
@@ -257,6 +244,61 @@ class IniciarSesionTests(APITestCase):
         self.assertEqual(set(datos), {"token", "expiry", "usuario_id", "username"})
         self.assertEqual(datos["usuario_id"], Usuario.objects.get(user__username="nueva@correo.com").usuario_id)
         self.assertEqual(cliente(datos["token"]).get(PERFIL).status_code, 200)
+
+
+class LimiteDeSesionesTests(APITestCase):
+    """Con más de 10 sesiones se cierra la que lleva más tiempo sin usarse; la recién
+    abierta, nunca (ver services/sesiones.py)."""
+
+    def setUp(self):
+        self.user = crear()
+
+    def sesiones_abiertas(self):
+        return AuthToken.objects.filter(user=self.user).count()
+
+    def test_sin_usar_ninguna_se_cierra_la_que_se_abrio_primero(self):
+        claves = [token_de(self.user) for _ in range(sesiones.MAXIMO_DE_SESIONES + 1)]
+        self.assertEqual(self.sesiones_abiertas(), sesiones.MAXIMO_DE_SESIONES)
+        self.assertEqual(cliente(claves[0]).get(PERFIL).status_code, 401)
+        self.assertEqual(cliente(claves[1]).get(PERFIL).status_code, 200)
+        self.assertEqual(cliente(claves[-1]).get(PERFIL).status_code, 200)
+
+    def test_el_telefono_que_se_usa_a_diario_no_se_cierra(self):
+        principal = cliente(token_de(self.user))             # la primera sesión: el de todos los días
+        for dia in range(1, sesiones.MAXIMO_DE_SESIONES):
+            with en(dias=dia):
+                token_de(self.user)                          # otra sesión que nunca se usa
+                principal.get(PERFIL)
+        with en(dias=sesiones.MAXIMO_DE_SESIONES):
+            token_de(self.user)                              # la sesión 11
+            self.assertEqual(principal.get(PERFIL).status_code, 200)
+        self.assertEqual(self.sesiones_abiertas(), sesiones.MAXIMO_DE_SESIONES)
+
+    def test_la_que_llego_al_tope_de_90_dias_cuenta_como_usada_hace_poco(self):
+        # Usada a diario, pasado el día 60 su vencimiento queda fijo en el día 90 y deja
+        # de correrse: por el vencimiento parecería la menos usada, y no lo es.
+        principal = cliente(token_de(self.user))
+        for dia in range(1, 86):
+            with en(dias=dia):
+                principal.get(PERFIL)
+                if dia >= 76:
+                    token_de(self.user)                      # 10 sesiones nuevas que nunca se usan
+        with en(dias=85, horas=1):
+            self.assertEqual(principal.get(PERFIL).status_code, 200)
+        self.assertEqual(self.sesiones_abiertas(), sesiones.MAXIMO_DE_SESIONES)
+
+    def test_la_sesion_recien_abierta_nunca_se_cierra(self):
+        # Diez que no vencen (creadas a mano en el admin) también cuentan como usadas hace poco.
+        for _ in range(sesiones.MAXIMO_DE_SESIONES):
+            AuthToken.objects.create(self.user, expiry=None)
+        self.assertEqual(cliente(token_de(self.user)).get(PERFIL).status_code, 200)
+        self.assertEqual(self.sesiones_abiertas(), sesiones.MAXIMO_DE_SESIONES)
+
+    def test_el_limite_no_toca_otras_cuentas(self):
+        beto = cliente(token_de(crear("beto")))
+        for _ in range(sesiones.MAXIMO_DE_SESIONES + 1):
+            token_de(self.user)
+        self.assertEqual(beto.get(PERFIL).status_code, 200)
 
 
 class CerrarSesionTests(APITestCase):
