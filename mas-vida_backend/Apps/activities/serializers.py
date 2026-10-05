@@ -9,6 +9,7 @@ Dos niveles, como se acordó para la plausibilidad en v1:
   dependa del motor (en SQLite un CHECK roto se ignora en silencio; en
   Postgres tumba el INSERT completo).
 """
+import math
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from rest_framework import serializers
@@ -92,10 +93,24 @@ def sesion_sin_ritmo_cardiaco(s) -> bool:
     return s["fc_promedio"] == 0 and s["fc_maxima"] == 0
 
 
+def duracion_coherente(s) -> bool:
+    """La duración no puede ser mayor que el tiempo entre inicio y fin.
+
+    Puede ser MENOR (las pausas no cuentan), nunca mayor: los puntos de intensidad
+    se calculan con `duracion_min` (30, 60 o 90 minutos) y una app con un error, o
+    quien falsifica, podría mandar 95 minutos para un entrenamiento de 10:00 a
+    10:10. Se tolera hasta el minuto que sobra al redondear un tiempo con segundos
+    (34 min 40 s se manda como 35).
+    """
+    minutos_reales = (s["fin"] - s["inicio"]).total_seconds() / 60
+    return s["duracion_min"] <= math.ceil(minutos_reales)
+
+
 def sesion_plausible(s) -> bool:
     return (
         s["fin"] >= s["inicio"]
         and 0 < s["duracion_min"] <= MAX_MINUTOS_SESION
+        and duracion_coherente(s)
         and BPM_MIN <= s["fc_promedio"] <= BPM_MAX
         and BPM_MIN <= s["fc_maxima"] <= BPM_MAX
         and s["fc_maxima"] >= s["fc_promedio"]

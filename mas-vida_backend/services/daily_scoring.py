@@ -302,12 +302,23 @@ def asentar(usuario, dia: ResultadoDia) -> ResultadoAnual:
     )
 
 
+def acreditado_del_dia(usuario, fecha: date) -> int:
+    """Lo que el ledger tiene acreditado ese día: la suma de todas sus filas de actividad.
+
+    Ya trae el techo diario, el techo anual, los ajustes por datos tardíos y el
+    retroactivo denegado (un día anulado queda en neto 0).
+    """
+    return _suma(Ledger.objects.filter(usuario=usuario, fecha=fecha, tipo__in=TIPOS_DEL_DIA))
+
+
 def guardar_resumen(usuario, dia: ResultadoDia) -> None:
-    """Tabla materializada: se puede borrar y reconstruir, no es fuente de verdad."""
+    """Tabla materializada: se puede borrar y reconstruir, no es fuente de verdad.
+
+    Los puntos son los ACREDITADOS (los del ledger), no los que calculó el día:
+    pasado el techo anual el día puede calcular 200 y acreditar 0, y Progreso tiene
+    que decir lo mismo que Mi Plan. Hay que llamarla DESPUÉS de `asentar`.
+    """
     hubo_sesion = dia.workouts_cantidad > 0
-    # Un día anulado por retroactivo denegado se ve en 0, igual que en el ledger.
-    corte = fecha_corte_sin_retroactivo(usuario)
-    anulado = corte is not None and dia.fecha < corte
     ResumenDiario.objects.update_or_create(
         usuario=usuario,
         fecha=dia.fecha,
@@ -317,7 +328,7 @@ def guardar_resumen(usuario, dia: ResultadoDia) -> None:
             "workouts_duracion_total_min": dia.workouts_duracion_total if hubo_sesion else None,
             "workouts_fc_promedio": dia.workouts_fc_promedio,
             "workouts_fc_maxima": dia.workouts_fc_maxima,
-            "puntos_dia": 0 if anulado else dia.puntos_dia,
+            "puntos_dia": acreditado_del_dia(usuario, dia.fecha),
             **{
                 zona: (dia.ritmo_cardiaco or {}).get(zona)
                 for zona in ("minutos_ligero", "minutos_moderado", "minutos_intenso")
