@@ -246,6 +246,14 @@ class IniciarSesionTests(APITestCase):
         with en(dias=60):
             self.assertEqual(cliente(nuevo).get(PERFIL).status_code, 200)    # 29 días después
 
+    def test_el_registro_ignora_un_token_viejo_en_el_encabezado(self):
+        # Como el login: un token vencido que quedó en la app no impide crear la cuenta.
+        c = cliente("token-que-ya-vencio")
+        r = c.post(REGISTRO, {
+            "username": "nueva@correo.com", "password": CLAVE, "birth_date": "1992-01-01",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+
     def test_contrasena_mala_da_400(self):
         malo = entrar(password="mala")
         self.assertEqual(malo.status_code, 400)

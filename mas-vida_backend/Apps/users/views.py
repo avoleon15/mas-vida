@@ -1,9 +1,9 @@
 from rest_framework import status
 from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
 from rest_framework.fields import DateTimeField
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from services import intentos, sesiones
@@ -13,6 +13,8 @@ from .serializers import RegistroSerializer
 
 
 @api_view(["POST"])
+# Como el login: un token viejo o vencido en el encabezado no impide crear la cuenta.
+@authentication_classes([])
 @permission_classes([AllowAny])
 def registro(request):
     # Cuenta todos los intentos de esa IP, salgan bien o mal.

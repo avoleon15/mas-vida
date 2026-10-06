@@ -162,8 +162,9 @@ campo dentro del JSON.
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
 (credenciales incorrectas en el login). `429` si se pasó el límite de intentos
-(ver "Límite de intentos" abajo). El login no lee el encabezado `Authorization`:
-un token viejo o inválido no impide iniciar sesión.
+(ver "Límite de intentos" abajo). El login y el registro no leen el encabezado
+`Authorization`: un token viejo o inválido no impide iniciar sesión ni crear la
+cuenta.
 
 ### Cerrar sesión: `POST /api/v1/logout` y `POST /api/v1/logout/todos` (A35, 4 oct 2026)
 
