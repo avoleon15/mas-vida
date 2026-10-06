@@ -966,6 +966,11 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   tope de 90; `logout` cierra un teléfono y `logout/todos` todos. La identidad sale
   del token, nunca del body. Swift decide "cambió la cuenta" por el `usuario_id`,
   no por el token (ver `contrato-tecnico.md`, "Autenticación (token)").
+- **Lo que no puede salir al piloto, apagado por defecto (6 oct 2026):** el botón
+  "Acceder por prueba" (`--dart-define=ACCESO_DE_PRUEBA=true` lo prende) y los botones
+  "Continuar con Apple/Google" mientras no existan sus endpoints
+  (`--dart-define=ENTRAR_CON_PROVEEDORES=true`). Las pruebas fallan si alguien los
+  vuelve a prender por defecto. Solo mayores de 18 años (el servidor también lo exige).
 - Fuente de datos: Apple HealthKit únicamente
 - Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación, NO sueño en v1)
 - Distribución piloto: TestFlight, cuenta Apple Developer de organización

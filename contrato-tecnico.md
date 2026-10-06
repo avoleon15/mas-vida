@@ -220,6 +220,12 @@ ofrecerlo si se ofrece Google (guía 4.8).
   del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
   cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
   cuentas distintas).
+- **Mientras no existan los endpoints, la app no muestra los botones** "Continuar con
+  Apple" y "Continuar con Google" (A37, 6 oct 2026; antes se veían y avisaban "Muy
+  pronto"): un botón de Apple que no entra es motivo de rechazo en la App Store, y
+  van los dos o ninguno (guía 4.8). Se prenden con
+  `--dart-define=ENTRAR_CON_PROVEEDORES=true`; el día que Luis los entregue se
+  cambia el valor por defecto en `acceso_screen.dart`.
 - **Desde A35:** el login con Google o Apple abre la sesión con
   `sesiones.iniciar_sesion` (no con el `Token` de DRF) y responde también `expiry` y
   `usuario_id`, como el login con contraseña.

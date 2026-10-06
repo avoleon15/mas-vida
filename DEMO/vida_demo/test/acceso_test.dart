@@ -146,7 +146,11 @@ void main() {
       Sesion? entro;
       await montarPantalla(
         tester,
-        AccesoScreen(servicio: _servicio(), alEntrar: (s) => entro = s),
+        AccesoScreen(
+          servicio: _servicio(),
+          alEntrar: (s) => entro = s,
+          conAccesoDePrueba: true,
+        ),
       );
       expect(find.text('Acceder por prueba'), findsOneWidget);
 
@@ -156,6 +160,57 @@ void main() {
 
       expect(entro, isNotNull);
       expect(entro!.esPrueba, isTrue);
+    });
+
+    // Lo que no puede salir al piloto (revisión del 6 de octubre): un usuario real
+    // que entra por "Acceder por prueba" no tiene fecha de nacimiento ni términos
+    // aceptados, y un botón de Apple que no entra es motivo de rechazo.
+    test(
+      'por defecto no se muestran ni el acceso de prueba ni Apple y Google',
+      () {
+        expect(mostrarAccesoDePrueba, isFalse);
+        expect(mostrarEntrarConProveedores, isFalse);
+      },
+    );
+
+    testWidgets('la pantalla de acceso no muestra nada de eso por defecto', (
+      tester,
+    ) async {
+      await montarPantalla(
+        tester,
+        AccesoScreen(servicio: _servicio(), alEntrar: (_) {}),
+      );
+
+      expect(find.text('Acceder por prueba'), findsNothing);
+      expect(find.byKey(llaveAccesoPrueba), findsNothing);
+      expect(find.byKey(llaveEntrarConApple), findsNothing);
+      expect(find.byKey(llaveEntrarConGoogle), findsNothing);
+      expect(find.textContaining('Apple'), findsNothing);
+      expect(find.textContaining('Google'), findsNothing);
+      // Lo que sí está: el formulario y crear la cuenta.
+      expect(find.byKey(llaveEntrar), findsOneWidget);
+      expect(find.byKey(llaveCrearCuenta), findsOneWidget);
+    });
+
+    testWidgets('con los proveedores prendidos se ven y avisan "Muy pronto"', (
+      tester,
+    ) async {
+      await montarPantalla(
+        tester,
+        AccesoScreen(
+          servicio: _servicio(),
+          alEntrar: (_) {},
+          conProveedores: true,
+        ),
+      );
+
+      expect(find.byKey(llaveEntrarConApple), findsOneWidget);
+      expect(find.byKey(llaveEntrarConGoogle), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(llaveEntrarConApple));
+      await tester.tap(find.byKey(llaveEntrarConApple));
+      await tester.pumpAndSettle();
+      expect(find.text('Muy pronto'), findsOneWidget);
     });
 
     testWidgets('"Entrar" se apaga hasta tener correo y contraseña', (
