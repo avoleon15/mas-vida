@@ -134,8 +134,10 @@ REST_KNOX = {
     # Cada uso corre el vencimiento, sin pasar del tope.
     "AUTO_REFRESH": True,
     "AUTO_REFRESH_MAX_TTL": timedelta(days=DIAS_MAXIMOS_DE_SESION),
-    # El vencimiento se escribe en la base a lo más una vez por minuto.
-    "MIN_REFRESH_INTERVAL": 60,
+    # El vencimiento se escribe en la base a lo más una vez por hora (decidido el 5 oct
+    # 2026, como lo tenía Luis antes de A35): sobre 30 días, una hora no se nota y la
+    # base se escribe mucho menos.
+    "MIN_REFRESH_INTERVAL": 3600,
     # Sin TOKEN_LIMIT_PER_USER: con el límite lleno, Knox rechaza el login (403) y la
     # persona queda afuera. Las sesiones de más se borran al entrar (sesiones.py).
 }

@@ -94,17 +94,17 @@ class VidaDelTokenTests(APITestCase):
         with en(dias=90, minutos=1):
             self.assertEqual(self.c.get(PERFIL).status_code, 401)
 
-    def test_el_vencimiento_se_escribe_a_lo_mas_una_vez_por_minuto(self):
+    def test_el_vencimiento_se_escribe_a_lo_mas_una_vez_por_hora(self):
         token = AuthToken.objects.get(user=self.user)
         with en(dias=1):
             self.c.get(PERFIL)
         token.refresh_from_db()
         primero = token.expiry
-        with en(dias=1, minutos=0.5):
+        with en(dias=1, minutos=50):
             self.c.get(PERFIL)
         token.refresh_from_db()
         self.assertEqual(token.expiry, primero)
-        with en(dias=1, minutos=2):
+        with en(dias=1, horas=2):
             self.c.get(PERFIL)
         token.refresh_from_db()
         self.assertGreater(token.expiry, primero)
@@ -405,6 +405,7 @@ class DiasDeVidaDeEntornoTests(TestCase):
         self.assertEqual(settings.REST_KNOX["TOKEN_TTL"], timedelta(days=settings.DIAS_DE_VIDA_DEL_TOKEN))
         self.assertEqual(settings.REST_KNOX["AUTO_REFRESH_MAX_TTL"], timedelta(days=90))
         self.assertTrue(settings.REST_KNOX["AUTO_REFRESH"])
+        self.assertEqual(settings.REST_KNOX["MIN_REFRESH_INTERVAL"], 3600)       # una hora
         self.assertNotIn("TOKEN_LIMIT_PER_USER", settings.REST_KNOX)
 
 
