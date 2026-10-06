@@ -5,7 +5,8 @@ Reglas (CLAUDE.md y contrato-tecnico.md):
   compra queda bloqueada.
 - Canjear descuenta las monedas y crea el cupón en la MISMA transacción: nunca
   queda un descuento sin cupón ni un cupón sin descuento.
-- Un cupón canjeado caduca a los 60 días del canje, aparte de las monedas.
+- Un cupón dura 3 semanas (21 días) desde que se canjea o se gana, aparte de las
+  monedas (decidido el 4 oct 2026; antes eran 60 días).
 - El estado `vencido` no se guarda: se calcula de la fecha de vencimiento, así
   no hace falta ningún proceso que lo marque.
 """
@@ -19,7 +20,9 @@ from Apps.coins.models import Canje, Patrocinio, Premio
 from services import monedas, polizas
 from services.tiempo import hoy as hoy_guatemala
 
-DIAS_DE_UN_CUPON = 60
+# 3 semanas, igual para el que se canjea con monedas y para el que se gana de un
+# patrocinio. Los cupones ya emitidos conservan su fecha: solo cambia el de ahora en adelante.
+DIAS_DE_UN_CUPON = 21
 
 ACTIVO = "activo"
 USADO = "usado"

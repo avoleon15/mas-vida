@@ -245,8 +245,8 @@ class CanjearTests(_ConToken, APITestCase):
         self.assertEqual(cupon["estado"], "activo")
         self.assertEqual(cupon["costo_monedas"], 40)
         self.assertEqual(cupon["canjeado"], hoy().isoformat())
-        self.assertEqual(cupon["vence"], (hoy() + timedelta(days=60)).isoformat())
-        self.assertEqual(cupon["dias_para_vencer"], 60)
+        self.assertEqual(cupon["vence"], (hoy() + timedelta(days=21)).isoformat())
+        self.assertEqual(cupon["dias_para_vencer"], 21)
         self.assertIsNone(cupon["usado_el"])
 
         fila = MonedaLedger.objects.get(usuario=self.usuario, tipo=MonedaLedger.Tipo.CANJE)
