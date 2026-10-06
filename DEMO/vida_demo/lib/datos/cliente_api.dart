@@ -18,7 +18,7 @@ import 'package:http/http.dart' as http;
 /// Todavía NO lo usa ninguna pantalla del producto: la app sigue leyendo
 /// del mock (ver `fuente_datos.dart`). Lo que devuelve el historial del
 /// backend es una lista de días con sus puntos, y el `Historial` que
-/// dibujan las pantallas trae además semanas, entrenamientos y racha;
+/// dibujan las pantallas trae además semanas y entrenamientos;
 /// hasta que esa forma se acuerde con Luis, esto se prueba desde
 /// `lib/debug/prueba_historial.dart`.
 class ClienteApi {

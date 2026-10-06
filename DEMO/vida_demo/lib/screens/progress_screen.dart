@@ -33,11 +33,12 @@ import '../widgets/tarjeta_puntos.dart';
 // El número del período y las barras de actividad, que eran dos tarjetas
 // distintas diciendo lo mismo, ahora son una sola: `TarjetaPuntos`.
 //
-// Y con ellas se fue la racha (21 de septiembre de 2026), que se ve en
-// Hoy y en Social. Lo que queda es UNA idea por pantalla: cuánto hiciste
-// en el período que elegiste. Todo lo que hay debajo del selector —el
-// número, la gráfica de pasos y tu actividad— cambia cuando cambia el
-// filtro. Nada más se queda quieto ahí ocupando lugar.
+// Y con ellas se fue la racha (21 de septiembre de 2026; desde el 6 de
+// octubre ya no existe en ninguna pantalla). Lo que queda es UNA idea por
+// pantalla: cuánto hiciste en el período que elegiste. Todo lo que hay
+// debajo del selector —el número, la gráfica de pasos y tu actividad—
+// cambia cuando cambia el filtro. Nada más se queda quieto ahí ocupando
+// lugar.
 // ============================================================
 
 class ProgressScreen extends StatefulWidget {
@@ -102,14 +103,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
                             ],
 
                             // LA RACHA SE FUE DE ACÁ (decisión de Daniel,
-                            // 21 de septiembre de 2026). Vive en Hoy —en
-                            // el saludo— y en Social, con la alerta de
-                            // racha en riesgo. Entera y con su historial
-                            // de ocho semanas era la tarjeta más alta de
-                            // la pantalla, y empujaba hasta abajo del
-                            // todo lo que esta pantalla sí tiene que
-                            // contar: el progreso del período que se
-                            // está mirando.
+                            // 21 de septiembre de 2026) y después de toda
+                            // la app (Hoy el 2 de octubre; Perfil y
+                            // Récords el 6). Con su historial de ocho
+                            // semanas era la tarjeta más alta de la
+                            // pantalla, y empujaba hasta abajo del todo
+                            // lo que esta pantalla sí tiene que contar:
+                            // el progreso del período que se está
+                            // mirando.
 
                             // La actividad del período, que ahora SÍ
                             // cambia con el filtro: antes existía solo en

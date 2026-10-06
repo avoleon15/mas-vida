@@ -895,9 +895,9 @@ class _PasoEdad extends StatelessWidget {
         ),
         const _Separador(),
         _Renglon(
-          icono: _icono(CupertinoIcons.person_3),
-          titulo: 'Tu liga',
-          detalle: 'En La Liga compites con gente de tu edad.',
+          icono: _icono(CupertinoIcons.flag),
+          titulo: 'Tu meta de pasos',
+          detalle: 'Tu meta semanal de pasos depende de tu edad.',
         ),
         const _Separador(),
         _Renglon(

@@ -27,7 +27,7 @@ import 'cliente_api.dart';
 ///
 /// Se guarda con la sesión para saber QUÉ texto aceptó cada quien: el
 /// día que cambie, hay que volver a pedirlo.
-const String versionTerminos = '2026-09-30';
+const String versionTerminos = '2026-10-06';
 
 /// El usuario que entró.
 class Sesion {

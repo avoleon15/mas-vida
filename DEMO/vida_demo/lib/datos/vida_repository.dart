@@ -14,7 +14,7 @@ abstract class VidaRepository {
   /// Ventana reciente de días con sus puntos ya calculados.
   Future<Historial> historial();
 
-  /// Acumulado anual, nivel, cashback, racha, retos y monedas.
+  /// Acumulado anual, nivel, cashback, retos y monedas.
   Future<ResumenAnual> resumenAnual();
 
   /// Catálogo de premios canjeables con monedas.

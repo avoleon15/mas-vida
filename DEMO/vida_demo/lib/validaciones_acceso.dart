@@ -8,9 +8,13 @@
 
 /// Edad mínima para abrir una cuenta.
 ///
-/// [PENDIENTE: confirmar con la aseguradora y con legal. Se puso 18
-/// porque aceptar los términos y el consentimiento de datos de salud es
-/// un contrato, y un menor no lo puede firmar solo.]
+/// Decidido el 6 de octubre de 2026: la app es solo para mayores de 18,
+/// porque aceptar los términos y el consentimiento de datos de salud es un
+/// contrato, y un menor no lo puede firmar solo. El servidor también lo
+/// exige (`services/edad.py`).
+///
+/// [PENDIENTE: que legal y la aseguradora lo confirmen. No cambia el
+/// código.]
 const int edadMinima = 18;
 
 /// Un correo con forma de correo. No verifica que exista: eso lo hace el

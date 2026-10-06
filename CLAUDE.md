@@ -279,10 +279,14 @@ fueguito 🔥 bajo el saludo. Antes (22 de septiembre) se habían quitado las
 recompensas por constancia y quedaba solo esa línea como motivación.
 
 La tarjeta de racha con su historial de 8 semanas (una casilla por semana:
-cumplido o no) ya había salido de Progreso el 21 de septiembre; el widget
-(`tarjeta_racha.dart`) quedó sin uso. [PENDIENTE: la racha todavía aparece en
-Perfil y en Récords. La reunión solo habló de Hoy: decidir si sale también de
-ahí.]
+cumplido o no) ya había salido de Progreso el 21 de septiembre.
+
+**Decidido el 6 de octubre de 2026: la racha sale de toda la app.** Se quitaron
+el interruptor "Racha en riesgo" de Perfil, la tarjeta "Tu racha más larga" de
+Récords, los campos `racha_semanas` y `racha_historial` del modelo
+`ResumenAnual` y de los datos de ejemplo. El servidor nunca los mandó, así que con
+la API real el modelo viejo no habría podido leer el resumen. Ya no hay ningún
+aviso de "racha en riesgo": el único aviso de Perfil es el recordatorio diario.
 
 ## Anti-fraude
 
@@ -962,6 +966,11 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   tope de 90; `logout` cierra un teléfono y `logout/todos` todos. La identidad sale
   del token, nunca del body. Swift decide "cambió la cuenta" por el `usuario_id`,
   no por el token (ver `contrato-tecnico.md`, "Autenticación (token)").
+- **Lo que no puede salir al piloto, apagado por defecto (6 oct 2026):** el botón
+  "Acceder por prueba" (`--dart-define=ACCESO_DE_PRUEBA=true` lo prende) y los botones
+  "Continuar con Apple/Google" mientras no existan sus endpoints
+  (`--dart-define=ENTRAR_CON_PROVEEDORES=true`). Las pruebas fallan si alguien los
+  vuelve a prender por defecto. Solo mayores de 18 años (el servidor también lo exige).
 - Fuente de datos: Apple HealthKit únicamente
 - Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación, NO sueño en v1)
 - Distribución piloto: TestFlight, cuenta Apple Developer de organización

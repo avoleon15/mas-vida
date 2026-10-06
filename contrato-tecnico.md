@@ -166,8 +166,17 @@ campo dentro del JSON.
   `actualizarSesion` para que sepa si cambió la persona. Es `null` solo en una cuenta
   sin perfil (las que crea el admin), que no usa la app.
 
+**Solo mayores de 18 años** (decidido el 6 oct 2026, hecho en A37): el registro acepta
+fechas de nacimiento de **18 a 120 años**, contados con el día de Guatemala. Quien
+cumple 18 hoy puede registrarse; quien los cumple mañana, no. La regla vive en
+`services/edad.py` y la app ya la aplicaba en el selector de fecha
+(`edadMinima = 18`); ahora el servidor también la exige, para que no se salte
+llamando a la API directo. **[PENDIENTE]** que legal y la aseguradora confirmen los
+18 (no cambia el código).
+
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
-contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
+contraseña débil, fecha de nacimiento futura, menor de 18 o mayor de 120 años) o
+`{ "non_field_errors": [...] }`
 (credenciales incorrectas en el login). `429` si se pasó el límite de intentos
 (ver "Límite de intentos" abajo). El login y el registro no leen el encabezado
 `Authorization`: un token viejo o inválido no impide iniciar sesión ni crear la
@@ -203,13 +212,20 @@ ofrecerlo si se ofrece Google (guía 4.8).
   mismo `sync`.
 - Ni Google ni Apple entregan la fecha de nacimiento. La primera vez se pide en
   un paso aparte y **sin ella no se crea la cuenta**: la edad decide la FCmáx,
-  el bono 60+ y la meta semanal de pasos.
+  el bono 60+ y la meta semanal de pasos. **Esa fecha pasa por la misma regla de
+  18 a 120 años** (`services/edad.py`, `problema_con_la_fecha_de_nacimiento`).
 - Apple puede ocultar el correo real (entrega uno de reenvío).
 - **[PENDIENTE] (Luis y Daniel):** la forma de los endpoints (propuesta:
   `POST /api/v1/login/google` y `POST /api/v1/login/apple` con la credencial
   del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
   cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
   cuentas distintas).
+- **Mientras no existan los endpoints, la app no muestra los botones** "Continuar con
+  Apple" y "Continuar con Google" (A37, 6 oct 2026; antes se veían y avisaban "Muy
+  pronto"): un botón de Apple que no entra es motivo de rechazo en la App Store, y
+  van los dos o ninguno (guía 4.8). Se prenden con
+  `--dart-define=ENTRAR_CON_PROVEEDORES=true`; el día que Luis los entregue se
+  cambia el valor por defecto en `acceso_screen.dart`.
 - **Desde A35:** el login con Google o Apple abre la sesión con
   `sesiones.iniciar_sesion` (no con el `Token` de DRF) y responde también `expiry` y
   `usuario_id`, como el login con contraseña.
@@ -2451,6 +2467,34 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 
 ## Puntos abiertos
 
+*De la revisión completa (6 oct 2026):*
+
+- **Contraseñas de `data.json` — [PENDIENTE] (Luis, en curso):** el archivo ya no
+  está en el repo (A37) pero **sigue en el historial de git** con los hashes de
+  `luigi` (superusuario) y `testuser`. Luis está cambiando esas contraseñas donde
+  existan las cuentas. Reescribir el historial queda fuera: obligaría a todo el
+  equipo a volver a clonar.
+- **Piloto con base simulada de la aseguradora (decidido 6 oct):** los usuarios del
+  piloto los creamos nosotros; una parte grande con póliza verificada (simulada) y
+  otra sin póliza, para probar los dos casos. **Falta:** un comando que cree ese grupo
+  (con contraseñas distintas, que se niegue a correr en el servidor real; reemplaza a
+  `sembrar_prueba`, que crea una cuenta con contraseña fija) y el estado "sin póliza"
+  en la app (Premios con candado y Mi Plan con "Ingresa tu póliza").
+- **Login con correo o con usuario — [PENDIENTE]:** hoy la app manda el correo como
+  `username`. Aceptar las dos formas exige guardar el correo aparte, único y sin
+  distinguir mayúsculas ("Ana@" y "ana@" hoy son cuentas distintas). Para el piloto lo
+  más simple es solo correo.
+- **Límite de 2,5 MB del sync — [PENDIENTE]:** un día de más de ~8.000 muestras
+  responde 400 en HTML y Swift lo toma como permanente (pierde ese día y frena los
+  siguientes). Opciones: subir el límite a 10 MB con un tope de muestras y un 413 claro
+  (recomendada), partir el envío en Swift, o mandar menos datos.
+- **Plausibilidad anti-fraude — [PENDIENTE]:** una lectura de ritmo cardíaco de 95
+  minutos o una sesión que no cuadra con su duración dan 150 puntos de intensidad. El
+  techo de 200 puntos al día limita el daño; volver a verlo antes de usuarios reales.
+- **Servidor del piloto — [PENDIENTE]:** dónde vive el backend, su dominio y HTTPS; con
+  eso la URL deja de estar fija en `http://192.168.1.21:8000` (Swift). Va junto con el
+  bundle ID de más abajo.
+
 *Del 3 oct (sincronización):*
 
 - **Identificador definitivo de la app (*bundle ID*):** hoy es
@@ -2469,9 +2513,14 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 - **Monedas de La Liga — resuelto (3 oct):** van a los 3 primeros, como ya
   decían los términos y `CLAUDE.md`. Quedan abiertos cuántas monedas da cada
   puesto y qué pasa con un empate total (ver "La Liga y Tus Ligas").
-- **Textos de los términos:** dicen que los demás ven "tu nombre y tu posición"
-  (desde el 2 oct también ven los puntos) y "4 temporadas de 13 semanas" (la
-  season 4 de 2026 tiene 14).
+- ~~Textos de los términos~~ — **corregidos el 6 oct (A37)**: ya no hablan de grupos
+  de edad en La Liga ni de "prioridad del reloj" (los pasos se eligen por hora);
+  dicen que los demás ven nombre público, posición y puntos (nunca pasos), "4
+  temporadas de 13 semanas; en los años con 53 semanas, la última tiene 14", y
+  cupones de 3 semanas. El registro dejó de prometer "compites con gente de tu
+  edad" y la hoja de monedas de decir que hay que cumplir los dos objetivos (cada
+  uno paga por separado). La versión del texto es del 6 oct 2026
+  (`versionTerminos`). **Sigue [PENDIENTE]** la revisión legal del texto completo.
 
 *De la reunión del 2 oct:*
 
