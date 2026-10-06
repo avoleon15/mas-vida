@@ -4,6 +4,12 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 6 oct 2026** (ciclos, monedas y cupones): el podio de La Liga se
+**paga el día 9** (el mes se sigue cerrando el día 2) para que las monedas y el cupón
+caigan en la season siguiente, y los **cupones duran 3 semanas (21 días)**, los
+canjeados y los ganados. La app dice "tus monedas llegan el día 9". Ver "Cierre de La
+Liga", "Monedas y seasons" y "Patrocinios".
+
 **Actualizado el 3 oct 2026** (cierre semanal): la semana se cierra el **martes
 00:00**, no el lunes: los datos atrasados del domingo tienen **todo el lunes**
 para llegar (como StepBet, 24 h). Ya está en el código (A34). El objetivo de la
@@ -845,7 +851,8 @@ vieja de trimestres.
   lugar se avisa **7 días antes** de que termine la season.
 - Sin póliza verificada se ganan igual pero no se pueden gastar, y al cerrar la
   season se reinician como las demás.
-- Los **cupones ya canjeados** no cambian: caducan a los 60 días del canje.
+- Los **cupones ya canjeados** no cambian con las seasons y caducan aparte, a las **3 semanas** del
+  canje (21 días; hasta el 5 oct eran 60).
 
 **Hecho en el código (2 oct):** `services/monedas.py`.
 
@@ -1031,10 +1038,15 @@ que ejecuta `python manage.py programador`:
   corrida siguiente.
 - **Martes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
 - **Día 2 de cada mes, 00:00** → cierre de La Liga del mes anterior (ver
-  "Endpoints de La Liga y Tus Ligas"). El día 1 entero es margen de gracia,
-  igual que el lunes para la semana. Si el día 2 es martes no hay corrida
-  aparte: la hace el cierre semanal de esa hora. Al arrancar, el programador
-  también cierra los meses que hayan quedado pendientes.
+  "Endpoints de La Liga y Tus Ligas"): tabla final y lo que gana cada uno, sin
+  pagar. El día 1 entero es margen de gracia, igual que el lunes para la semana.
+- **Día 9 de cada mes, 00:00** → pago del podio (`pago_liga`, 6 oct 2026): las monedas
+  y el cupón de La Liga. Si el día 2 o el 9 es martes no hay corrida aparte: la
+  hace el cierre semanal de esa hora, que también cierra y paga La Liga. Al
+  arrancar, el programador también cierra y paga los meses que hayan quedado
+  pendientes (si el servidor estuvo apagado el día 2, el pago cierra primero el
+  mes). El programador no agenda nada antes del primer mes de La Liga (octubre
+  de 2026).
 - Siempre **hora de Guatemala**, sin importar en qué zona esté el servidor.
 - Si una corrida falla (por ejemplo la base de datos caída un momento) reintenta
   cada 5 minutos, hasta 12 veces, y nunca se cae por un error. Si el servidor
@@ -1105,8 +1117,10 @@ toca el contrato.
   (4 oct):** ver "Patrocinios".
 - **Premio: monedas a los 3 primeros** del mes (decidido 3 oct 2026; reemplaza
   los premios por percentil). Nadie más gana monedas en La Liga. El servidor
-  calcula la posición **una sola vez, al cierre del mes**, con el desempate de
-  arriba, y paga las monedas en ese momento.
+  calcula la posición **una sola vez, al cierre del mes** (día 2), con el desempate
+  de arriba, y **paga las monedas el día 9** (6 oct 2026; antes se pagaban al cerrar).
+  Lo que gana cada uno se fija al cerrar: si se editan los montos del admin entre el
+  2 y el 9, se paga lo ya fijado.
   - **Cuántas monedas a cada puesto (1.º, 2.º, 3.º): [PENDIENTE] (Diego).**
     Mientras tanto el código paga **30, 20 y 10** (provisional, 3 oct),
     editables en el admin (tabla `PremioPodioLiga`).
@@ -1205,12 +1219,24 @@ servicio `programador` cierra el mes anterior. **Margen de gracia (3 oct
 día del mes (lo caminado el 31 y sincronizado el 1 todavía cuenta para el
 podio), con el mismo `goals.DIAS_DE_GRACIA` que el cierre semanal del martes.
 Guarda la tabla final de todos los participantes (`DesgloseLigaMensual`, con
-puntos, pasos, workouts, posición y monedas) y paga el podio con monedas
-`liga_mensual` fechadas ese día 2 (cuentan en la season de ese día). Una sola
-vez por mes; un mes cerrado no se reabre. Participan los usuarios con póliza
+puntos, pasos, workouts, posición y las monedas que le tocan) **sin pagar**. Una
+sola vez por mes; un mes cerrado no se reabre. Participan los usuarios con póliza
 verificada **al momento del cierre**. El primer cierre es el **2 nov 2026**
-(octubre); los meses anteriores nunca se cierran. A mano:
-`python manage.py cerrar_liga [--mes AAAA-MM]`.
+(octubre); los meses anteriores nunca se cierran.
+
+**Pago del podio (6 oct 2026).** El **día 9 a las 00:00** el programador paga lo que
+se fijó al cerrar: monedas `liga_mensual` fechadas ese día 9 y, si el mes tiene
+patrocinio, el cupón (ver "Patrocinios"). Una sola vez por mes (`LigaMensual.pagada_en`);
+pagar un mes que no está cerrado o antes del día 9 no hace nada. **Por qué el 9:** las
+seasons arrancan un lunes entre el 28 de sep y el 4 de oct (y análogo en enero, abril y
+julio); lo pagado el día 2 podía caer en la season que estaba por terminar y vencer a
+los pocos días (en 2027, por ejemplo, octubre arranca el día 4). El día 9 siempre es de
+la season nueva, así que lo ganado dura casi toda. Las monedas ganadas por el podio
+cuentan en la season del día en que se pagan, también si el pago se atrasa.
+**Dar a la app:** la app dice "tus monedas llegan el día 9" (texto fijo; el servidor no
+manda la fecha). Entre el 2 y el 9 la tabla ya es la final.
+
+A mano: `python manage.py cerrar_liga [--mes AAAA-MM]` cierra y, desde el día 9, paga.
 
 ---
 
@@ -2220,7 +2246,7 @@ días; fuera de eso `400`).
   `anuladas`, lo que se descontó a mano (por ejemplo, el retroactivo denegado).
   Todo en positivo.
 - **Cada movimiento cuenta en su fecha**, no en la de la actividad: las ganadas,
-  cuando se pagaron (el cierre del martes o el del día 2 de La Liga); las
+  cuando se pagaron (el cierre del martes o el pago del día 9 de La Liga); las
   vencidas, cuando se asentaron, que es la primera vez que se pidió el saldo
   después del cierre de la season. Antes de contar se asientan las pendientes,
   igual que en `monedas/saldo`.
@@ -2270,8 +2296,8 @@ el cupón y el saldo que queda:
 
 - El descuento (una fila `canje` negativa en el ledger) y el cupón se escriben
   **en la misma transacción**: nunca queda uno sin el otro.
-- El cupón **caduca a los 60 días** del canje (hora de Guatemala), aparte de
-  las monedas. El código es único, con la forma `MV-XXXX-XXXX` (sin 0, O, 1, I
+- El cupón **caduca a las 3 semanas** (21 días) del canje (hora de Guatemala),
+  aparte de las monedas. Los cupones ya emitidos conservan la fecha que tenían. El código es único, con la forma `MV-XXXX-XXXX` (sin 0, O, 1, I
   ni L, para que se lea y se teclee bien en caja).
 - Se puede canjear el mismo premio más de una vez; cada canje es otro cupón.
 - Un premio con costo 0 (promoción gratis) se canjea igual, sin mover el ledger.
@@ -2402,20 +2428,20 @@ ellas). Los crea el servidor al cerrar el ciclo y aparecen en
 - **Semana patrocinada:** al cierre del martes 00:00, quien **completó** la
   semana (los dos componentes) gana el cupón. Con un solo componente cumplido
   cobra sus monedas pero no el cupón. `ganado_en` = "Semana 7".
-- **La Liga patrocinada:** al cierre del día 2, los que ganan monedas (el podio,
-  con al menos 1 punto) ganan el cupón. `ganado_en` = "La Liga de octubre".
-- **Hace falta póliza verificada al momento del cierre** (decidido 4 oct): un
+- **La Liga patrocinada:** el día 9, al pagar el podio (antes, al cerrar el día 2), los
+  que ganan monedas (el podio, con al menos 1 punto) ganan el cupón. `ganado_en` = "La Liga de octubre".
+- **Hace falta póliza verificada al momento de ganarlo** (decidido 4 oct; en La Liga, al pagar el día 9, no al cerrar): un
   cupón es un premio, y todo premio exige póliza. Sin ella las monedas se
   ganan igual, pero el cupón no. Tampoco se da por una semana anterior a la
   verificación si se denegó el retroactivo.
 - **Un patrocinio da un solo cupón por persona**: correr el cierre dos veces,
   o la corrección de las 12:00, no duplica.
-- El cupón caduca a los **60 días** de ganado (igual que uno canjeado), no
+- El cupón caduca a las **3 semanas** (21 días) de ganado (igual que uno canjeado), no
   cuesta monedas (`costo_monedas` en `null`) y su `beneficio` es el texto del
   cupón del patrocinio, no el del premio del catálogo. Si un patrocinio se
   carga o se apaga **después** del cierre, no se premia hacia atrás.
-- Los resúmenes de `cerrar_semana` y `cerrar_liga` traen `cupones`: cuántos se
-  entregaron.
+- Los resúmenes de `cerrar_semana` y de `pagar_la_liga` traen `cupones`: cuántos se
+  entregaron (el cierre de La Liga ya no trae `monedas_pagadas`, sino `monedas_por_pagar`).
 
 **[PENDIENTE]:** Diego define los comercios, los textos de cupón y las fotos
 de cada marca (las del mock son de ejemplo). Qué pasa con el cupón de quien
@@ -2493,7 +2519,7 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
   sin uso: decidir si se borra. El código de invitación se valida único al
   crearlo, pero la columna todavía no tiene restricción `unique` en la base.
 - ~~Cupones que se ganan (semanas y podios patrocinados)~~ — **hecho** (4 oct):
-  los crean el cierre semanal y el cierre de La Liga (ver "Patrocinios").
+  los crean el cierre semanal y el pago del podio de La Liga (ver "Patrocinios").
 - **Quién marca un cupón como usado:** hoy solo se hace a mano en el admin
   (acción "Marcar como usado"). Falta decidir si el comercio lo marca (por
   ejemplo con un endpoint que reciba el código) o si basta con que venza.
