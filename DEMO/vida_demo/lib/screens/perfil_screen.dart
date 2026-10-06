@@ -35,7 +35,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
   // Preferencias locales. Hoy viven solo en memoria: no hay backend de
   // preferencias todavía y no se inventa persistencia.
   bool _recordatorioDiario = true;
-  bool _avisoRacha = true;
   bool _compartirConAseguradora = true;
 
   @override
@@ -190,15 +189,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
                           valor: _recordatorioDiario,
                           onChanged: (v) =>
                               setState(() => _recordatorioDiario = v),
-                        ),
-                        const _Separador(),
-                        _FilaSwitch(
-                          titulo: 'Racha en riesgo',
-                          nota:
-                              'Te avisamos el domingo si tu racha está por '
-                              'cortarse',
-                          valor: _avisoRacha,
-                          onChanged: (v) => setState(() => _avisoRacha = v),
                         ),
                       ],
                     ),

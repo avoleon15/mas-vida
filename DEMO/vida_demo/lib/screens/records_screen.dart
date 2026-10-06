@@ -183,27 +183,6 @@ class RecordsScreen extends StatelessWidget {
       );
     }
 
-    // La racha más larga que se ve en el historial de semanas.
-    final resumen = Datos.i.resumen;
-    var mejorRacha = 0;
-    var corriendo = 0;
-    for (final cumplida in resumen.rachaHistorial) {
-      corriendo = cumplida ? corriendo + 1 : 0;
-      if (corriendo > mejorRacha) mejorRacha = corriendo;
-    }
-    if (resumen.rachaSemanas > mejorRacha) mejorRacha = resumen.rachaSemanas;
-
-    marcas.add(
-      _Marca(
-        valor: '$mejorRacha',
-        unidad: mejorRacha == 1 ? 'semana' : 'semanas',
-        titulo: 'Tu racha más larga',
-        detalle: resumen.rachaSemanas == mejorRacha
-            ? 'la que llevas ahora'
-            : 'hoy llevas ${resumen.rachaSemanas}',
-      ),
-    );
-
     final activos = dias.where((d) => d.puntosDia > 0).length;
     marcas.add(
       _Marca(

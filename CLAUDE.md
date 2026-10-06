@@ -279,10 +279,14 @@ fueguito 🔥 bajo el saludo. Antes (22 de septiembre) se habían quitado las
 recompensas por constancia y quedaba solo esa línea como motivación.
 
 La tarjeta de racha con su historial de 8 semanas (una casilla por semana:
-cumplido o no) ya había salido de Progreso el 21 de septiembre; el widget
-(`tarjeta_racha.dart`) quedó sin uso. [PENDIENTE: la racha todavía aparece en
-Perfil y en Récords. La reunión solo habló de Hoy: decidir si sale también de
-ahí.]
+cumplido o no) ya había salido de Progreso el 21 de septiembre.
+
+**Decidido el 6 de octubre de 2026: la racha sale de toda la app.** Se quitaron
+el interruptor "Racha en riesgo" de Perfil, la tarjeta "Tu racha más larga" de
+Récords, los campos `racha_semanas` y `racha_historial` del modelo
+`ResumenAnual` y de los datos de ejemplo. El servidor nunca los mandó, así que con
+la API real el modelo viejo no habría podido leer el resumen. Ya no hay ningún
+aviso de "racha en riesgo": el único aviso de Perfil es el recordatorio diario.
 
 ## Anti-fraude
 

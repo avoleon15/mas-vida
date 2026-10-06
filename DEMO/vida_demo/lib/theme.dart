@@ -404,8 +404,8 @@ class AppTheme {
 
   /// Display font (Archivo) con el tracking ya ajustado al tamaño.
   ///
-  /// Es la que llevan los números grandes: los pasos del día, los puntos,
-  /// la racha. Va en w700 porque Archivo en peso normal no aguanta el
+  /// Es la que llevan los números grandes: los pasos del día y los
+  /// puntos. Va en w700 porque Archivo en peso normal no aguanta el
   /// tamaño — al lado de Manrope se vería como texto agrandado y no como
   /// un número protagonista.
   static TextStyle display(double fontSize) => GoogleFonts.archivo(
