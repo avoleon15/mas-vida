@@ -46,6 +46,10 @@ class HealthKitBridge {
   /// Le entrega a Swift el token de la sesión, o `null` cuando se cierra.
   /// Swift lo guarda en su propio Keychain y lo usa para firmar el `sync`.
   ///
+  /// [usuarioId] es el que devolvió el login o el registro. Con él Swift
+  /// sabe si entró otra persona (y entonces vacía la cola de días) o la
+  /// misma con un token nuevo (y la conserva). Sin él compara el token.
+  ///
   /// Se llama al entrar o registrarse (con el token), al cerrar sesión
   /// (con null) y cada vez que abre la app (con lo que haya): así la copia
   /// de Swift no se desincroniza ni después de reinstalar. Es idempotente.
@@ -53,11 +57,14 @@ class HealthKitBridge {
   /// Nunca falla hacia afuera: donde no hay lado nativo (Web, los tests)
   /// el canal no existe y se devuelve [EstadoSesionNativa.noDisponible].
   /// El token nunca se escribe en un log ni en un error.
-  Future<EstadoSesionNativa> actualizarSesion(String? token) async {
+  Future<EstadoSesionNativa> actualizarSesion(
+    String? token, {
+    String? usuarioId,
+  }) async {
     try {
       final respuesta = await _canal.invokeMapMethod<String, dynamic>(
         'actualizarSesion',
-        {'token': token},
+        {'token': token, 'usuario_id': usuarioId},
       );
       return switch (respuesta?['estado']) {
         'ok' => EstadoSesionNativa.ok,

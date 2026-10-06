@@ -6,7 +6,8 @@ import 'package:vida_demo/datos/healthkit_bridge.dart';
 // EL WRAPPER DEL CANAL NATIVO — `actualizarSesion`.
 //
 // Lo que se protege: que el token llegue a Swift con el nombre de método y
-// la forma que espera AppDelegate.swift (`{ "token": String? }`), que el
+// la forma que espera AppDelegate.swift
+// (`{ "token": String?, "usuario_id": String? }`), que el
 // cierre de sesión viaje como `null`, y que cada respuesta posible se lea
 // bien — incluida una que esta versión no conoce.
 //
@@ -45,9 +46,24 @@ void main() {
 
         expect(llamadas, hasLength(1));
         expect(llamadas.single.method, 'actualizarSesion');
-        expect(llamadas.single.arguments, {'token': 'abc123'});
+        expect(llamadas.single.arguments, {
+          'token': 'abc123',
+          'usuario_id': null,
+        });
       },
     );
+
+    test('el usuario_id viaja junto al token: Swift decide con él si cambió '
+        'la persona', () async {
+      responder((_) => {'estado': 'ok'});
+
+      await HealthKitBridge().actualizarSesion('abc123', usuarioId: 'u-1');
+
+      expect(llamadas.single.arguments, {
+        'token': 'abc123',
+        'usuario_id': 'u-1',
+      });
+    });
 
     test(
       'cerrar sesión manda la clave token con null, no un mapa vacío',
@@ -67,7 +83,10 @@ void main() {
 
       await HealthKitBridge().actualizarSesion('  abc123  ');
 
-      expect(llamadas.single.arguments, {'token': '  abc123  '});
+      expect(llamadas.single.arguments, {
+        'token': '  abc123  ',
+        'usuario_id': null,
+      });
     });
   });
 

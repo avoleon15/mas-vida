@@ -5,13 +5,13 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import ResumenDiario
 from Apps.poincs.models import VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services.device import agrupar_por_dispositivo
 from services.hearth_rate import minutos_por_zona
 
@@ -124,8 +124,8 @@ class ZonasPorLaApiTests(APITestCase):
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})
         self.usuario = crear_usuario()
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         self.hoy = timezone.localdate()
 
     def _inicio(self, minuto):

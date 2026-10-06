@@ -12,7 +12,6 @@ from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.coins.models import Canje, MonedaLedger, Premio
@@ -20,6 +19,7 @@ from Apps.objetivos.models import CumplimientoSemanal
 from Apps.poincs.models import VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import goals, monedas, premios
 from services.tiempo import hoy
 
@@ -68,8 +68,8 @@ class _ConToken:
     def setUp(self):
         preparar_version_de_reglas()
         self.usuario = crear_usuario()
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
 
 class SinTokenTests(APITestCase):
@@ -142,7 +142,7 @@ class CatalogoTests(_ConToken, APITestCase):
 
     def test_sin_perfil_da_403(self):
         sin_perfil = User.objects.create_user(username="sinperfil", password="clave-segura-1")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=sin_perfil).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(sin_perfil)}")
         self.assertEqual(self.client.get(self.url).status_code, 403)
 
 
@@ -216,7 +216,7 @@ class SaldoTests(_ConToken, APITestCase):
 
     def test_sin_perfil_da_403(self):
         sin_perfil = User.objects.create_user(username="sinperfil", password="clave-segura-1")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=sin_perfil).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(sin_perfil)}")
         self.assertEqual(self.client.get(self.url).status_code, 403)
 
 

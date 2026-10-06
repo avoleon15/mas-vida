@@ -11,12 +11,13 @@ from django.urls import reverse
 from django.utils import timezone
 import uuid
 
-from rest_framework.authtoken.models import Token
+from knox.models import AuthToken
 from rest_framework.test import APITestCase
 
 from Apps.policies.models import PolizaVinculada
 from Apps.users.admin import UsuarioAdmin
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 
 
 def crear_usuario(nombre="ana"):
@@ -221,7 +222,8 @@ class RegistroTests(APITestCase):
 
         self.assertEqual(respuesta.status_code, 201)
         user = get_user_model().objects.get(username="ana")
-        self.assertEqual(respuesta.json()["token"], Token.objects.get(user=user).key)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {respuesta.json()['token']}")
+        self.assertEqual(self.client.get("/api/v1/historial").status_code, 200)
         self.assertEqual(respuesta.json()["username"], "ana")
         self.assertEqual(user.usuario.birth_date, datetime.date(1990, 1, 1))
 
@@ -321,13 +323,14 @@ class LoginYTokenTests(APITestCase):
 
     # --- Login ------------------------------------------------------------
 
-    def test_login_correcto_devuelve_el_token_de_la_cuenta(self):
+    def test_login_correcto_devuelve_un_token_que_funciona(self):
         respuesta = self.client.post(
             "/api/v1/login", {"username": "ana", "password": self.clave}, format="json"
         )
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.json()["token"], Token.objects.get(user=self.usuario.user).key)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {respuesta.json()['token']}")
+        self.assertEqual(self.client.get("/api/v1/historial").status_code, 200)
 
     def test_login_con_contrasena_equivocada_se_rechaza(self):
         respuesta = self.client.post(
@@ -346,22 +349,15 @@ class LoginYTokenTests(APITestCase):
 
     # --- Token ------------------------------------------------------------
 
-    def test_toda_cuenta_nueva_recibe_su_token_automaticamente(self):
-        # El token lo crea una señal al guardar el User, venga de donde venga
-        # (registro, admin o consola).
+    def test_crear_una_cuenta_no_abre_sesion(self):
+        # El token sale del login o del registro, no de crear el User (admin o consola).
         user = get_user_model().objects.create_user("nueva", "n@example.com", "x")
 
-        self.assertTrue(Token.objects.filter(user=user).exists())
-
-    def test_guardar_de_nuevo_el_user_no_duplica_el_token(self):
-        self.usuario.user.first_name = "Ana"
-        self.usuario.user.save()
-
-        self.assertEqual(Token.objects.filter(user=self.usuario.user).count(), 1)
+        self.assertFalse(AuthToken.objects.filter(user=user).exists())
 
     def test_el_token_abre_los_endpoints_protegidos(self):
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
         respuesta = self.client.get("/api/v1/historial")
 

@@ -6,7 +6,6 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
 from django.test import TestCase
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import ResumenDiario
@@ -21,6 +20,7 @@ from Apps.liga.models import (
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import ligas, monedas
 
 OCTUBRE = date(2026, 10, 1)
@@ -289,7 +289,7 @@ class _ConToken:
     def setUp(self):
         version()
         self.yo = crear_usuario("yo", VERIFICADA, "Luis", "Montenegro")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=self.yo.user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(self.yo.user)}")
         reloj = mock.patch("Apps.liga.views.hoy", return_value=HOY)
         reloj.start()
         self.addCleanup(reloj.stop)
@@ -308,7 +308,7 @@ class SinTokenTests(APITestCase):
 
     def test_sin_perfil_da_403(self):
         user = User.objects.create_user(username="sinperfil", password="clave-segura-1")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
         self.assertEqual(self.client.get("/api/v1/ligas").status_code, 403)
 
 
@@ -381,7 +381,7 @@ class TusLigasEndpointTests(_ConToken, APITestCase):
     def test_otro_usuario_se_une_con_el_codigo_sin_poliza(self):
         codigo = self._crear().json()["codigo"]
         amigo = crear_usuario("amigo")                      # sin póliza: Tus Ligas no la exige
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=amigo.user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(amigo.user)}")
 
         r = self.client.post("/api/v1/ligas/unirse", {"codigo": f"  {codigo.lower()} "}, format="json")
         self.assertEqual(r.status_code, 200, r.content)
@@ -421,7 +421,7 @@ class SalirDeUnaLigaTests(_ConToken, APITestCase):
         return self.client.post("/api/v1/ligas", {"nombre": nombre}, format="json").json()
 
     def _como(self, usuario):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=usuario.user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(usuario.user)}")
 
     def _unir(self, usuario, grupo):
         self._como(usuario)

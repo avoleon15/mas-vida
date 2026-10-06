@@ -3,11 +3,11 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.coins.models import MonedaLedger
 from Apps.coins.test_premios import crear_usuario, preparar_version_de_reglas
+from Apps.users.pruebas import token_de
 from services import monedas
 from services.tiempo import hoy
 
@@ -119,8 +119,8 @@ class MonedasPeriodoEndpointTests(APITestCase):
     def setUp(self):
         preparar_version_de_reglas()
         self.usuario = crear_usuario("ana")
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def pedir(self, **params):
         return self.client.get(URL, params)
@@ -131,7 +131,7 @@ class MonedasPeriodoEndpointTests(APITestCase):
 
     def test_cuenta_sin_perfil_da_403(self):
         user = get_user_model().objects.create_user("sinperfil", password="clave-segura-1")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
         self.assertEqual(self.pedir(desde="2026-10-01", hasta="2026-10-31").status_code, 403)
 
     def test_devuelve_el_resumen_del_periodo(self):

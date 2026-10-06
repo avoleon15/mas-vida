@@ -366,6 +366,8 @@ final class HealthKitManager {
     /// Hasta qué día llegó todo al servidor: de ahí sale qué mandar al
     /// ponerse al día (ver `ponerseAlDia()`).
     private let marcaEnvios = MarcaEnvios()
+    /// A nombre de quién están la marca y la cola (ver `CuentaDeEnvios`).
+    private let cuentaDeEnvios = CuentaDeEnvios()
 
     // MARK: - Estado
 
@@ -839,15 +841,17 @@ final class HealthKitManager {
     }
 
     // MARK: - actualizarSesion()
-    // Tercer método del contrato. Flutter entrega el token al iniciar sesión,
-    // `nil` al cerrarla, y otra vez el token actual cada vez que abre la app.
+    // Tercer método del contrato. Flutter entrega el token (y el `usuario_id`)
+    // al iniciar sesión, `nil` al cerrarla, y otra vez lo actual cada vez que
+    // abre la app.
     // Nunca se escribe el token en logs.
 
-    func actualizarSesion(token: String?) -> ResultadoActualizarSesion {
-        // Si cambió la cuenta, también olvida hasta qué día se había mandado
-        // y la cola (ver `Sesion.aplicar(token:en:marca:cola:)`).
+    func actualizarSesion(token: String?, usuarioId: String?) -> ResultadoActualizarSesion {
+        // Si entró otra persona, también olvida hasta qué día se había mandado
+        // y la cola (ver `Sesion.aplicar(token:usuarioId:en:marca:cola:cuenta:)`).
         let (resultado, haySesion) = Sesion.aplicar(
-            token: token, en: almacenSesion, marca: marcaEnvios, cola: syncQueue)
+            token: token, usuarioId: usuarioId, en: almacenSesion,
+            marca: marcaEnvios, cola: syncQueue, cuenta: cuentaDeEnvios)
         pendientesEnCola = syncQueue.pendientes().count
         // Con sesión, se manda lo que falte. Sin `await`: Flutter espera esta
         // respuesta y no puede colgarse por la red.

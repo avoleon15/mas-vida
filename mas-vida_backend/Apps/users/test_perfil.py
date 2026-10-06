@@ -3,12 +3,12 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import Muestra, MuestraBPM, Sesion
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import perfil
 
 User = get_user_model()
@@ -57,8 +57,8 @@ def pasos(usuario, dispositivo, hace_dias, externo):
 class _ConToken:
     def setUp(self):
         self.usuario = crear()
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def get(self):
         r = self.client.get(URL)
@@ -73,7 +73,7 @@ class PerfilEndpointTests(_ConToken, APITestCase):
 
     def test_una_cuenta_sin_perfil_da_403(self):
         user = User.objects.create_user("sinperfil", password="clave-segura-1")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
         self.assertEqual(self.client.get(URL).status_code, 403)
 
     def test_solo_acepta_get(self):

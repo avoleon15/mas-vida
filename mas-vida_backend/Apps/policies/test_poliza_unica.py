@@ -8,13 +8,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.db import IntegrityError, transaction
 from django.test import RequestFactory, TestCase
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
 
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.admin import PolizaVinculadaAdmin
 from Apps.policies.models import PolizaVinculada, RegistroAseguradora
 from Apps.users.models import IntentoFallido, Usuario
+from Apps.users.pruebas import token_de
 from services import polizas
 
 User = get_user_model()
@@ -30,7 +30,7 @@ def crear_cuenta(nombre, nacimiento=NACIMIENTO):
     user = User.objects.create_user(f"{nombre}@correo.com", password="Clave-segura-2026")
     usuario = Usuario.objects.create(user=user, usuario_id=f"id-{nombre}", birth_date=nacimiento)
     cliente = APIClient()
-    cliente.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+    cliente.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
     usuario.cliente = cliente
     return usuario
 

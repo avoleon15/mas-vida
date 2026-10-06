@@ -945,18 +945,18 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   solo para HealthKit.
 - **MethodChannel:** 3 métodos, nada más — `solicitarPermisos`, `sincronizar`
   y `actualizarSesion` (le entrega a Swift el token de la sesión, o `null` al
-  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart` (todavía le falta
-  `actualizarSesion`). Todo lo demás va
+  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás va
   por HTTP directo contra la API.
 - Backend: **Django + PostgreSQL** (decisión final). `TIME_ZONE =
   'America/Guatemala'`.
 - Sync: `POST /api/v1/sync`, el día completo cada vez. Los reintentos corren
   del lado nativo — Flutter no implementa reintentos propios.
-- Autenticación: `TokenAuthentication` de DRF, con el encabezado
-  `Authorization: Token <clave>` en todo `/api/v1/*` salvo registro y login. La
-  identidad sale del token, nunca del body: `usuario_id` ya no viaja en ningún
-  request. **Backend implementado.** Falta que Swift mande el token y las
-  pantallas de Flutter (ver `contrato-tecnico.md`, "Autenticación (token)").
+- Autenticación: tokens de **django-rest-knox** (A35, 4 oct 2026), con el
+  encabezado `Authorization: Token <clave>` en todo `/api/v1/*` salvo registro y
+  login. Un token por sesión, guardado como hash; vence a los 30 días sin uso, con
+  tope de 90; `logout` cierra un teléfono y `logout/todos` todos. La identidad sale
+  del token, nunca del body. Swift decide "cambió la cuenta" por el `usuario_id`,
+  no por el token (ver `contrato-tecnico.md`, "Autenticación (token)").
 - Fuente de datos: Apple HealthKit únicamente
 - Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación, NO sueño en v1)
 - Distribución piloto: TestFlight, cuenta Apple Developer de organización

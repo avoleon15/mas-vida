@@ -74,20 +74,24 @@ private let canalHealthKit = "com.assures.masvida/healthkit"
             result(["estado": "error_permanente", "detalle": detalle])
           }
 
-        // Le entrega a Swift el token de la sesión: `{ "token": String? }`, con
-        // `null` cuando se cierra la sesión. El token nunca se devuelve ni se
-        // escribe en logs; `detalle` es texto técnico sin el token.
+        // Le entrega a Swift la sesión: `{ "token": String?, "usuario_id": String? }`,
+        // con `token` en `null` cuando se cierra la sesión. El token nunca se
+        // devuelve ni se escribe en logs; `detalle` es texto técnico sin el token.
         case "actualizarSesion":
           guard let argumentos = call.arguments as? [String: Any] else {
             result(FlutterError(
               code: "ARGUMENTOS_INVALIDOS",
-              message: "actualizarSesion espera { \"token\": String? }",
+              message: "actualizarSesion espera { \"token\": String?, \"usuario_id\": String? }",
               details: nil
             ))
             break
           }
-          // `null` llega como NSNull: `as? String` lo vuelve nil.
-          switch HealthKitManager.shared.actualizarSesion(token: argumentos["token"] as? String) {
+          // `null` llega como NSNull: `as? String` lo vuelve nil. Una versión de
+          // Flutter sin `usuario_id` sigue funcionando (ver `Sesion.aplicar`).
+          switch HealthKitManager.shared.actualizarSesion(
+            token: argumentos["token"] as? String,
+            usuarioId: argumentos["usuario_id"] as? String
+          ) {
           case .ok:
             result(["estado": "ok"])
           case .errorAlmacenamiento(let detalle):

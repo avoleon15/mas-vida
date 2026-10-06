@@ -10,7 +10,6 @@ from unittest import mock
 
 from django.apps import apps as registro_apps
 from django.test import TestCase
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.coins.models import MonedaLedger
@@ -18,6 +17,7 @@ from Apps.objetivos.models import CumplimientoSemanal, MetaPasosPorEdad
 from Apps.objetivos.tests import crear_usuario, dia
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import VersionRegla
+from Apps.users.pruebas import token_de
 from services import goals, monedas
 
 LUNES = date(2026, 9, 21)
@@ -160,8 +160,8 @@ class _ConToken:
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})
         self.usuario = crear_usuario("ana", nacimiento=date(1980, 5, 1))  # 46 → 45.000
-        token = Token.objects.get(user=self.usuario.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.usuario.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         reloj = mock.patch("Apps.objetivos.views.hoy", return_value=MIERCOLES_SEMANA_2)
         reloj.start()
         self.addCleanup(reloj.stop)
