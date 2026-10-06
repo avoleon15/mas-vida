@@ -176,7 +176,7 @@ class ResumenAcreditadoTests(_ConSync):
         PolizaVinculada.objects.create(
             usuario=self.usuario, policy_number="P-1", insurer="Demo",
             estado_verificacion=PolizaVinculada.EstadoVerificacion.VERIFICADA,
-            birth_date_confirmada=date(1989, 1, 1), fecha_verificacion=timezone.now(),
+            birth_date_confirmada=date(1998, 1, 1), fecha_verificacion=timezone.now(),   # se puso 8 años más vieja: mentira
         )
         self.sync(self.ayer, [self.pasos("a", self.ayer, 12000)])
         fila = self.resumen(self.ayer)

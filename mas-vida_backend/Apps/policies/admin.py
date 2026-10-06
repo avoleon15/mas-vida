@@ -62,6 +62,13 @@ class PolizaVinculadaAdmin(admin.ModelAdmin):
                     "nacimiento NO coincide. Se anuló el histórico anterior.",
                     messages.WARNING,
                 )
+            elif resultado == "tolerado":
+                self.message_user(
+                    request,
+                    f"{poliza.policy_number}: verificada. La fecha de nacimiento difiere "
+                    "poco y no le da ventaja: se toma como error y el histórico se conserva.",
+                    messages.SUCCESS,
+                )
             elif resultado == "aplicado":
                 self.message_user(
                     request,

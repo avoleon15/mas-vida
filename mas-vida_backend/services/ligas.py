@@ -39,7 +39,7 @@ from Apps.liga.models import (
 )
 from Apps.poincs.models import Ledger
 from Apps.users.models import Usuario
-from services import monedas, patrocinios
+from services import monedas, patrocinios, polizas
 from services.goals import DIAS_DE_GRACIA
 from services.polizas import VERIFICADA
 
@@ -131,6 +131,16 @@ def tabla(usuario_pks, inicio: date, hasta: date) -> list[Fila]:
         .values("usuario").annotate(total=Sum("workouts_cantidad"))
         .values_list("usuario", "total")
     )
+    # Quien tiene el retroactivo denegado: sus pasos y workouts anteriores a la
+    # verificación no cuentan para el desempate (sus puntos ya están anulados en el ledger).
+    for pk, corte in polizas.cortes_de_retroactivo(pks).items():
+        if corte <= inicio:
+            continue
+        propios = ResumenDiario.objects.filter(usuario=pk, fecha__range=(max(inicio, corte), hasta)) if corte <= hasta \
+            else ResumenDiario.objects.none()
+        totales = propios.aggregate(pasos=Sum("pasos_totales_dia"), workouts=Sum("workouts_cantidad"))
+        pasos[pk], workouts[pk] = totales["pasos"] or 0, totales["workouts"] or 0
+
     orden = sorted(
         pks,
         key=lambda pk: (

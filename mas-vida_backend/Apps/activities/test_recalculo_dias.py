@@ -196,7 +196,7 @@ class RecalculoPorLaApiTests(APITestCase):
         PolizaVinculada.objects.create(
             usuario=self.usuario, policy_number="P-1", insurer="Demo",
             estado_verificacion=PolizaVinculada.EstadoVerificacion.VERIFICADA,
-            birth_date_confirmada=date(1989, 1, 1),                    # no coincide con la del registro
+            birth_date_confirmada=date(1998, 1, 1),                    # se puso 8 años más vieja que la real: mentira
             fecha_verificacion=timezone.now(),
         )
         self.sync(self.hoy, [self.muestra("a", self.ayer, 8, 8.5, 12000)])
