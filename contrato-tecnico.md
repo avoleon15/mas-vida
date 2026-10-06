@@ -2467,6 +2467,34 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 
 ## Puntos abiertos
 
+*De la revisión completa (6 oct 2026):*
+
+- **Contraseñas de `data.json` — [PENDIENTE] (Luis, en curso):** el archivo ya no
+  está en el repo (A37) pero **sigue en el historial de git** con los hashes de
+  `luigi` (superusuario) y `testuser`. Luis está cambiando esas contraseñas donde
+  existan las cuentas. Reescribir el historial queda fuera: obligaría a todo el
+  equipo a volver a clonar.
+- **Piloto con base simulada de la aseguradora (decidido 6 oct):** los usuarios del
+  piloto los creamos nosotros; una parte grande con póliza verificada (simulada) y
+  otra sin póliza, para probar los dos casos. **Falta:** un comando que cree ese grupo
+  (con contraseñas distintas, que se niegue a correr en el servidor real; reemplaza a
+  `sembrar_prueba`, que crea una cuenta con contraseña fija) y el estado "sin póliza"
+  en la app (Premios con candado y Mi Plan con "Ingresa tu póliza").
+- **Login con correo o con usuario — [PENDIENTE]:** hoy la app manda el correo como
+  `username`. Aceptar las dos formas exige guardar el correo aparte, único y sin
+  distinguir mayúsculas ("Ana@" y "ana@" hoy son cuentas distintas). Para el piloto lo
+  más simple es solo correo.
+- **Límite de 2,5 MB del sync — [PENDIENTE]:** un día de más de ~8.000 muestras
+  responde 400 en HTML y Swift lo toma como permanente (pierde ese día y frena los
+  siguientes). Opciones: subir el límite a 10 MB con un tope de muestras y un 413 claro
+  (recomendada), partir el envío en Swift, o mandar menos datos.
+- **Plausibilidad anti-fraude — [PENDIENTE]:** una lectura de ritmo cardíaco de 95
+  minutos o una sesión que no cuadra con su duración dan 150 puntos de intensidad. El
+  techo de 200 puntos al día limita el daño; volver a verlo antes de usuarios reales.
+- **Servidor del piloto — [PENDIENTE]:** dónde vive el backend, su dominio y HTTPS; con
+  eso la URL deja de estar fija en `http://192.168.1.21:8000` (Swift). Va junto con el
+  bundle ID de más abajo.
+
 *Del 3 oct (sincronización):*
 
 - **Identificador definitivo de la app (*bundle ID*):** hoy es
