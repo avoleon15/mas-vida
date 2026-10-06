@@ -194,10 +194,16 @@ class AdminDeTokensTests(TestCase):
 class GuardadoComoHashTests(APITestCase):
     def test_en_la_base_no_queda_la_clave_del_token(self):
         clave = entrar_y_clave()
-        token = AuthToken.objects.get()
-        self.assertNotIn(clave, (token.digest, token.token_key))
-        self.assertEqual(len(token.digest), 128)            # SHA-512
         self.assertEqual(len(clave), 64)
+        # Ningún campo guardado contiene la clave (ni siquiera como parte de un texto).
+        # Knox guarda los primeros 15 caracteres para encontrar la fila: no alcanzan
+        # para entrar.
+        for campo, valor in AuthToken.objects.values().get().items():
+            with self.subTest(campo=campo):
+                self.assertNotIn(clave, str(valor))
+        token = AuthToken.objects.get()
+        self.assertEqual(token.token_key, clave[:15])
+        self.assertEqual(len(token.digest), 128)            # SHA-512
 
     def test_el_token_viejo_de_drf_ya_no_sirve(self):
         from rest_framework.authtoken.models import Token
