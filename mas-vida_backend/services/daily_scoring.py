@@ -94,12 +94,21 @@ def _rango_del_dia(fecha: date):
     return inicio, inicio + timedelta(days=1)
 
 
-def fecha_nacimiento_efectiva(usuario) -> date:
-    """La confirmada por la aseguradora manda sobre la autoreportada."""
+def fecha_nacimiento_efectiva(usuario, fecha: date | None = None) -> date:
+    """La confirmada por la aseguradora manda sobre la autoreportada.
+
+    Con `fecha`, la que valía ese día: si la aseguradora corrigió la fecha después,
+    la corrección vale desde que se hizo y lo anterior se sigue calculando con la
+    fecha de entonces (una corrección nunca le quita puntos a nadie).
+    """
     poliza = PolizaVinculada.objects.filter(
         usuario=usuario, estado_verificacion="verificada"
     ).first()
     if poliza and poliza.birth_date_confirmada:
+        if fecha is not None:
+            posterior = poliza.correcciones.filter(desde__gt=fecha).order_by("desde", "id").first()
+            if posterior is not None:
+                return posterior.fecha_anterior
         return poliza.birth_date_confirmada
     return usuario.birth_date
 
@@ -158,7 +167,7 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
     pasos = pasos_ganadores_por_bloque(pasos, inicio, fin)
 
     pasos_totales = sum(m["cantidad"] for m in pasos)
-    edad = calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
+    edad = calculate_age(fecha_nacimiento_efectiva(usuario, fecha), fecha)
 
     puntos_pasos = calculate_daily_step_points(pasos_totales, edad)
     sesiones_por = agrupar_por_dispositivo(sesiones)

@@ -124,7 +124,7 @@ def edad_en(usuario, fecha: date) -> int:
     La confirmada por la aseguradora si hay póliza verificada; si no, la del
     registro (la misma regla que usan los puntos).
     """
-    return calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
+    return calculate_age(fecha_nacimiento_efectiva(usuario, fecha), fecha)
 
 
 def meta_pasos_de(usuario, objetivo: ObjetivoSemanal) -> int:

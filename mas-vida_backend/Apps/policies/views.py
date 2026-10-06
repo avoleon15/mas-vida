@@ -30,6 +30,8 @@ def _dejar_rechazada(poliza, motivo):
     poliza.nombre = poliza.apellido = poliza.plan = None
     poliza.prima_anual_gtq = None
     poliza.fecha_renovacion = None
+    poliza.retroactivo = ""
+    poliza.corte_retroactivo = None
     poliza.save()
 
 

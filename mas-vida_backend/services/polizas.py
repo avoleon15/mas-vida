@@ -217,11 +217,13 @@ def es_mentira(declarada: date, confirmada: date, fecha: date) -> bool:
 
 
 def _corte_de(poliza: PolizaVinculada, declarada: date) -> date | None:
-    if (
-        poliza.estado_verificacion != VERIFICADA
-        or poliza.birth_date_confirmada is None
-        or poliza.fecha_verificacion is None
-    ):
+    if poliza.estado_verificacion != VERIFICADA:
+        return None
+    # El veredicto se tomó al verificar y no se recalcula (ver PolizaVinculada.retroactivo).
+    if poliza.retroactivo:
+        return poliza.corte_retroactivo if poliza.retroactivo == PolizaVinculada.Retroactivo.DENEGADO else None
+    # Filas sin veredicto guardado: se calcula con la regla.
+    if poliza.birth_date_confirmada is None or poliza.fecha_verificacion is None:
         return None
     dia_de_la_verificacion = timezone.localtime(poliza.fecha_verificacion).date()
     if not es_mentira(declarada, poliza.birth_date_confirmada, dia_de_la_verificacion):
@@ -274,6 +276,8 @@ def vincular(usuario, policy_number: str, insurer: str, policy_start_date: date)
         birth_date_confirmada=None,
         estado_verificacion=PENDIENTE,
         fecha_verificacion=None,
+        retroactivo="",
+        corte_retroactivo=None,
     )
     if existente is None:
         return PolizaVinculada.objects.create(usuario=usuario, **datos)
@@ -301,6 +305,20 @@ def verificar(poliza: PolizaVinculada, ahora=None) -> str:
         raise PolizaEnOtraCuenta()
 
     ahora = ahora or timezone.now()
+    usuario = poliza.usuario
+    hoy = timezone.localtime(ahora).date()
+
+    # El veredicto se toma ahora y queda guardado: una corrección posterior de
+    # la fecha no lo cambia.
+    if poliza.birth_date_confirmada == usuario.birth_date:
+        resultado = "aplicado"
+    elif not es_mentira(usuario.birth_date, poliza.birth_date_confirmada, hoy):
+        resultado = "tolerado"          # un error dentro de lo tolerable: no se le quita nada
+    else:
+        resultado = "denegado"
+    poliza.retroactivo = resultado
+    poliza.corte_retroactivo = hoy if resultado == "denegado" else None
+
     poliza.estado_verificacion = VERIFICADA
     poliza.fecha_verificacion = ahora
     try:
@@ -308,18 +326,13 @@ def verificar(poliza: PolizaVinculada, ahora=None) -> str:
         with transaction.atomic():
             poliza.save()
     except IntegrityError:
+        poliza.retroactivo, poliza.corte_retroactivo = "", None      # no quedó verificada
+        poliza.estado_verificacion, poliza.fecha_verificacion = PENDIENTE, None
         raise PolizaEnOtraCuenta()
 
-    usuario = poliza.usuario
-    if poliza.birth_date_confirmada == usuario.birth_date:
-        return "aplicado"
-
-    hoy = timezone.localtime(ahora).date()
-    if not es_mentira(usuario.birth_date, poliza.birth_date_confirmada, hoy):
-        return "tolerado"          # un error dentro de lo tolerable: no se le quita nada
-
-    denegar_retroactivo(usuario, hoy)
-    return "denegado"
+    if resultado == "denegado":
+        denegar_retroactivo(usuario, hoy)
+    return resultado
 
 
 @transaction.atomic
@@ -329,6 +342,8 @@ def rechazar(poliza: PolizaVinculada) -> None:
         raise ValueError("Una póliza verificada no se rechaza")
     poliza.estado_verificacion = RECHAZADA
     poliza.fecha_verificacion = None
+    poliza.retroactivo = ""
+    poliza.corte_retroactivo = None
     poliza.save()
 
 

@@ -1,8 +1,21 @@
 from django.contrib import admin, messages
+from django.utils import timezone
 
 from services import polizas
 
-from .models import PolizaVinculada, RegistroAseguradora
+from .models import CorreccionDeNacimiento, PolizaVinculada, RegistroAseguradora
+
+
+class CorreccionDeNacimientoInline(admin.TabularInline):
+    """El historial de correcciones de la póliza: solo se ve, lo escribe save_model."""
+
+    model = CorreccionDeNacimiento
+    extra = 0
+    can_delete = False
+    readonly_fields = ("fecha_anterior", "fecha_nueva", "desde", "creada_en")
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(PolizaVinculada)
@@ -26,13 +39,40 @@ class PolizaVinculadaAdmin(admin.ModelAdmin):
     search_fields = ("policy_number", "usuario__usuario_id")
     readonly_fields = (
         "estado_verificacion", "motivo_rechazo", "fecha_vinculacion", "fecha_verificacion",
+        "retroactivo", "corte_retroactivo",
     )
+    inlines = [CorreccionDeNacimientoInline]
     actions = ["verificar_polizas", "rechazar_polizas"]
 
     def save_model(self, request, obj, form, change):
         if not change:
             obj.estado_verificacion = polizas.PENDIENTE
+
+        # Cambiar la fecha confirmada de una póliza ya VERIFICADA es una corrección de
+        # la aseguradora: vale desde hoy y no le quita nada a la persona (el veredicto
+        # del retroactivo ya está tomado). Queda registrada.
+        correccion = None
+        if change and obj.estado_verificacion == polizas.VERIFICADA and obj.birth_date_confirmada:
+            anterior = (
+                PolizaVinculada.objects.filter(pk=obj.pk).values_list("birth_date_confirmada", flat=True).first()
+            )
+            if anterior and anterior != obj.birth_date_confirmada:
+                correccion = (anterior, obj.birth_date_confirmada)
+
         super().save_model(request, obj, form, change)
+
+        if correccion is not None:
+            CorreccionDeNacimiento.objects.create(
+                poliza=obj, fecha_anterior=correccion[0], fecha_nueva=correccion[1],
+                desde=timezone.localdate(),
+            )
+            self.message_user(
+                request,
+                f"{obj.policy_number}: la fecha de nacimiento cambió de {correccion[0]} a "
+                f"{correccion[1]}. Vale desde hoy; lo anterior se queda con la fecha de entonces "
+                "y no se le quita nada.",
+                messages.WARNING,
+            )
 
     @admin.action(description="Verificar pólizas seleccionadas")
     def verificar_polizas(self, request, queryset):
