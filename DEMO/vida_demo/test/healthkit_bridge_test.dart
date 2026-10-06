@@ -131,7 +131,8 @@ void main() {
         responder(
           (_) => throw PlatformException(
             code: 'ARGUMENTOS_INVALIDOS',
-            message: 'actualizarSesion espera { "token": String? }',
+            message:
+                'actualizarSesion espera { "token": String?, "usuario_id": String? }',
           ),
         );
 
