@@ -4,9 +4,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.utils import timezone
 
 from rest_framework import serializers
+
+from services.edad import problema_con_la_fecha_de_nacimiento
 
 from .models import Usuario
 
@@ -31,11 +32,11 @@ class RegistroSerializer(serializers.Serializer):
 
     def validate_birth_date(self, value):
         # La edad sale de esta fecha (FCmáx, bono 60+): una fecha futura daría
-        # una edad negativa y rompería el cálculo de puntos.
-        if value > timezone.localdate():
-            raise serializers.ValidationError(
-                "La fecha de nacimiento no puede ser futura."
-            )
+        # una edad negativa y rompería el cálculo de puntos. Solo de 18 a 120 años
+        # (services/edad.py); el login con Google y Apple tiene que usar la misma regla.
+        problema = problema_con_la_fecha_de_nacimiento(value)
+        if problema is not None:
+            raise serializers.ValidationError(problema)
         return value
 
     def validate(self, attrs):

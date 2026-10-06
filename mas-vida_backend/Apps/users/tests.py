@@ -274,12 +274,15 @@ class RegistroTests(APITestCase):
         self.assertFalse(get_user_model().objects.filter(username="ana").exists())
         self.assertEqual(Usuario.objects.count(), 0)
 
-    def test_nacer_hoy_es_valido(self):
+    def test_nacer_hoy_no_es_valido_solo_se_abre_cuenta_desde_los_18(self):
+        # Antes valía (A-06): una cuenta recién nacida rompía el sync. Ahora solo
+        # de 18 a 120 años (services/edad.py; más casos en test_edad.py).
         hoy = timezone.localdate().isoformat()
 
         respuesta = self.client.post(self.url, self.datos(birth_date=hoy), format="json")
 
-        self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("birth_date", respuesta.json())
 
     def test_la_fecha_de_nacimiento_es_obligatoria(self):
         datos = self.datos()

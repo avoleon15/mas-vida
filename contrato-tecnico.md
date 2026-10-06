@@ -166,8 +166,17 @@ campo dentro del JSON.
   `actualizarSesion` para que sepa si cambió la persona. Es `null` solo en una cuenta
   sin perfil (las que crea el admin), que no usa la app.
 
+**Solo mayores de 18 años** (decidido el 6 oct 2026, hecho en A37): el registro acepta
+fechas de nacimiento de **18 a 120 años**, contados con el día de Guatemala. Quien
+cumple 18 hoy puede registrarse; quien los cumple mañana, no. La regla vive en
+`services/edad.py` y la app ya la aplicaba en el selector de fecha
+(`edadMinima = 18`); ahora el servidor también la exige, para que no se salte
+llamando a la API directo. **[PENDIENTE]** que legal y la aseguradora confirmen los
+18 (no cambia el código).
+
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
-contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
+contraseña débil, fecha de nacimiento futura, menor de 18 o mayor de 120 años) o
+`{ "non_field_errors": [...] }`
 (credenciales incorrectas en el login). `429` si se pasó el límite de intentos
 (ver "Límite de intentos" abajo). El login y el registro no leen el encabezado
 `Authorization`: un token viejo o inválido no impide iniciar sesión ni crear la
@@ -203,7 +212,8 @@ ofrecerlo si se ofrece Google (guía 4.8).
   mismo `sync`.
 - Ni Google ni Apple entregan la fecha de nacimiento. La primera vez se pide en
   un paso aparte y **sin ella no se crea la cuenta**: la edad decide la FCmáx,
-  el bono 60+ y la meta semanal de pasos.
+  el bono 60+ y la meta semanal de pasos. **Esa fecha pasa por la misma regla de
+  18 a 120 años** (`services/edad.py`, `problema_con_la_fecha_de_nacimiento`).
 - Apple puede ocultar el correo real (entrega uno de reenvío).
 - **[PENDIENTE] (Luis y Daniel):** la forma de los endpoints (propuesta:
   `POST /api/v1/login/google` y `POST /api/v1/login/apple` con la credencial

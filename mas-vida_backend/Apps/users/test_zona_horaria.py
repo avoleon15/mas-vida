@@ -88,15 +88,28 @@ class RegistroFechaFuturaTests(APITestCase):
         self.assertEqual(respuesta.status_code, 400)
         self.assertIn("birth_date", respuesta.json())
 
-    def test_a_las_23_de_guatemala_hoy_es_valido(self):
+    # Desde el 6 oct 2026 solo se abre cuenta desde los 18 años (services/edad.py): el
+    # borde que importa ya no es "nacer hoy" sino "cumplir 18 hoy", contado con el día
+    # de Guatemala y no con el de UTC.
+
+    def test_a_las_23_de_guatemala_quien_cumple_18_hoy_es_valido(self):
+        # 23:00 del 30-sep en Guatemala (ya es 1-oct en UTC): cumple 18 el 30-sep.
         with ahora_es(a_las(2026, 10, 1, 5, 0)):
-            respuesta = self.registrar("ana", "2026-09-30")
+            respuesta = self.registrar("ana", "2008-09-30")
 
         self.assertEqual(respuesta.status_code, 201)
 
-    def test_pasada_la_medianoche_de_guatemala_el_nuevo_dia_ya_es_valido(self):
+    def test_a_las_23_de_guatemala_quien_cumple_18_manana_todavia_es_menor(self):
+        # En UTC ya es 1-oct y parecería que cumplió; en Guatemala todavía no.
+        with ahora_es(a_las(2026, 10, 1, 5, 0)):
+            respuesta = self.registrar("ana", "2008-10-01")
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("birth_date", respuesta.json())
+
+    def test_pasada_la_medianoche_de_guatemala_quien_cumple_18_el_nuevo_dia_ya_es_valido(self):
         with ahora_es(a_las(2026, 10, 1, 6, 0)):
-            respuesta = self.registrar("ana", "2026-10-01")
+            respuesta = self.registrar("ana", "2008-10-01")
 
         self.assertEqual(respuesta.status_code, 201)
 
