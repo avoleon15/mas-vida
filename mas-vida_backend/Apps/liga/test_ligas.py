@@ -27,6 +27,7 @@ OCTUBRE = date(2026, 10, 1)
 FIN_OCTUBRE = date(2026, 10, 31)
 NOVIEMBRE = date(2026, 11, 1)
 CIERRE = date(2026, 11, 2)     # día 2: octubre ya pasó su margen de gracia
+PAGO = date(2026, 11, 9)       # día 9: se paga el podio
 HOY = date(2026, 10, 14)
 
 VERIFICADA = PolizaVinculada.EstadoVerificacion.VERIFICADA
@@ -181,6 +182,8 @@ class NombrePublicoTests(TestCase):
 
 
 class CerrarLaLigaTests(TestCase):
+    """El mes se cierra el día 2 (tabla final y quién gana qué) y el podio se paga el día 9."""
+
     def setUp(self):
         version()
         self.oro = crear_usuario("oro", VERIFICADA)
@@ -194,35 +197,55 @@ class CerrarLaLigaTests(TestCase):
         ):
             puntos(usuario, date(2026, 10, 15), cantidad)
 
+    def saldos(self, hoy):
+        return [monedas.saldo(u, hoy) for u in (self.oro, self.plata, self.bronce, self.cuarto)]
+
+    def cerrar_y_pagar(self, mes=OCTUBRE, cierre=CIERRE, pago=PAGO):
+        ligas.cerrar_la_liga(mes, cierre)
+        return ligas.pagar_la_liga(mes, pago)
+
     def test_el_podio_viene_cargado_por_la_migracion(self):
         self.assertEqual(ligas.premios_podio(), [30, 20, 10])
 
-    def test_paga_al_podio_y_guarda_la_tabla_de_todos(self):
+    def test_cerrar_guarda_la_tabla_de_todos_y_fija_lo_que_gana_cada_uno_pero_no_paga(self):
         resumen = ligas.cerrar_la_liga(OCTUBRE, CIERRE)
         self.assertEqual(resumen["participantes"], 4)      # el sin póliza no compite
-        self.assertEqual(resumen["monedas_pagadas"], 60)
-        self.assertEqual(
-            [monedas.saldo(u, CIERRE) for u in (self.oro, self.plata, self.bronce, self.cuarto)],
-            [30, 20, 10, 0],
-        )
-        self.assertEqual(monedas.saldo(self.sin_poliza, CIERRE), 0)
+        self.assertEqual(resumen["monedas_por_pagar"], 60)
+        self.assertEqual(self.saldos(CIERRE), [0, 0, 0, 0])        # todavía no llegan
+        self.assertFalse(MonedaLedger.objects.exists())
+        desglose = DesgloseLigaMensual.objects.get(usuario=self.oro)
+        self.assertEqual((desglose.posicion_final, desglose.monedas), (1, 30))
         desglose = DesgloseLigaMensual.objects.get(usuario=self.cuarto)
         self.assertEqual((desglose.posicion_final, desglose.puntos_mes, desglose.monedas), (4, 100, 0))
         self.assertEqual(desglose.workouts_acumulados_mes, 0)
         liga = LigaMensual.objects.get(mes=OCTUBRE)
-        self.assertEqual((liga.cerrada_en, liga.total_participantes), (CIERRE, 4))
+        self.assertEqual((liga.cerrada_en, liga.pagada_en, liga.total_participantes), (CIERRE, None, 4))
+
+    def test_el_dia_9_se_paga_al_podio(self):
+        ligas.cerrar_la_liga(OCTUBRE, CIERRE)
+        pago = ligas.pagar_la_liga(OCTUBRE, PAGO)
+        self.assertEqual((pago["pagada"], pago["monedas_pagadas"]), (True, 60))
+        self.assertEqual(self.saldos(PAGO), [30, 20, 10, 0])
+        self.assertEqual(monedas.saldo(self.sin_poliza, PAGO), 0)
+        self.assertEqual(LigaMensual.objects.get(mes=OCTUBRE).pagada_en, PAGO)
 
     def test_las_monedas_son_de_liga_y_cuentan_en_la_season_del_pago(self):
-        ligas.cerrar_la_liga(OCTUBRE, CIERRE)
+        self.cerrar_y_pagar()
         fila = MonedaLedger.objects.get(usuario=self.oro)
-        self.assertEqual((fila.tipo, fila.fecha), (MonedaLedger.Tipo.LIGA_MENSUAL, CIERRE))
+        self.assertEqual((fila.tipo, fila.fecha), (MonedaLedger.Tipo.LIGA_MENSUAL, PAGO))
 
-    def test_cerrar_dos_veces_no_paga_dos_veces(self):
+    def test_cerrar_dos_veces_no_duplica(self):
         ligas.cerrar_la_liga(OCTUBRE, CIERRE)
         segunda = ligas.cerrar_la_liga(OCTUBRE, CIERRE)
         self.assertFalse(segunda["cerrada"])
-        self.assertEqual(monedas.saldo(self.oro, CIERRE), 30)
         self.assertEqual(DesgloseLigaMensual.objects.count(), 4)
+
+    def test_pagar_dos_veces_no_paga_dos_veces(self):
+        self.cerrar_y_pagar()
+        segunda = ligas.pagar_la_liga(OCTUBRE, PAGO)
+        self.assertFalse(segunda["pagada"])
+        self.assertEqual(self.saldos(PAGO), [30, 20, 10, 0])
+        self.assertEqual(MonedaLedger.objects.count(), 3)
 
     def test_un_mes_que_no_termino_no_se_cierra(self):
         with self.assertRaises(ValueError):
@@ -234,29 +257,36 @@ class CerrarLaLigaTests(TestCase):
         self.assertEqual(ligas.ponerse_al_dia(NOVIEMBRE), [])
         self.assertEqual(ligas.dia_de_cierre(OCTUBRE), CIERRE)
 
+    def test_antes_del_dia_9_no_se_paga(self):
+        ligas.cerrar_la_liga(OCTUBRE, CIERRE)
+        with self.assertRaises(ValueError):
+            ligas.pagar_la_liga(OCTUBRE, date(2026, 11, 8))
+        self.assertEqual(ligas.pagar_al_dia(date(2026, 11, 8)), [])
+        self.assertEqual(ligas.dia_de_pago(OCTUBRE), PAGO)
+        self.assertEqual(self.saldos(date(2026, 11, 8)), [0, 0, 0, 0])
+
+    def test_no_se_paga_un_mes_que_no_se_cerro(self):
+        with self.assertRaises(ValueError):
+            ligas.pagar_la_liga(OCTUBRE, PAGO)
+
     def test_lo_del_ultimo_dia_que_llega_en_el_margen_cuenta(self):
         # El cuarto caminó el 31 y lo sincronizó el 1: con eso pasa a oro (400 + 1).
         puntos(self.cuarto, FIN_OCTUBRE, 301)
-        ligas.cerrar_la_liga(OCTUBRE, CIERRE)
-        self.assertEqual(monedas.saldo(self.cuarto, CIERRE), 30)
+        self.cerrar_y_pagar()
+        self.assertEqual(monedas.saldo(self.cuarto, PAGO), 30)
 
     def test_empate_en_el_podio_comparte_puesto_y_monedas(self):
         puntos(self.plata, date(2026, 10, 16), 100)        # plata empata con oro: 400
-        ligas.cerrar_la_liga(OCTUBRE, CIERRE)
-        self.assertEqual(
-            [monedas.saldo(u, CIERRE) for u in (self.oro, self.plata, self.bronce, self.cuarto)],
-            [30, 30, 10, 0],                                 # nadie queda 2.º
-        )
+        self.cerrar_y_pagar()
+        self.assertEqual(self.saldos(PAGO), [30, 30, 10, 0])     # nadie queda 2.º
 
     def test_el_cierre_desempata_por_pasos_y_despues_por_workouts(self):
         # plata iguala a oro en puntos (400) y en pasos: decide quién hizo más workouts.
         puntos(self.plata, date(2026, 10, 16), 100)
         pasos(self.oro, date(2026, 10, 16), 8_000, workouts=1)
         pasos(self.plata, date(2026, 10, 16), 8_000, workouts=3)
-        ligas.cerrar_la_liga(OCTUBRE, CIERRE)
-        self.assertEqual(
-            [monedas.saldo(u, CIERRE) for u in (self.plata, self.oro)], [30, 20],
-        )
+        self.cerrar_y_pagar()
+        self.assertEqual([monedas.saldo(u, PAGO) for u in (self.plata, self.oro)], [30, 20])
         desglose = DesgloseLigaMensual.objects.get(usuario=self.plata)
         self.assertEqual((desglose.posicion_final, desglose.workouts_acumulados_mes), (1, 3))
 
@@ -264,25 +294,51 @@ class CerrarLaLigaTests(TestCase):
         # En noviembre solo oro suma: plata y bronce quedarían 2.º y 3.º con 0.
         puntos(self.oro, date(2026, 11, 5), 10)
         resumen = ligas.cerrar_la_liga(NOVIEMBRE, date(2026, 12, 2))
-        self.assertEqual(resumen["monedas_pagadas"], 30)
+        self.assertEqual(resumen["monedas_por_pagar"], 30)
         self.assertEqual(
             DesgloseLigaMensual.objects.filter(liga_mensual__mes=NOVIEMBRE, monedas__gt=0).count(), 1,
         )
 
-    def test_usa_los_montos_editados_en_el_admin(self):
+    def test_usa_los_montos_editados_en_el_admin_antes_del_cierre(self):
         PremioPodioLiga.objects.filter(puesto=1).update(monedas=50)
+        self.cerrar_y_pagar()
+        self.assertEqual(monedas.saldo(self.oro, PAGO), 50)
+
+    def test_lo_que_se_fijo_al_cerrar_no_cambia_si_se_editan_los_montos_antes_del_pago(self):
         ligas.cerrar_la_liga(OCTUBRE, CIERRE)
-        self.assertEqual(monedas.saldo(self.oro, CIERRE), 50)
+        PremioPodioLiga.objects.filter(puesto=1).update(monedas=500)
+        ligas.pagar_la_liga(OCTUBRE, PAGO)
+        self.assertEqual(monedas.saldo(self.oro, PAGO), 30)
 
     def test_ponerse_al_dia_no_cierra_meses_anteriores_al_primero(self):
         self.assertEqual(ligas.ponerse_al_dia(date(2026, 10, 20)), [])
+        self.assertEqual(ligas.pagar_al_dia(date(2026, 10, 20)), [])
         self.assertFalse(LigaMensual.objects.exists())
 
     def test_ponerse_al_dia_cierra_los_meses_pendientes_una_sola_vez(self):
         resultados = ligas.ponerse_al_dia(date(2026, 12, 5))
         self.assertEqual([r["mes"] for r in resultados], ["2026-10-01", "2026-11-01"])
         self.assertEqual(ligas.ponerse_al_dia(date(2026, 12, 6)), [])
-        self.assertEqual(monedas.saldo(self.oro, date(2026, 12, 6)), 30)  # noviembre: sin puntos
+
+    def test_pagar_al_dia_paga_los_meses_pendientes_una_sola_vez(self):
+        ligas.ponerse_al_dia(date(2026, 12, 5))
+        resultados = ligas.pagar_al_dia(date(2026, 12, 10))
+        self.assertEqual([r["mes"] for r in resultados], ["2026-10-01", "2026-11-01"])
+        self.assertEqual(ligas.pagar_al_dia(date(2026, 12, 11)), [])
+        self.assertEqual(monedas.saldo(self.oro, date(2026, 12, 11)), 30)  # noviembre: sin puntos
+
+    def test_pagar_al_dia_cierra_antes_el_mes_que_no_se_cerro(self):
+        # El servidor estuvo apagado el día 2 y volvió el 12.
+        resultados = ligas.pagar_al_dia(date(2026, 11, 12))
+        self.assertEqual([r["mes"] for r in resultados], ["2026-10-01"])
+        self.assertEqual(LigaMensual.objects.get(mes=OCTUBRE).cerrada_en, date(2026, 11, 12))
+        self.assertEqual(monedas.saldo(self.oro, date(2026, 11, 12)), 30)
+
+    def test_un_mes_ya_cerrado_y_pagado_por_el_modelo_anterior_no_se_paga_otra_vez(self):
+        # Meses cerrados antes de este cambio: la migración les puso pagada_en = cerrada_en.
+        LigaMensual.objects.create(mes=OCTUBRE, cerrada_en=CIERRE, pagada_en=CIERRE, total_participantes=4)
+        self.assertEqual(ligas.pagar_al_dia(PAGO), [])
+        self.assertFalse(MonedaLedger.objects.exists())
 
 
 class _ConToken:
@@ -511,13 +567,29 @@ class ComandoCerrarLigaTests(TestCase):
 
     def test_sin_mes_pone_al_dia(self):
         self.assertIn("2026-10-01", self._correr())
-        self.assertEqual(monedas.saldo(self.oro, CIERRE), 30)
+        self.assertEqual(monedas.saldo(self.oro, CIERRE), 0)       # cerrado, pero el podio se paga el 9
         self.assertIn("No hay meses", self._correr())
 
-    def test_con_mes(self):
-        self._correr("--mes", "2026-10")
+    def test_sin_mes_paga_lo_que_ya_toca(self):
+        self._correr()
+        salida = self._correr(hoy=PAGO)
+        self.assertIn("Podio de La Liga 2026-10-01", salida)
+        self.assertEqual(monedas.saldo(self.oro, PAGO), 30)
+        self.assertIn("No hay meses", self._correr(hoy=PAGO))
+
+    def test_con_mes_cierra_y_dice_cuando_se_paga(self):
+        salida = self._correr("--mes", "2026-10")
+        self.assertIn("se paga desde el 2026-11-09", salida)
+        self.assertEqual(monedas.saldo(self.oro, CIERRE), 0)
         self.assertIn("ya estaba cerrada", self._correr("--mes", "2026-10"))
-        self.assertEqual(monedas.saldo(self.oro, CIERRE), 30)
+
+    def test_con_mes_el_dia_9_cierra_y_paga_y_otra_vez_no_paga(self):
+        self.assertIn("Podio de La Liga 2026-10-01", self._correr("--mes", "2026-10", hoy=PAGO))
+        self.assertEqual(monedas.saldo(self.oro, PAGO), 30)
+        salida = self._correr("--mes", "2026-10", hoy=PAGO)
+        self.assertIn("ya estaba cerrada", salida)
+        self.assertIn("ya estaba pagado", salida)
+        self.assertEqual(monedas.saldo(self.oro, PAGO), 30)
 
     def test_errores_claros(self):
         for args, hoy in (

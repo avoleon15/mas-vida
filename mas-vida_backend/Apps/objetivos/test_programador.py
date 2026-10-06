@@ -14,7 +14,7 @@ from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
 from services import monedas, programador
-from services.programador import CIERRE, CORRECCION, LIGA, correr, ejecutar, proxima_ejecucion
+from services.programador import CIERRE, CORRECCION, LIGA, PAGO_LIGA, correr, ejecutar, proxima_ejecucion
 from services.tiempo import inicio_semana
 
 GT = ZoneInfo("America/Guatemala")
@@ -58,6 +58,24 @@ class ProximaEjecucionTests(SimpleTestCase):
     def test_la_liga_cierra_el_dia_2_y_el_dia_1_es_margen_de_gracia(self):
         self.assertEqual(proxima_ejecucion(gt(2026, 10, 31, 23, 0)), (gt(2026, 11, 2, 0, 0), LIGA))
         self.assertEqual(proxima_ejecucion(gt(2026, 11, 1, 12, 0)), (gt(2026, 11, 2, 0, 0), LIGA))
+
+    def test_el_podio_se_paga_el_dia_9(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 2, 0, 0)), (gt(2026, 11, 3, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 8, 12, 0)), (gt(2026, 11, 9, 0, 0), PAGO_LIGA))
+        # Pagado, la siguiente es el cierre semanal del martes.
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 9, 0, 0)), (gt(2026, 11, 10, 0, 0), CIERRE))
+
+    def test_si_el_dia_9_es_martes_lo_cubre_el_cierre_y_no_se_repite(self):
+        # 9 mar 2027 es martes.
+        self.assertEqual(proxima_ejecucion(gt(2027, 3, 8, 23, 0)), (gt(2027, 3, 9, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2027, 3, 9, 0, 0)), (gt(2027, 3, 9, 12, 0), CORRECCION))
+
+    def test_antes_de_que_arranque_la_liga_no_se_agenda_ni_cierre_ni_pago(self):
+        # Septiembre no tiene La Liga: el 9 de octubre no hay corrida de pago.
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 7, 12, 0)), (gt(2026, 10, 13, 0, 0), CIERRE))
+
+    def test_el_dia_2_sigue_cerrando_aunque_el_pago_este_cerca(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 12, 1, 12, 0)), (gt(2026, 12, 2, 0, 0), LIGA))
 
     def test_si_el_dia_2_es_martes_lo_cubre_el_cierre_y_no_se_repite(self):
         # 2 feb 2027 es martes: una sola corrida a las 00:00 y después la corrección.
@@ -258,6 +276,36 @@ class EjecutarTests(TestCase):
         self.assertEqual(
             [r["mes"] for r in resultado["liga"]], ["2026-11-01", "2026-12-01", "2027-01-01"],
         )
+
+    def test_la_corrida_de_liga_del_dia_2_no_paga_y_la_del_dia_9_si(self):
+        PolizaVinculada.objects.create(
+            usuario=self.ana, policy_number="P-1", insurer="Demo", estado_verificacion="verificada",
+        )
+        Ledger.objects.create(
+            usuario=self.ana, puntos=100, tipo=Ledger.TipoLedger.AJUSTE_MANUAL,
+            fecha=date(2026, 10, 10), version_regla=VersionRegla.objects.get(version=1),
+        )
+        ejecutar(LIGA, gt(2026, 11, 2, 0, 0))
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 11, 2)), 0)
+        resultado = ejecutar(PAGO_LIGA, gt(2026, 11, 9, 0, 0))
+        self.assertEqual([r["mes"] for r in resultado], ["2026-10-01"])
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 11, 9)), 30)
+        # Correrla otra vez no paga dos veces.
+        ejecutar(PAGO_LIGA, gt(2026, 11, 9, 0, 0))
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 11, 9)), 30)
+
+    def test_el_cierre_semanal_tambien_paga_el_podio_que_ya_toca(self):
+        PolizaVinculada.objects.create(
+            usuario=self.ana, policy_number="P-1", insurer="Demo", estado_verificacion="verificada",
+        )
+        Ledger.objects.create(
+            usuario=self.ana, puntos=100, tipo=Ledger.TipoLedger.AJUSTE_MANUAL,
+            fecha=date(2026, 10, 10), version_regla=VersionRegla.objects.get(version=1),
+        )
+        resultado = ejecutar(CIERRE, gt(2027, 3, 9, 0, 0))               # martes día 9
+        self.assertIn("2026-10-01", [r["mes"] for r in resultado["pagos"]])
+        # Un pago atrasado cuenta en la season del día en que se paga.
+        self.assertEqual(monedas.saldo(self.ana, date(2027, 3, 9)), 30)
 
     def test_una_corrida_desconocida_falla(self):
         with self.assertRaises(ValueError):

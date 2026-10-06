@@ -17,6 +17,9 @@ Reglas (contrato-tecnico.md, "La Liga y Tus Ligas"):
 - El cierre espera el mismo margen de gracia que la semana
   (`goals.DIAS_DE_GRACIA`, 1 día): el mes se cierra el día 2 a las 00:00, así
   lo caminado el último día y sincronizado el día 1 todavía cuenta.
+- El podio se PAGA el día 9 (`DIA_DE_PAGO`), no al cerrar: así las monedas y el
+  cupón caen en la season siguiente y no vencen a los pocos días. Al cerrar se
+  fija quién gana qué; el día 9 se acreditan.
 - Tus Ligas: grupos que arma el usuario, con o sin póliza, sin premios. Se
   entra con un código y se puede salir cuando se quiera. De La Liga no se sale.
 """
@@ -93,6 +96,18 @@ def dia_de_cierre(mes: date) -> date:
     último día (lo mismo que el lunes para la semana).
     """
     return rango_mes(mes)[1] + timedelta(days=1 + DIAS_DE_GRACIA)
+
+
+# El podio se paga el día 9 del mes siguiente, no el día del cierre (decidido el 4 oct
+# 2026). Las seasons arrancan un lunes entre el 28 de sep y el 4 de oct (y igual en
+# enero, abril y julio): pagado el día 2 podía caer en la season que estaba por
+# terminar y vencer a los pocos días. El día 9 ya es siempre de la season nueva.
+DIA_DE_PAGO = 9
+
+
+def dia_de_pago(mes: date) -> date:
+    """Desde qué día se paga el podio del mes de `mes`: el día 9 del siguiente."""
+    return rango_mes(mes)[1] + timedelta(days=DIA_DE_PAGO)
 
 
 # --- la tabla ------------------------------------------------------------------
@@ -220,11 +235,11 @@ def premios_podio() -> list[int]:
 
 
 def cerrar_la_liga(mes: date, hoy: date) -> dict:
-    """Cierra La Liga del mes de `mes`: guarda la tabla final y paga el podio.
+    """Cierra La Liga del mes de `mes`: guarda la tabla final y fija quién gana qué.
 
-    Una sola vez: si ya está cerrada no hace nada (idempotente, y seguro con
-    dos instancias del programador). Las monedas se pagan con fecha `hoy`, así
-    que cuentan en la season de ese día.
+    NO paga: las monedas y el cupón del podio se pagan el día 9 (`pagar_la_liga`),
+    para que caigan en la season siguiente. Una sola vez: si ya está cerrada no hace
+    nada (idempotente, y seguro con dos instancias del programador).
     """
     inicio, fin = rango_mes(mes)
     if hoy < dia_de_cierre(mes):
@@ -235,7 +250,7 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
 
     resumen = {
         "mes": inicio.isoformat(), "cerrada": False, "participantes": 0,
-        "monedas_pagadas": 0, "cupones": 0,
+        "monedas_por_pagar": 0,
     }
     with transaction.atomic():
         liga, _ = LigaMensual.objects.select_for_update().get_or_create(mes=inicio)
@@ -244,7 +259,6 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
 
         filas = tabla(participantes_la_liga().values_list("pk", flat=True), inicio, fin)
         podio = premios_podio()
-        patrocinio = patrocinios.de_liga(inicio)
         por_pk = usuarios(f.usuario_pk for f in filas)
         for fila in filas:
             gana = (
@@ -260,15 +274,7 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
                 posicion_final=fila.posicion,
                 monedas=gana,
             )
-            if gana:
-                monedas.acreditar(por_pk[fila.usuario_pk], gana, MonedaLedger.Tipo.LIGA_MENSUAL, fecha=hoy)
-                resumen["monedas_pagadas"] += gana
-                # Con patrocinio, el cupón de la marca va ADEMÁS de las monedas, a los mismos.
-                if patrocinio is not None:
-                    cupon = patrocinios.premiar_liga(
-                        por_pk[fila.usuario_pk], patrocinio, inicio,
-                    )
-                    resumen["cupones"] += cupon is not None
+            resumen["monedas_por_pagar"] += gana
 
         liga.total_participantes = len(filas)
         liga.cerrada_en = hoy
@@ -277,14 +283,75 @@ def cerrar_la_liga(mes: date, hoy: date) -> dict:
     return resumen
 
 
+def pagar_la_liga(mes: date, hoy: date) -> dict:
+    """Paga el podio del mes de `mes`, ya cerrado: las monedas y, con patrocinio, el cupón.
+
+    Una sola vez (idempotente, y seguro con dos instancias del programador). Las
+    monedas se pagan con fecha `hoy`: cuentan en la season de ese día. Quienes ganan
+    y cuánto salen de lo que se fijó al cerrar (`DesgloseLigaMensual.monedas`), no de
+    los montos de hoy. El cupón pide póliza verificada AL PAGAR, como todo premio.
+    """
+    inicio, _ = rango_mes(mes)
+    if hoy < dia_de_pago(mes):
+        raise ValueError(f"El podio de {inicio:%Y-%m} se paga desde el {dia_de_pago(mes)}")
+
+    resumen = {"mes": inicio.isoformat(), "pagada": False, "monedas_pagadas": 0, "cupones": 0}
+    with transaction.atomic():
+        liga = LigaMensual.objects.select_for_update().filter(mes=inicio).first()
+        if liga is None or liga.cerrada_en is None:
+            raise ValueError(f"La Liga de {inicio:%Y-%m} todavía no está cerrada")
+        if liga.pagada_en is not None:
+            return resumen
+
+        patrocinio = patrocinios.de_liga(inicio)
+        ganadores = (
+            DesgloseLigaMensual.objects
+            .filter(liga_mensual=liga, monedas__gt=0)
+            .select_related("usuario")
+            .order_by("posicion_final", "pk")
+        )
+        for desglose in ganadores:
+            monedas.acreditar(desglose.usuario, desglose.monedas, MonedaLedger.Tipo.LIGA_MENSUAL, fecha=hoy)
+            resumen["monedas_pagadas"] += desglose.monedas
+            # Con patrocinio, el cupón de la marca va ADEMÁS de las monedas, a los mismos.
+            if patrocinio is not None:
+                cupon = patrocinios.premiar_liga(desglose.usuario, patrocinio, inicio)
+                resumen["cupones"] += cupon is not None
+
+        liga.pagada_en = hoy
+        liga.save(update_fields=["pagada_en"])
+    resumen["pagada"] = True
+    return resumen
+
+
+def _meses_hasta(dia_fn, hoy: date):
+    """Los meses (desde el primero) cuyo día `dia_fn(mes)` ya llegó."""
+    mes = PRIMER_MES
+    while dia_fn(mes) <= hoy:
+        yield mes
+        mes = rango_mes(mes)[1] + timedelta(days=1)
+
+
 def ponerse_al_dia(hoy: date) -> list[dict]:
     """Cierra los meses de La Liga que ya pasaron su margen de gracia y sigan abiertos."""
     resultados = []
-    mes = PRIMER_MES
-    while dia_de_cierre(mes) <= hoy:
+    for mes in _meses_hasta(dia_de_cierre, hoy):
         if not LigaMensual.objects.filter(mes=mes, cerrada_en__isnull=False).exists():
             resultados.append(cerrar_la_liga(mes, hoy))
-        mes = rango_mes(mes)[1] + timedelta(days=1)
+    return resultados
+
+
+def pagar_al_dia(hoy: date) -> list[dict]:
+    """Paga el podio de los meses que ya llegaron al día 9 y sigan sin pagar.
+
+    Si algún mes no se cerró (el servidor estuvo apagado el día 2), lo cierra antes de pagar.
+    """
+    resultados = []
+    for mes in _meses_hasta(dia_de_pago, hoy):
+        if LigaMensual.objects.filter(mes=mes, pagada_en__isnull=False).exists():
+            continue
+        cerrar_la_liga(mes, hoy)           # no hace nada si ya estaba cerrada
+        resultados.append(pagar_la_liga(mes, hoy))
     return resultados
 
 
