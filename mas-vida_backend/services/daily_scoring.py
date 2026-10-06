@@ -8,7 +8,9 @@ Elección de fuente (decidido 30 sep, cambia la sección 7 de las reglas de
 puntaje): cada métrica elige por separado el dispositivo que más aporta, sin
 importar si es reloj, anillo o teléfono, y nunca se suma la misma actividad
 dos veces.
-- Pasos: en cada hora gana el dispositivo con más pasos; las horas se suman.
+- Pasos: en cada bloque (una hora, o varias si una muestra de más de una hora las
+  cubre) gana el dispositivo con más pasos; los bloques se suman. Una muestra que
+  cruza la medianoche se reparte entre los dos días según el tiempo en cada uno.
 - Workouts: un entrenamiento que dos dispositivos registran al mismo tiempo
   cuenta una vez (el más largo); los que no se cruzan cuentan todos. Un
   workout necesita ritmo cardíaco: sin eso el serializer lo descarta.
@@ -27,7 +29,7 @@ import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from Apps.activities.models import Muestra, MuestraBPM, ResumenDiario, Sesion
@@ -36,7 +38,7 @@ from Apps.poincs.models import Ledger
 from services.device import (
     agrupar_por_dispositivo,
     clave_dispositivo,
-    pasos_ganadores_por_hora,
+    pasos_ganadores_por_bloque,
 )
 from services.hearth_rate import (
     calculate_age,
@@ -92,12 +94,21 @@ def _rango_del_dia(fecha: date):
     return inicio, inicio + timedelta(days=1)
 
 
-def fecha_nacimiento_efectiva(usuario) -> date:
-    """La confirmada por la aseguradora manda sobre la autoreportada."""
+def fecha_nacimiento_efectiva(usuario, fecha: date | None = None) -> date:
+    """La confirmada por la aseguradora manda sobre la autoreportada.
+
+    Con `fecha`, la que valía ese día: si la aseguradora corrigió la fecha después,
+    la corrección vale desde que se hizo y lo anterior se sigue calculando con la
+    fecha de entonces (una corrección nunca le quita puntos a nadie).
+    """
     poliza = PolizaVinculada.objects.filter(
         usuario=usuario, estado_verificacion="verificada"
     ).first()
     if poliza and poliza.birth_date_confirmada:
+        if fecha is not None:
+            posterior = poliza.correcciones.filter(desde__gt=fecha).order_by("desde", "id").first()
+            if posterior is not None:
+                return posterior.fecha_anterior
         return poliza.birth_date_confirmada
     return usuario.birth_date
 
@@ -136,8 +147,12 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
     inicio, fin = _rango_del_dia(fecha)
     dispositivo = ("fuente_bundle", "dispositivo_modelo", "dispositivo_fabricante")
 
+    # Pasos: las que empiezan en el día y también las que empezaron antes y siguen
+    # dentro (una muestra larga que cruza la medianoche cuenta en los dos días).
     pasos = _dicts(
-        Muestra.objects.filter(usuario=usuario, inicio__gte=inicio, inicio__lt=fin),
+        Muestra.objects.filter(usuario=usuario).filter(
+            Q(inicio__gte=inicio, inicio__lt=fin) | Q(inicio__lt=inicio, fin__gt=inicio),
+        ),
         ("inicio", "fin", "cantidad", *dispositivo),
     )
     sesiones = _dicts(
@@ -149,10 +164,10 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         ("inicio", "fin", "bpm", *dispositivo),
     )
 
-    pasos = pasos_ganadores_por_hora(pasos)
+    pasos = pasos_ganadores_por_bloque(pasos, inicio, fin)
 
     pasos_totales = sum(m["cantidad"] for m in pasos)
-    edad = calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
+    edad = calculate_age(fecha_nacimiento_efectiva(usuario, fecha), fecha)
 
     puntos_pasos = calculate_daily_step_points(pasos_totales, edad)
     sesiones_por = agrupar_por_dispositivo(sesiones)
@@ -192,6 +207,39 @@ def calcular_dia(usuario, fecha: date) -> ResultadoDia:
         workouts_fc_maxima=max((s["fc_maxima"] for s in sesiones), default=None),
         ritmo_cardiaco=minutos_por_zona(ritmo_por, edad),
     )
+
+
+def dias_que_tocan(pasos, sesiones, ritmo, desde: date, hasta: date) -> set[date]:
+    """Los días (hora de Guatemala) a los que pertenecen las muestras de un sync, dentro de [desde, hasta].
+
+    Cada día se recalcula con todo lo guardado, pero el sync solo nombra UN día. Si
+    en el paquete viaja una muestra de otro día (un tramo que cruza la medianoche,
+    un teléfono en otra zona horaria, un dato que el reloj subió tarde), ese día
+    tiene que recalcularse también o se queda con sus puntos viejos hasta que
+    alguien vuelva a mandarlo.
+
+    - Pasos: todos los días que cubre la muestra (una larga puede cubrir varios).
+    - Workouts y ritmo cardíaco: el día en que empiezan (así los calcula `calcular_dia`).
+    Lo que cae fuera de [desde, hasta] se guarda pero no se recalcula.
+    """
+    un_dia = timedelta(days=1)
+    dias = set()
+
+    def agregar(dia):
+        if desde <= dia <= hasta:
+            dias.add(dia)
+
+    for muestra in pasos:
+        inicio = timezone.localtime(muestra["inicio"]).date()
+        fin = muestra["fin"]
+        ultimo = timezone.localtime(fin - timedelta(microseconds=1)).date() if fin > muestra["inicio"] else inicio
+        dia = max(inicio, desde)            # no se recorre más allá de la ventana
+        while dia <= min(ultimo, hasta):
+            agregar(dia)
+            dia += un_dia
+    for muestra in (*sesiones, *ritmo):
+        agregar(timezone.localtime(muestra["inicio"]).date())
+    return dias
 
 
 def _suma(queryset) -> int:
@@ -263,12 +311,23 @@ def asentar(usuario, dia: ResultadoDia) -> ResultadoAnual:
     )
 
 
+def acreditado_del_dia(usuario, fecha: date) -> int:
+    """Lo que el ledger tiene acreditado ese día: la suma de todas sus filas de actividad.
+
+    Ya trae el techo diario, el techo anual, los ajustes por datos tardíos y el
+    retroactivo denegado (un día anulado queda en neto 0).
+    """
+    return _suma(Ledger.objects.filter(usuario=usuario, fecha=fecha, tipo__in=TIPOS_DEL_DIA))
+
+
 def guardar_resumen(usuario, dia: ResultadoDia) -> None:
-    """Tabla materializada: se puede borrar y reconstruir, no es fuente de verdad."""
+    """Tabla materializada: se puede borrar y reconstruir, no es fuente de verdad.
+
+    Los puntos son los ACREDITADOS (los del ledger), no los que calculó el día:
+    pasado el techo anual el día puede calcular 200 y acreditar 0, y Progreso tiene
+    que decir lo mismo que Mi Plan. Hay que llamarla DESPUÉS de `asentar`.
+    """
     hubo_sesion = dia.workouts_cantidad > 0
-    # Un día anulado por retroactivo denegado se ve en 0, igual que en el ledger.
-    corte = fecha_corte_sin_retroactivo(usuario)
-    anulado = corte is not None and dia.fecha < corte
     ResumenDiario.objects.update_or_create(
         usuario=usuario,
         fecha=dia.fecha,
@@ -278,7 +337,7 @@ def guardar_resumen(usuario, dia: ResultadoDia) -> None:
             "workouts_duracion_total_min": dia.workouts_duracion_total if hubo_sesion else None,
             "workouts_fc_promedio": dia.workouts_fc_promedio,
             "workouts_fc_maxima": dia.workouts_fc_maxima,
-            "puntos_dia": 0 if anulado else dia.puntos_dia,
+            "puntos_dia": acreditado_del_dia(usuario, dia.fecha),
             **{
                 zona: (dia.ritmo_cardiaco or {}).get(zona)
                 for zona in ("minutos_ligero", "minutos_moderado", "minutos_intenso")

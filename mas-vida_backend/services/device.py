@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.utils import timezone
 
@@ -78,33 +78,102 @@ def agrupar_por_dispositivo(muestras):
     return grupos
 
 
-def _hora_local(muestra):
-    """Hora (en hora de Guatemala) en la que empieza la muestra.
+# Una muestra de más de una hora es un total que una app escribe de golpe (una
+# pulsera que sube "11.000 pasos de 8:00 a 18:00"), no una lectura del momento.
+UMBRAL_MUESTRA_LARGA = timedelta(hours=1)
 
-    Una muestra que cruza el cambio de hora cuenta en la hora en que empieza.
-    Guatemala no tiene horario de verano, así que las horas son estables.
+
+def _inicio_de_hora(momento):
+    """La hora en punto (hora de Guatemala) que contiene a `momento`."""
+    return timezone.localtime(momento).replace(minute=0, second=0, microsecond=0)
+
+
+def _parte_del_dia(muestra, inicio_dia, fin_dia):
+    """Qué parte de una muestra cae dentro del día [inicio_dia, fin_dia).
+
+    Devuelve (desde, hasta, cantidad, es_larga) o None si no toca el día. Una
+    muestra que cruza la medianoche se reparte entre los dos días en proporción
+    al tiempo que pasa en cada uno. Se calcula con el acumulado de cada borde,
+    así lo que le toca a cada día suma SIEMPRE la cantidad original. Una lectura
+    sin duración (fin = inicio) cuenta entera en el día en que ocurre.
     """
     inicio = datetime.fromisoformat(muestra["inicio"])
-    return timezone.localtime(inicio).replace(minute=0, second=0, microsecond=0)
+    fin = datetime.fromisoformat(muestra["fin"])
+    duracion = (fin - inicio).total_seconds()
+    es_larga = (fin - inicio) > UMBRAL_MUESTRA_LARGA
+
+    if duracion <= 0:
+        if inicio_dia <= inicio < fin_dia:
+            return inicio, inicio, muestra["cantidad"], False
+        return None
+
+    desde, hasta = max(inicio, inicio_dia), min(fin, fin_dia)
+    if hasta <= desde:
+        return None
+    antes = (desde - inicio).total_seconds()
+    hasta_s = (hasta - inicio).total_seconds()
+    cantidad = round(muestra["cantidad"] * hasta_s / duracion) - round(muestra["cantidad"] * antes / duracion)
+    return desde, hasta, cantidad, es_larga
 
 
-def pasos_ganadores_por_hora(pasos):
-    """Muestras de pasos que cuentan: en cada hora, las del dispositivo con más pasos.
+def _bloques_de_horas(partes):
+    """Rangos de horas que se comparan como una sola unidad.
 
-    El mismo caminar lo registran a la vez el teléfono y el reloj, así que
-    dentro de una hora nunca se suman dos dispositivos (se duplicaría). Entre
-    horas distintas sí se suma: un reloj que solo se usa para dormir no le
-    quita al teléfono los pasos del día, y un reloj que solo se usa en el gym
-    aporta justo esa hora. Un empate exacto se resuelve por la clave, solo para
-    que el resultado sea siempre el mismo.
+    Cada hora es su propio bloque, salvo las que cubre una muestra larga: esas se
+    funden en un bloque (y dos muestras largas que se cruzan, en uno solo). Las
+    muestras cortas, aunque crucen el cambio de hora, siguen contando en la hora
+    en que empiezan: si no, encadenarían todas las horas del día en un solo
+    bloque y un reloj usado solo en el gimnasio perdería su hora.
     """
-    por_hora = {}
+    rangos = sorted(
+        (_inicio_de_hora(desde), _inicio_de_hora(hasta - timedelta(microseconds=1)))
+        for desde, hasta, _, es_larga in partes if es_larga
+    )
+    fundidos = []
+    for primera, ultima in rangos:
+        if fundidos and primera <= fundidos[-1][1]:       # comparten al menos una hora
+            fundidos[-1] = (fundidos[-1][0], max(fundidos[-1][1], ultima))
+        else:
+            fundidos.append((primera, ultima))
+    return fundidos
+
+
+def pasos_ganadores_por_bloque(pasos, inicio_dia, fin_dia):
+    """Muestras de pasos que cuentan en el día: en cada bloque, las del dispositivo con más pasos.
+
+    El mismo caminar lo registran a la vez el teléfono y el reloj, así que dentro
+    de un bloque nunca se suman dos dispositivos (se duplicaría). Un bloque es una
+    hora, o varias si una muestra larga las cubre (ver `_bloques_de_horas`). Entre
+    bloques distintos sí se suma: un reloj que solo se usa para dormir no le quita
+    al teléfono los pasos del día, y uno que solo se usa en el gimnasio aporta
+    justo esa hora. Un empate exacto se resuelve por la clave, solo para que el
+    resultado sea siempre el mismo.
+
+    Devuelve las muestras ganadoras con la `cantidad` que le toca a este día (las
+    que cruzan la medianoche vienen recortadas).
+    """
+    partes = []
     for muestra in pasos:
-        por_hora.setdefault(_hora_local(muestra), []).append(muestra)
+        parte = _parte_del_dia(muestra, inicio_dia, fin_dia)
+        if parte is not None and parte[2] > 0:
+            partes.append((muestra, *parte))
+    fundidos = _bloques_de_horas([p[1:] for p in partes])
+
+    def bloque_de(desde):
+        hora = _inicio_de_hora(desde)
+        for primera, ultima in fundidos:
+            if primera <= hora <= ultima:
+                return primera
+        return hora
+
+    por_bloque = {}
+    for muestra, desde, _hasta, cantidad, _larga in partes:
+        recortada = {**muestra, "cantidad": cantidad}
+        por_bloque.setdefault(bloque_de(desde), []).append(recortada)
 
     elegidas = []
-    for hora in sorted(por_hora):
-        grupos = agrupar_por_dispositivo(por_hora[hora])
+    for bloque in sorted(por_bloque):
+        grupos = agrupar_por_dispositivo(por_bloque[bloque])
         ganador = max(
             grupos,
             key=lambda clave: (sum(m["cantidad"] for m in grupos[clave]), clave),

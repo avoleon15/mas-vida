@@ -37,7 +37,7 @@ from Apps.users.models import Usuario
 from services import monedas, patrocinios
 from services.daily_scoring import fecha_nacimiento_efectiva
 from services.hearth_rate import calculate_age
-from services.polizas import fecha_corte_sin_retroactivo
+from services.polizas import cortes_de_retroactivo, fecha_corte_sin_retroactivo
 from services.tiempo import (
     anio_season,
     fin_semana,
@@ -124,7 +124,7 @@ def edad_en(usuario, fecha: date) -> int:
     La confirmada por la aseguradora si hay póliza verificada; si no, la del
     registro (la misma regla que usan los puntos).
     """
-    return calculate_age(fecha_nacimiento_efectiva(usuario), fecha)
+    return calculate_age(fecha_nacimiento_efectiva(usuario, fecha), fecha)
 
 
 def meta_pasos_de(usuario, objetivo: ObjetivoSemanal) -> int:
@@ -189,10 +189,13 @@ def _totales(filas):
 
 
 def progreso(usuario, objetivo: ObjetivoSemanal) -> Progreso:
+    # Lo anterior a la verificación, si se denegó el retroactivo, no cuenta para la meta.
+    corte = fecha_corte_sin_retroactivo(usuario)
+    desde = max(objetivo.fecha_inicio, corte) if corte is not None else objetivo.fecha_inicio
     pasos, workouts = _totales(
         ResumenDiario.objects.filter(
             usuario=usuario,
-            fecha__gte=objetivo.fecha_inicio,
+            fecha__gte=desde,
             fecha__lte=objetivo.fecha_fin,
         )
     )
@@ -213,7 +216,17 @@ def _progreso_de_todos(usuarios, objetivo: ObjetivoSemanal) -> dict[int, tuple[i
         .values("usuario")
         .annotate(pasos=Sum("pasos_totales_dia"), workouts=Sum("workouts_cantidad"))
     )
-    return {f["usuario"]: (f["pasos"] or 0, f["workouts"] or 0) for f in filas}
+    avance = {f["usuario"]: (f["pasos"] or 0, f["workouts"] or 0) for f in filas}
+
+    # Quien tiene el retroactivo denegado: los días anteriores a su verificación no
+    # cuentan para la meta (los de la semana que cruza la verificación tampoco).
+    for pk, corte in cortes_de_retroactivo(u.pk for u in usuarios).items():
+        if corte <= objetivo.fecha_inicio:
+            continue
+        avance[pk] = (0, 0) if corte > objetivo.fecha_fin else _totales(
+            ResumenDiario.objects.filter(usuario_id=pk, fecha__gte=corte, fecha__lte=objetivo.fecha_fin)
+        )
+    return avance
 
 
 def primer_dia_de_cierre(lunes: date) -> date:

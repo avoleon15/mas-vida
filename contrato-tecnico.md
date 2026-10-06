@@ -67,7 +67,8 @@ Decidido en esta revisión: **cualquier workout de cualquier duración cuenta**
 hace el servidor con datos mal formados o imposibles en `sync`.
 
 **Actualizado el 1 oct 2026** (fuentes, workouts y póliza): la elección de
-fuente pasa de "gana el reloj" a **una decisión por hora** para los pasos; un
+fuente pasa de "gana el reloj" a **una decisión por bloque** (una hora, o varias si una
+muestra larga las cubre; ver "Pasos por bloques") para los pasos; un
 workout **necesita ritmo cardíaco** (sin reloj no hay workout, y los workouts
 ingresados a mano no cuentan); y se documentan los endpoints de póliza y la
 regla de retroactividad. Ver "Elección de fuente", "Qué cuenta como workout" y
@@ -402,7 +403,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 
 | Campo | Tipo | Obligatorio | Notas |
 |---|---|---|---|
-| `fecha` | string (YYYY-MM-DD) | sí | día calendario que se está sincronizando. El servidor guarda todas las muestras que llegan y **recalcula ese día** con todas las guardadas que **empiezan** dentro de él, en hora de Guatemala |
+| `fecha` | string (YYYY-MM-DD) | sí | día calendario que se está sincronizando. El servidor guarda todas las muestras que llegan y **recalcula ese día** con todo lo guardado, en hora de Guatemala. **Desde el 5 oct 2026 también recalcula los demás días a los que pertenecen las muestras del paquete** (ver "Qué días recalcula un sync") |
 | `zona_horaria` | string (IANA) | sí | ej. `America/Guatemala`. El servidor valida que sea una zona IANA real, pero **hoy no la usa**: el día y la semana se cortan siempre en hora de Guatemala (`TIME_ZONE` del servidor). Para el piloto, todo en Guatemala, es lo mismo |
 | `pasos[]` | array | sí (puede ir vacío) | una entrada por muestra de `HKQuantitySample` de tipo `.stepCount` **medida por un sensor**: las escritas a mano en Salud no se mandan (ver "Lo escrito a mano no cuenta") |
 | `pasos[].external_id` | string (UUID) | sí | el `sample.uuid` de HealthKit — clave de idempotencia |
@@ -494,7 +495,7 @@ sin importar si son reloj, anillo o teléfono. La derivación de arriba se
 conserva para reportes y para saber qué dispositivo es cada uno, pero
 "`desconocido` se trata como `telefono`" ya no cambia ningún puntaje.
 
-### Elección de fuente — por hora (decidido 1 oct 2026)
+### Elección de fuente — por bloques (decidido 1 oct 2026; bloques desde el 5 oct 2026)
 
 Reemplaza la regla anterior "si hay reloj ese día, el reloj gana", que dejaba en
 cero a quien usa el reloj solo para dormir o solo para entrenar. **Nunca se
@@ -502,7 +503,7 @@ suma la misma actividad dos veces, y nunca se descarta actividad real.**
 
 | Métrica | Regla |
 |---|---|
-| **Pasos** | En **cada hora** (hora de Guatemala) gana el dispositivo con más pasos en esa hora; después se suman las horas. Una muestra cuenta en la hora en que **empieza**. |
+| **Pasos** | En cada **bloque** gana el dispositivo con más pasos; después se suman los bloques. Un bloque es **una hora** (hora de Guatemala) o, si una muestra de **más de una hora** las cubre, esas horas juntas (ver "Pasos por bloques"). Una muestra corta cuenta en la hora en que **empieza**. |
 | **Workouts** | Si dos dispositivos registran el mismo entrenamiento (se cruzan en el tiempo) cuenta **uno**, el más largo. Los que no se cruzan cuentan todos, aunque vengan de dispositivos distintos. |
 | **Intensidad** | Cada dispositivo calcula la suya con sus propias sesiones y su propio ritmo cardíaco; gana el de más puntos. No se suman. |
 
@@ -514,6 +515,43 @@ El día se **recalcula completo en cada sync** de esa fecha, a partir de lo
 guardado y no del último payload: un reloj de terceros que escribe a Apple
 Salud con horas de retraso corrige el resultado solo (con una fila de ajuste en
 el ledger, nunca editando una existente).
+
+### Pasos por bloques (hecho 5 oct 2026)
+
+Una app que escribe un total de varias horas de golpe (una pulsera con "11.000
+pasos de 8:00 a 18:00") antes caía entera en la hora en que empieza, y el iPhone
+ganaba las otras nueve: 12.000 pasos reales se contaban como 21.800.
+
+- Una muestra de **más de una hora** es larga: las horas que cubre se **funden en
+  un solo bloque** (y dos muestras largas que se cruzan, en uno). En cada bloque
+  gana el dispositivo con más pasos; no se suman. Una muestra de justo una hora o
+  menos es corta.
+- Las muestras **cortas** siguen contando en la hora en que empiezan, **aunque
+  crucen el cambio de hora** (8:51 a 9:09 cuenta en la hora 8). Si no, las lecturas
+  normales del iPhone encadenarían todo el día en un bloque y un reloj usado solo
+  en el gimnasio perdería su hora.
+- Una muestra que **cruza la medianoche** se reparte entre los dos días en
+  proporción al tiempo que pasa en cada uno; lo repartido suma siempre la cantidad
+  original (se calcula con el acumulado de cada borde, sin perder un paso por
+  redondeo). Una lectura sin duración cuenta entera en el día en que ocurre.
+- Una muestra de todo el día (0:00 a 24:00) compara el día entero: gana el
+  dispositivo con más pasos en total.
+
+### Qué días recalcula un sync (hecho 5 oct 2026)
+
+El sync nombra un día, pero cada muestra pertenece a un día: una que cruza la
+medianoche, un teléfono en otra zona horaria o un dato que el reloj sube tarde
+pueden viajar en el paquete de otro día. Antes se guardaban sin recalcular su
+día, que se quedaba con los puntos viejos hasta que alguien lo volviera a mandar.
+
+- El servidor recalcula **el día del sync y todos los días a los que pertenecen
+  las muestras del paquete**, del más viejo al más nuevo y en la misma
+  transacción. Los pasos pertenecen a todos los días que cubren; los workouts y el
+  ritmo cardíaco, al día en que empiezan.
+- Solo dentro de la **ventana de 14 días** y hasta hoy. Lo más viejo o futuro se
+  guarda pero no se recalcula (y no responde error). Un ciclo ya cerrado (semana,
+  liga) no se reabre: se corrigen los puntos y el historial, no el cierre.
+- La respuesta del sync sigue siendo la del día que nombra `fecha`.
 
 ### Qué cuenta como workout (decidido 1 oct 2026)
 
@@ -532,6 +570,13 @@ solo el teléfono no se registran workouts.
   simple de esas lecturas).
 - Un workout que cuenta suma a `workouts_dia` (dashboard) y al objetivo
   semanal, además de a los puntos de intensidad.
+- **Duración coherente (5 oct 2026):** la `duracion_min` no puede ser **mayor** que el
+  tiempo entre `inicio` y `fin` (puede ser menor: las pausas no cuentan). Se tolera el
+  minuto del redondeo (34 min 40 s se manda como 35). Una sesión que no cumple se
+  descarta como cualquier muestra imposible: se cuenta en `descartadas`, el resto del
+  paquete se acepta y la respuesta es `200`. Es porque los puntos de intensidad salen
+  de `duracion_min` (30, 60 o 90): un error o una falsificación podía dar 150 puntos
+  por "95 minutos" en un entrenamiento de 10:00 a 10:10.
 - **Duración (decidido 1 oct 2026):** cualquier workout, de cualquier duración,
   cuenta para `workouts_dia` y para el objetivo semanal. Los 30 minutos mínimos
   son solo para ganar **puntos de intensidad** (un workout de 10 min cuenta
@@ -586,12 +631,12 @@ HTTP directo contra la API de Luis — no viaja por acá.
 | `fecha` | string (YYYY-MM-DD) | eco del día sincronizado |
 | `puntos_pasos` | int | tabla de pasos: 7.000–9.999 = 25, 10.000–14.999 = 50, 15.000+ = 100. Debajo de 7.000: 0. **+25** si la persona tiene 60 años o más y ganó algo por pasos |
 | `puntos_intensidad` | int | FCM = 219 − edad. Escalón de **la mejor sesión del día** (no se suman): 30 min al 60% = 50, 30 min al 70% = 100, 60 min al 60% = 100, 90 min al 60% = 150. Cuentan los workouts y las sesiones que el servidor infiere del ritmo cardíaco. **+25** con 60 años o más si ganó algo por intensidad |
-| `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` |
+| `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` y, desde el 5 oct 2026, también en `dashboard/resumen` |
 | `tope_diario_aplicado` | bool | true si los puntos brutos pasaron de 200 (llegar a 200 justos no es recorte) |
 | `puntos_ano` | int | lo acreditado en el **año de póliza** en curso (desde la fecha de inicio o la última renovación de la póliza; suma del ledger), con el techo de 12.000 ya aplicado (hecho el 4 oct; ver "Cashback en quetzales"). Es el año **en curso**, aunque el día sincronizado sea de uno anterior. Sin póliza verificada es el año calendario, solo de referencia |
 | `tope_anual_aplicado` | bool | true si el techo del año de póliza **recortó lo de este día** |
 | `nivel` | int (0–4) | nivel de cashback del **año de póliza**, según `puntos_ano`: 0 bajo 2.500, 1 desde 2.500 (5%), 2 desde 5.000 (7,5%), 3 desde 10.000 (10%), 4 desde 15.000 (20%) — no confundir con el **objetivo semanal** (ver abajo) |
-| `pasos_totales_dia` | int | total de pasos del día con la regla por hora (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
+| `pasos_totales_dia` | int | total de pasos del día con la regla por bloques (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
 
 No incluye ningún campo que explique *por qué* se descartó una muestra, se
 detectó una sesión intensa, o se aplicó un techo — esa lógica es del backend.
@@ -966,9 +1011,12 @@ orden.
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
   **gastarlas**. Sin tope, y caducan al cerrar la season (hecho el 2 oct; ver
   "Monedas y seasons").
-- **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
-  vinculada") **sí** cuentan para el progreso de la semana en curso. Las
-  monedas solo se anulan si la semana entera cerró antes de la verificación.
+- Los días anulados por **retroactivo denegado** (ver "Retroactividad") **no
+  cuentan** para el progreso de la semana (decidido y hecho el 5 oct 2026): la
+  semana que cruza la verificación solo cuenta desde ese día. Los pasos de esos días
+  siguen guardados y visibles en Progreso. Las monedas de una semana que cerró
+  antes de la verificación se anulan; las de una que cierra después se pagan con lo
+  que cuenta.
 
 ### Cierre semanal programado (1 oct; martes desde el 3 oct)
 
@@ -1486,7 +1534,7 @@ existe en memoria al procesar el payload.
 | `workouts_dia.fc_maxima` | máximo de `sesiones[].fc_maxima` del día |
 | `workouts_dia` | `null` si no hubo sesión ese día — no `0`, para no confundir "sin actividad intensa" con "FC de cero" |
 | `ritmo_cardiaco` | minutos del día en cada zona (4 oct 2026); ver "Minutos por zona de ritmo cardíaco" abajo. `null` los días sin lecturas de ritmo cardíaco (casi siempre, sin reloj) — no ceros |
-| `puntos_dia` | mismo valor que ya viaja en el JSON #2, **salvo** un día anulado por retroactivo denegado (ver "Póliza vinculada"), que aquí y en el historial va en `0` |
+| `puntos_dia` | **lo acreditado** (desde el 5 oct 2026): la suma de las filas de actividad de ese día en el ledger, o sea con el techo diario, el techo anual, los ajustes por datos tardíos y el retroactivo denegado ya aplicados. **Ya no es el mismo valor que el del JSON #2 del sync** (ese es lo que calculó el día): pasado el techo anual un día puede calcular 200 y acreditar 0, y Progreso tiene que decir lo mismo que Mi Plan. Un día anulado por retroactivo denegado va en `0` (sus pasos siguen guardados y se ven) |
 
 ### Minutos por zona de ritmo cardíaco (hecho 4 oct 2026)
 
@@ -1776,15 +1824,56 @@ Con token. Cuenta sin perfil: `403`.
 Al verificarse, la fecha de nacimiento de la **cuenta** (la del registro) se
 compara con la **confirmada por la aseguradora**:
 
-- **Coinciden:** todo lo ganado en la cuenta base (puntos y monedas) cuenta.
-- **No coinciden:** no hay retroactividad. Los días anteriores a la
+- **Coinciden:** todo lo ganado en la cuenta base (puntos y monedas) cuenta
+  (veredicto `aplicado`).
+- **Difieren poco y sin ventaja:** se toma como un error y **no se le quita nada**
+  (`tolerado`).
+- **Mentira:** no hay retroactividad (`denegado`). Los días anteriores a la
   verificación se anulan con una fila negativa por día en el ledger
   (`retroactivo_denegado`), y las monedas ganadas antes también. Nada se edita
-  ni se borra. La edad que se usa para el puntaje es, desde la verificación, la
-  confirmada por la aseguradora.
+  ni se borra. Los pasos y workouts de esos días tampoco cuentan para la meta
+  semanal ni para el desempate de La Liga y Tus Ligas (siguen guardados y se ven en
+  Progreso).
 
-Como la verificación ocurre al vincular, "desde la vinculación" y "desde la
-verificación" son el mismo momento.
+La edad que se usa para el puntaje es, desde la verificación, la confirmada por la
+aseguradora. Como la verificación ocurre al vincular, "desde la vinculación" y
+"desde la verificación" son el mismo momento.
+
+**Qué es error y qué es mentira** (decidido el 4 oct 2026, hecho el 5 oct; es la regla
+**del demo**, se revisa con casos reales):
+
+- Una fecha distinta se **tolera** si difiere en **hasta 2 años** de la de la
+  aseguradora (mes y día incluidos) **y no le da ventaja**.
+- Es **mentira** si difiere en **más de 2 años**, o si **le da ventaja** aunque
+  difiera poco.
+- **Ventaja** es cruzar los 60 años (bono +25), una meta semanal de pasos más baja o una
+  FCmáx más baja (que hace más fácil la intensidad). Como la meta y la FCmáx bajan con
+  la edad, en la práctica es ser **más vieja en años cumplidos**, aunque sea uno. Se
+  mide con las edades del día de la verificación: alguien que se puso unos meses más
+  vieja es tolerada o no según cuándo verifique (nacida el 2 ene en vez del 17 may:
+  verificando en octubre las dos ya cumplieron 36; verificando en marzo una tiene 36 y
+  la otra 35, y cuenta como ventaja). Quien se puso más joven nunca le conviene y se
+  tolera hasta 2 años.
+- `POST /api/v1/polizas/vincular` no dice el veredicto (queda en la póliza). **[PENDIENTE]**
+  decidir si la respuesta lo lleva para que la app lo explique con tono cálido.
+
+**El veredicto se toma una vez y no se recalcula** (5 oct 2026). Se guarda en la póliza
+(`retroactivo` y, si fue denegado, `corte_retroactivo`, el día de la verificación).
+Las filas anteriores a este campo se fijaron con lo que ya se les había aplicado
+(cualquier diferencia de fecha anulaba lo anterior).
+
+**Si la aseguradora corrige su fecha después de verificar** (error suyo, 5 oct 2026):
+
+- **No se le quita nada a la persona.** El veredicto no cambia y la corrección **vale
+  hacia adelante**: para un día anterior se sigue usando la fecha de entonces (los
+  puntos, el bono 60+, la FCmáx, las zonas de ritmo cardíaco y la meta semanal), así
+  que un dato tardío de ayer conserva lo que tenía aunque la fecha corregida ya no se
+  lo daría. Con varias correcciones, cada tramo usa su fecha.
+- Hoy se hace **cambiando la fecha confirmada de la póliza en el admin de Django**: queda
+  registrada como `CorreccionDeNacimiento` (fecha anterior, nueva y desde cuándo vale; se
+  ve en la ficha de la póliza) y el admin avisa. Solo se agregan filas.
+- **Sumar hacia atrás**, si la fecha corregida le daba más puntos, **no es automático**:
+  lo decide un administrador caso por caso (el panel; ver `panel-admin.md`).
 
 ---
 
@@ -1807,7 +1896,7 @@ verificación" son el mismo momento.
   puntos ni para `pasos_totales_dia`. Jerarquía de fuentes antes de sumar,
   siempre: sistema (`com.apple.health.*`) vs. terceros (Garmin, Whoop, Zepp,
   Fitbit, etc.) al mismo nivel de confianza. **Elección de fuente (1 oct): pasos
-  por hora, workouts sin duplicar los que se cruzan, intensidad por el
+  por bloque (hora o varias horas), workouts sin duplicar los que se cruzan, intensidad por el
   dispositivo que más puntos da — ver "Elección de fuente". Nunca se suman.**
   La decisión se re-evalúa en cada sync de esa fecha, no solo la primera vez
   (los relojes de terceros pueden sincronizar a Health con retraso).
@@ -1833,7 +1922,7 @@ verificación" son el mismo momento.
   tiene nombre. **Hoy ni el dashboard ni el historial devuelven
   `tipo_actividad`** (el dashboard agrega los workouts del día); la regla
   aplica cuando exista una lista de workouts.
-- **`pasos_totales_dia`** usa la misma regla por hora que el motor de puntos —
+- **`pasos_totales_dia`** usa la misma regla por bloques que el motor de puntos —
   no es un cálculo nuevo y separado.
 - **Sesión intensa sin workout (L7):** se detecta en el backend sobre
   `frecuencia_cardiaca[]` cruda. Umbral: ≥30 min continuos al 60-70% de FCM,
@@ -2386,8 +2475,8 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
   límite de HealthKit; se mitiga con las reglas del servidor (topes por muestra,
   ventana de 14 días), no se resuelve.
 
-- **Días anulados y objetivo semanal:** un día anulado por retroactivo denegado
-  sigue contando para el progreso de la semana en curso. ¿Debe contar?
+- ~~Días anulados y objetivo semanal~~ — **resuelto** (5 oct): no cuentan para la meta
+  semanal ni para el desempate de las ligas (ver "Retroactividad").
 - **Programar `cerrar_semana` — resuelto en el repo (1 oct):** lo corre el
   servicio `programador` de Compose (ver "Cierre semanal programado"). Falta
   confirmar con quien despliegue que producción usa Compose; si no, hay que

@@ -278,7 +278,11 @@ class CerrarSemanaTests(TestCase):
     def test_una_semana_cerrada_antes_de_verificar_con_edad_distinta_no_paga(self):
         self._poliza_con_retroactivo_denegado(self.ana, date(2026, 9, 29))
         resumen = self._cerrar()
-        self.assertTrue(self._cumplimiento(self.ana).cumplido)   # se registra
+        # Los días anteriores a la verificación no cuentan para la meta (5 oct 2026): la semana
+        # entera es anterior, así que queda en cero y no cumplida (antes quedaba "cumplida" sin pago).
+        cumplimiento = self._cumplimiento(self.ana)
+        self.assertFalse(cumplimiento.cumplido)
+        self.assertEqual((cumplimiento.pasos_semanales, cumplimiento.workouts_acumulados), (0, 0))
         self.assertEqual(resumen["monedas_pagadas"], PAGO_SOLO_PASOS)  # solo beto: ana no cobra
         self.assertEqual(monedas.saldo(self.ana, HOY), 0)
 

@@ -78,6 +78,19 @@ class PolizaVinculada(ModeloBase):
     )
     fecha_renovacion = models.DateField(null=True, blank=True)
 
+    class Retroactivo(models.TextChoices):
+        APLICADO = 'aplicado', 'Aplicado (la fecha coincide)'
+        TOLERADO = 'tolerado', 'Tolerado (error sin ventaja)'
+        DENEGADO = 'denegado', 'Denegado (mentira)'
+
+    # El veredicto del retroactivo se toma UNA vez, al verificar, y no se recalcula:
+    # si después se corrige `birth_date_confirmada` (error de la aseguradora), a la
+    # persona no se le quita nada. Vacío = filas anteriores a este campo o creadas
+    # a mano; en ese caso se calcula con la regla (services/polizas.py).
+    retroactivo = models.CharField(max_length=10, choices=Retroactivo.choices, blank=True, default="")
+    # Si fue denegado: el día de la verificación. Lo anterior no cuenta.
+    corte_retroactivo = models.DateField(null=True, blank=True)
+
     class Meta:
         constraints = [
             # Una póliza pertenece a una sola cuenta verificada (4 oct 2026): dos
@@ -95,6 +108,28 @@ class PolizaVinculada(ModeloBase):
 
     def __str__(self):
         return f"{self.insurer} {self.policy_number} - {self.estado_verificacion}"
+
+
+class CorreccionDeNacimiento(ModeloBase):
+    """La aseguradora corrigió la fecha de nacimiento de una póliza ya verificada.
+
+    La fecha nueva vale desde `desde` hacia adelante; lo anterior se sigue
+    calculando con la fecha de entonces, así una corrección nunca le quita puntos a
+    nadie. Sumar hacia atrás, si la fecha corregida le daba más, lo decide un
+    administrador. Solo se agregan filas: es el registro de quién cambió qué.
+    """
+
+    poliza = models.ForeignKey(PolizaVinculada, on_delete=models.CASCADE, related_name="correcciones")
+    fecha_anterior = models.DateField()
+    fecha_nueva = models.DateField()
+    desde = models.DateField()
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["desde", "id"]
+
+    def __str__(self):
+        return f"{self.poliza_id}: {self.fecha_anterior} -> {self.fecha_nueva} desde {self.desde}"
 
 
 class RegistroAseguradora(ModeloBase):

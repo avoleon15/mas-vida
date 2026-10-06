@@ -13,6 +13,16 @@ histórico sin dejar rastro. Se cuenta desde la verificación y no desde la
 vinculación porque los días intermedios también se calcularon con una edad
 sin confirmar, que es justo lo que esta regla evita reprocesar.
 
+Quien se equivoca con su edad no es lo mismo que quien miente (decidido el 4 oct
+2026, para el demo; se revisa con casos reales). Una fecha distinta se TOLERA, sin
+quitarle nada, si difiere en hasta 2 años de la de la aseguradora (mes y día
+incluidos) Y no le da ventaja. Es mentira, y se anula todo lo anterior a la
+verificación, si difiere en más de 2 años o si, aunque sea poco, le da ventaja
+(ver `es_mentira`).
+
+Lo anulado también deja de contar para la meta semanal y para el desempate de
+La Liga y Tus Ligas (ver `cortes_de_retroactivo`).
+
 Las monedas ganadas antes del corte también se anulan (ver
 services.monedas.anular_ganadas_antes_de).
 """
@@ -28,7 +38,9 @@ from Apps.activities.models import ResumenDiario
 from Apps.policies.models import PolizaVinculada
 from Apps.poincs.models import Ledger
 from services import monedas
+from services.hearth_rate import calculate_age, fcm
 from services.niveles import TOPE_ANUAL
+from services.points import AGE_BONUS_MINIMUM
 
 PENDIENTE = "pendiente"
 VERIFICADA = "verificada"
@@ -162,23 +174,92 @@ def tiene_poliza_verificada(usuario) -> bool:
     ).exists()
 
 
+# Hasta cuántos años de diferencia se tolera un error de fecha (mes y día incluidos).
+ANIOS_DE_TOLERANCIA = 2
+
+
+def _edad(nacimiento: date, fecha: date) -> int:
+    return 0 if fecha < nacimiento else calculate_age(nacimiento, fecha)
+
+
+def le_da_ventaja(declarada: date, confirmada: date, fecha: date) -> bool:
+    """Si la fecha que dio la persona le facilita algo frente a la de la aseguradora.
+
+    Se mide con las edades en `fecha` (el día de la verificación). Es ventaja:
+    cruzar los 60 años (bono +25), una meta semanal de pasos más baja o una FCmáx más
+    baja, que hace más fácil la intensidad. Como la meta y la FCmáx bajan con la edad,
+    en la práctica es ventaja ser MÁS VIEJA en años cumplidos, aunque sea uno.
+    """
+    # Import acá: services.goals importa este módulo.
+    from services import goals
+
+    edad_declarada, edad_real = _edad(declarada, fecha), _edad(confirmada, fecha)
+    return (
+        (edad_declarada >= AGE_BONUS_MINIMUM > edad_real)
+        or goals.meta_pasos_para_edad(edad_declarada, 0) < goals.meta_pasos_para_edad(edad_real, 0)
+        or fcm(edad_declarada) < fcm(edad_real)
+    )
+
+
+def es_mentira(declarada: date, confirmada: date, fecha: date) -> bool:
+    """Si la diferencia entre la fecha del registro y la de la aseguradora cuenta como mentira.
+
+    Mentira si difiere en más de 2 años, o si le da ventaja (aunque difiera poco).
+    Una fecha distinta, dentro de los 2 años y sin ventaja, es un error y no se castiga.
+    """
+    if declarada == confirmada:
+        return False
+    mas_vieja = _mismo_dia_otro_anio(confirmada, confirmada.year - ANIOS_DE_TOLERANCIA)
+    mas_nueva = _mismo_dia_otro_anio(confirmada, confirmada.year + ANIOS_DE_TOLERANCIA)
+    if not (mas_vieja <= declarada <= mas_nueva):
+        return True
+    return le_da_ventaja(declarada, confirmada, fecha)
+
+
+def _corte_de(poliza: PolizaVinculada, declarada: date) -> date | None:
+    if poliza.estado_verificacion != VERIFICADA:
+        return None
+    # El veredicto se tomó al verificar y no se recalcula (ver PolizaVinculada.retroactivo).
+    if poliza.retroactivo:
+        return poliza.corte_retroactivo if poliza.retroactivo == PolizaVinculada.Retroactivo.DENEGADO else None
+    # Filas sin veredicto guardado: se calcula con la regla.
+    if poliza.birth_date_confirmada is None or poliza.fecha_verificacion is None:
+        return None
+    dia_de_la_verificacion = timezone.localtime(poliza.fecha_verificacion).date()
+    if not es_mentira(declarada, poliza.birth_date_confirmada, dia_de_la_verificacion):
+        return None
+    return dia_de_la_verificacion
+
+
 def fecha_corte_sin_retroactivo(usuario) -> date | None:
     """Día desde el cual cuentan los puntos, si se denegó el retroactivo.
 
     None = el histórico cuenta completo (sin póliza, pendiente, rechazada, o
-    verificada con fecha de nacimiento coincidente).
+    verificada con fecha de nacimiento coincidente o con un error tolerado).
     """
     poliza = PolizaVinculada.objects.filter(
         usuario=usuario, estado_verificacion=VERIFICADA
     ).first()
-    if (
-        poliza is None
-        or poliza.birth_date_confirmada is None
-        or poliza.fecha_verificacion is None
-        or poliza.birth_date_confirmada == usuario.birth_date
-    ):
-        return None
-    return timezone.localtime(poliza.fecha_verificacion).date()
+    return None if poliza is None else _corte_de(poliza, usuario.birth_date)
+
+
+def cortes_de_retroactivo(usuario_pks) -> dict[int, date]:
+    """{usuario: día de corte} de los que tienen el retroactivo denegado, entre `usuario_pks`.
+
+    Lo anterior al corte no cuenta para la meta semanal ni para el desempate de las
+    ligas (los pasos y workouts de esos días siguen guardados y se ven en Progreso).
+    """
+    filas = (
+        PolizaVinculada.objects
+        .filter(usuario__in=list(usuario_pks), estado_verificacion=VERIFICADA)
+        .select_related("usuario")
+    )
+    cortes = {}
+    for poliza in filas:
+        corte = _corte_de(poliza, poliza.usuario.birth_date)
+        if corte is not None:
+            cortes[poliza.usuario_id] = corte
+    return cortes
 
 
 @transaction.atomic
@@ -195,6 +276,8 @@ def vincular(usuario, policy_number: str, insurer: str, policy_start_date: date)
         birth_date_confirmada=None,
         estado_verificacion=PENDIENTE,
         fecha_verificacion=None,
+        retroactivo="",
+        corte_retroactivo=None,
     )
     if existente is None:
         return PolizaVinculada.objects.create(usuario=usuario, **datos)
@@ -209,8 +292,10 @@ def vincular(usuario, policy_number: str, insurer: str, policy_start_date: date)
 def verificar(poliza: PolizaVinculada, ahora=None) -> str:
     """Marca la póliza como verificada y aplica la regla de retroactividad.
 
-    Devuelve "aplicado", "denegado" o "sin_cambios" (ya estaba verificada). Lanza
-    PolizaEnOtraCuenta si otra cuenta ya la tiene verificada (no cambia nada).
+    Devuelve "aplicado" (la fecha coincide), "tolerado" (difiere poco y sin ventaja:
+    se conserva todo), "denegado" (mentira: se anula lo anterior) o "sin_cambios"
+    (ya estaba verificada). Lanza PolizaEnOtraCuenta si otra cuenta ya la tiene
+    verificada (no cambia nada).
     """
     if poliza.estado_verificacion == VERIFICADA:
         return "sin_cambios"
@@ -220,6 +305,20 @@ def verificar(poliza: PolizaVinculada, ahora=None) -> str:
         raise PolizaEnOtraCuenta()
 
     ahora = ahora or timezone.now()
+    usuario = poliza.usuario
+    hoy = timezone.localtime(ahora).date()
+
+    # El veredicto se toma ahora y queda guardado: una corrección posterior de
+    # la fecha no lo cambia.
+    if poliza.birth_date_confirmada == usuario.birth_date:
+        resultado = "aplicado"
+    elif not es_mentira(usuario.birth_date, poliza.birth_date_confirmada, hoy):
+        resultado = "tolerado"          # un error dentro de lo tolerable: no se le quita nada
+    else:
+        resultado = "denegado"
+    poliza.retroactivo = resultado
+    poliza.corte_retroactivo = hoy if resultado == "denegado" else None
+
     poliza.estado_verificacion = VERIFICADA
     poliza.fecha_verificacion = ahora
     try:
@@ -227,14 +326,13 @@ def verificar(poliza: PolizaVinculada, ahora=None) -> str:
         with transaction.atomic():
             poliza.save()
     except IntegrityError:
+        poliza.retroactivo, poliza.corte_retroactivo = "", None      # no quedó verificada
+        poliza.estado_verificacion, poliza.fecha_verificacion = PENDIENTE, None
         raise PolizaEnOtraCuenta()
 
-    usuario = poliza.usuario
-    if poliza.birth_date_confirmada == usuario.birth_date:
-        return "aplicado"
-
-    denegar_retroactivo(usuario, timezone.localtime(ahora).date())
-    return "denegado"
+    if resultado == "denegado":
+        denegar_retroactivo(usuario, hoy)
+    return resultado
 
 
 @transaction.atomic
@@ -244,6 +342,8 @@ def rechazar(poliza: PolizaVinculada) -> None:
         raise ValueError("Una póliza verificada no se rechaza")
     poliza.estado_verificacion = RECHAZADA
     poliza.fecha_verificacion = None
+    poliza.retroactivo = ""
+    poliza.corte_retroactivo = None
     poliza.save()
 
 
