@@ -11,7 +11,6 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.forms.models import model_to_dict
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
 
 from Apps.activities.models import ResumenDiario
@@ -20,6 +19,7 @@ from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.admin import PolizaVinculadaAdmin
 from Apps.policies.models import CorreccionDeNacimiento, PolizaVinculada, RegistroAseguradora
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import goals, perfil, polizas
 from services.daily_scoring import fecha_nacimiento_efectiva
 from services.tiempo import inicio_semana
@@ -233,7 +233,7 @@ class NadieDejaDePerderPuntosPorLaCorreccionTests(APITestCase):
         self.version = version()
         self.usuario = crear_usuario(declarada=A_LOS_60)
         self.poliza = poliza_de(self.usuario, A_LOS_60, retroactivo=RETRO.APLICADO)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=self.usuario.user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(self.usuario.user)}")
         self.ayer = HOY - timedelta(days=1)
 
     def pasos(self, externo, dia, cantidad, hora=8):
@@ -403,7 +403,7 @@ class VincularPorLaApiGuardaElVeredictoTests(APITestCase):
     def vincular(self, declarada):
         usuario = crear_usuario(f"u{declarada.year}", declarada)
         cliente = APIClient()
-        cliente.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=usuario.user).key}")
+        cliente.credentials(HTTP_AUTHORIZATION=f"Token {token_de(usuario.user)}")
         r = cliente.post("/api/v1/polizas/vincular", {
             "policy_number": "POL-X", "insurer": "Seguros Demo", "birth_date": REAL.isoformat(),
         }, format="json")

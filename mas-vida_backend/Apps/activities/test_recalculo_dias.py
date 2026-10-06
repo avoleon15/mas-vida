@@ -6,13 +6,13 @@ from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.test import SimpleTestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import Muestra, ResumenDiario
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services.daily_scoring import dias_que_tocan
 
 GT = ZoneInfo("America/Guatemala")
@@ -78,7 +78,7 @@ class RecalculoPorLaApiTests(APITestCase):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})
         user = get_user_model().objects.create_user("ana@correo.com", password="Clave-segura-2026")
         self.usuario = Usuario.objects.create(user=user, usuario_id="ana-1", birth_date=date(1990, 5, 17))
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(user)}")
         self.hoy = timezone.localdate()
         self.ayer = self.hoy - timedelta(days=1)
 

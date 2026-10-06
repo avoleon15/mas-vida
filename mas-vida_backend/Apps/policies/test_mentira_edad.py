@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient, APITestCase
 
 from Apps.activities.models import ResumenDiario
@@ -15,6 +14,7 @@ from Apps.objetivos.models import CumplimientoSemanal
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.models import PolizaVinculada, RegistroAseguradora
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 from services import goals, ligas, monedas, polizas
 
 User = get_user_model()
@@ -211,7 +211,7 @@ class VincularPorLaApiTests(APITestCase):
             puntos=50, version_regla=self.version,
         )
         cliente = APIClient()
-        cliente.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=usuario.user).key}")
+        cliente.credentials(HTTP_AUTHORIZATION=f"Token {token_de(usuario.user)}")
         usuario.cliente = cliente
         return usuario
 

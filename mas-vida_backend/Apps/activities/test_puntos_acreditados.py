@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.activities.models import ResumenDiario, Sesion
@@ -16,6 +15,7 @@ from Apps.activities.serializers import duracion_coherente, sesion_plausible
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.policies.models import PolizaVinculada
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 
 GT = ZoneInfo("America/Guatemala")
 WATCH = {"fuente_bundle": "com.apple.health", "fuente_nombre": "Apple Watch", "dispositivo_modelo": "Watch", "dispositivo_fabricante": "Apple Inc."}
@@ -66,7 +66,7 @@ class _ConSync(APITestCase):
     def setUp(self):
         VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})
         self.usuario = crear_usuario()
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get(user=self.usuario.user).key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token_de(self.usuario.user)}")
         self.hoy = timezone.localdate()
         self.ayer = self.hoy - timedelta(days=1)
 
