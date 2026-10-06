@@ -28,6 +28,7 @@ LUNES = date(2026, 9, 21)
 CIERRE_SEMANA = date(2026, 9, 29)       # martes: la semana del 21 ya pasó su margen de gracia
 OCTUBRE = date(2026, 10, 1)
 CIERRE_LIGA = date(2026, 11, 2)         # día 2: octubre ya pasó su margen de gracia
+PAGO_LIGA = date(2026, 11, 9)           # día 9: se pagan las monedas y el cupón
 
 
 def comercio(nombre="Montanos", **extra):
@@ -461,7 +462,25 @@ class CuponDeLigaTests(TestCase):
             self.usuarios[nombre] = u
 
     def _cerrar(self):
-        return ligas.cerrar_la_liga(OCTUBRE, CIERRE_LIGA)
+        """Cierra el día 2 y paga el día 9; devuelve el resumen del pago."""
+        ligas.cerrar_la_liga(OCTUBRE, CIERRE_LIGA)
+        return ligas.pagar_la_liga(OCTUBRE, PAGO_LIGA)
+
+    def test_el_cupon_no_llega_al_cerrar_sino_al_pagar_el_dia_9(self):
+        ligas.cerrar_la_liga(OCTUBRE, CIERRE_LIGA)
+        self.assertFalse(Canje.objects.exists())
+        ligas.pagar_la_liga(OCTUBRE, PAGO_LIGA)
+        self.assertEqual(Canje.objects.count(), 3)
+
+    def test_quien_pierde_la_poliza_entre_el_cierre_y_el_pago_cobra_las_monedas_pero_no_el_cupon(self):
+        ligas.cerrar_la_liga(OCTUBRE, CIERRE_LIGA)
+        PolizaVinculada.objects.filter(usuario=self.usuarios["oro"]).update(
+            estado_verificacion=PolizaVinculada.EstadoVerificacion.RECHAZADA,
+        )
+        ligas.pagar_la_liga(OCTUBRE, PAGO_LIGA)
+        self.assertEqual(monedas.saldo(self.usuarios["oro"], PAGO_LIGA), 30)
+        self.assertFalse(Canje.objects.filter(usuario=self.usuarios["oro"]).exists())
+        self.assertEqual(Canje.objects.count(), 2)
 
     def test_el_podio_gana_el_cupon_ademas_de_las_monedas(self):
         resumen = self._cerrar()
@@ -474,7 +493,7 @@ class CuponDeLigaTests(TestCase):
         self.assertEqual(cupon.beneficio, "2x1 en sushi")
         self.assertEqual(cupon.patrocinio, self.patrocinio)
         self.assertEqual(cupon.costo_monedas, 0)
-        self.assertEqual(monedas.saldo(self.usuarios["oro"], CIERRE_LIGA), 30)
+        self.assertEqual(monedas.saldo(self.usuarios["oro"], PAGO_LIGA), 30)
 
     def test_quien_no_llega_al_podio_o_tiene_cero_puntos_no_gana(self):
         self._cerrar()
@@ -485,7 +504,7 @@ class CuponDeLigaTests(TestCase):
         self.patrocinio.delete()
         self.assertEqual(self._cerrar()["cupones"], 0)
         self.assertFalse(Canje.objects.exists())
-        self.assertEqual(monedas.saldo(self.usuarios["plata"], CIERRE_LIGA), 20)
+        self.assertEqual(monedas.saldo(self.usuarios["plata"], PAGO_LIGA), 20)
 
     def test_un_patrocinio_apagado_no_da_cupones(self):
         self.patrocinio.activo = False
@@ -493,10 +512,10 @@ class CuponDeLigaTests(TestCase):
         self._cerrar()
         self.assertFalse(Canje.objects.exists())
 
-    def test_cerrar_otra_vez_no_duplica(self):
+    def test_pagar_otra_vez_no_duplica(self):
         self._cerrar()
-        segundo = self._cerrar()
-        self.assertFalse(segundo["cerrada"])
+        segundo = ligas.pagar_la_liga(OCTUBRE, PAGO_LIGA)
+        self.assertFalse(segundo["pagada"])
         self.assertEqual(Canje.objects.count(), 3)
 
     def test_con_empate_en_el_podio_los_dos_ganan_su_cupon(self):

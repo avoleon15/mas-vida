@@ -89,7 +89,11 @@ expresamente por ser de Vitality.
    monedas en código, comentarios o mocks, es del plazo viejo.
 
    - Se ganan por cumplir el objetivo semanal (**cada componente paga por
-     separado**) y por quedar top 3 en La Liga.
+     separado**) y por quedar top 3 en La Liga. **El podio de La Liga se paga
+     el día 9** del mes siguiente (decidido el 4 de octubre de 2026; el mes
+     se cierra el día 2): así las monedas y el cupón caen en la season
+     siguiente y no vencen a los pocos días. La app dice "tus monedas
+     llegan el día 9".
    - **Sin tope de acumulación** (decidido el 2 de octubre de 2026; antes
      el tope era 100 y el excedente se perdía).
    - Al empezar una season, primero se reinicia el saldo y después se paga
@@ -98,7 +102,8 @@ expresamente por ser de Vitality.
    - **Aviso de fin de season:** 7 días antes de que termine la season se
      avisa que las monedas se reinician. Reemplaza el aviso al llegar a 80,
      que existía por el tope.
-   - Un cupón ya canjeado caduca aparte, a los **60 días** de canjeado.
+   - Un cupón (canjeado o ganado) caduca aparte, a las **3 semanas** (21
+     días). Hasta el 5 de octubre de 2026 eran 60 días.
    - Sin póliza verificada se ganan igual, pero **no se pueden canjear**:
      catálogo visible, botón de compra bloqueado con candado.
 

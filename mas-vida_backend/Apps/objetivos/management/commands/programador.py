@@ -8,8 +8,9 @@ martes) y después espera:
   - martes 00:00 -> cierre: fija el resultado de la semana y paga las monedas
     (el lunes queda para los datos atrasados del domingo)
   - martes 12:00 -> corrección: actualiza los acumulados, no paga ni reabre
-  - día 2, 00:00 -> liga: cierra La Liga del mes anterior y paga el podio
+  - día 2, 00:00 -> liga: cierra La Liga del mes anterior
     (el día 1 queda para los datos atrasados del último día)
+  - día 9, 00:00 -> pago_liga: paga el podio (monedas y cupón) del mes cerrado
 
 Pensado para correr como un servicio aparte (ver compose.yaml).
 """
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Corre el cierre semanal (martes 00:00), su corrección (martes 12:00) y el cierre mensual de La Liga."
+    help = "Corre el cierre semanal (martes 00:00), su corrección (martes 12:00), el cierre de La Liga (día 2) y el pago de su podio (día 9)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -46,6 +47,8 @@ class Command(BaseCommand):
             self.stdout.write("Puesta al día: no hay semanas pendientes.")
         for resumen in ligas.ponerse_al_dia(hoy):
             self.stdout.write(f"Puesta al día: La Liga {resumen['mes']}: {resumen}")
+        for resumen in ligas.pagar_al_dia(hoy):
+            self.stdout.write(f"Puesta al día: podio de La Liga {resumen['mes']}: {resumen}")
 
         proxima, tipo = programador.proxima_ejecucion(timezone.now())
         self.stdout.write(self.style.SUCCESS(

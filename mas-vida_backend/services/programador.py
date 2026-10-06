@@ -7,9 +7,13 @@
   También cierra La Liga del mes que haya pasado su margen de gracia.
 - Martes 12:00 (corrección): actualiza los acumulados de la semana que cerró con
   los datos atrasados, sin cambiar `cumplido` ni pagar.
-- Día 2 de cada mes, 00:00 (liga): cierra La Liga del mes anterior y paga el
-  podio. El día 1 entero es margen de gracia, como el lunes para la semana. Si
-  el día 2 es martes no hay corrida aparte: la hace el cierre de esa misma hora.
+- Día 2 de cada mes, 00:00 (liga): cierra La Liga del mes anterior (tabla final y
+  quién gana qué). El día 1 entero es margen de gracia, como el lunes para la
+  semana.
+- Día 9 de cada mes, 00:00 (pago_liga): paga el podio del mes cerrado, monedas y
+  cupón, para que caigan en la season siguiente (`ligas.DIA_DE_PAGO`).
+- Si el día 2 o el 9 es martes no hay corrida aparte: la hace el cierre de esa
+  misma hora, que también cierra y paga La Liga.
 
 La lógica está separada del bucle y el reloj se inyecta, así se puede probar
 una semana entera en un instante. Todo lo que hace es idempotente: correr de
@@ -31,6 +35,7 @@ logger = logging.getLogger(__name__)
 CIERRE = "cierre"
 CORRECCION = "correccion"
 LIGA = "liga"
+PAGO_LIGA = "pago_liga"
 
 # (días después del lunes, hora, qué corrida es), en orden. El cierre espera
 # `goals.DIAS_DE_GRACIA` días después del domingo.
@@ -51,9 +56,9 @@ MAX_INTENTOS = 12
 def proxima_ejecucion(ahora: datetime) -> tuple[datetime, str]:
     """La corrida que sigue, ESTRICTAMENTE después de `ahora`.
 
-    Devuelve (momento con zona, CIERRE | CORRECCION | LIGA). Nunca hay dos
-    corridas a la misma hora: si el cierre de La Liga coincide con el cierre
-    semanal, lo cubre el cierre (que también cierra La Liga).
+    Devuelve (momento con zona, CIERRE | CORRECCION | LIGA | PAGO_LIGA). Nunca hay
+    dos corridas a la misma hora: si el cierre o el pago de La Liga coincide con el
+    cierre semanal, lo cubre el cierre (que también cierra y paga La Liga).
     """
     zona = timezone.get_current_timezone()
     hoy = timezone.localtime(ahora).date()
@@ -67,9 +72,12 @@ def proxima_ejecucion(ahora: datetime) -> tuple[datetime, str]:
     momentos_de_cierre = {momento for momento, tipo in candidatas if tipo == CIERRE}
     mes_anterior = hoy.replace(day=1) - timedelta(days=1)
     for mes in (mes_anterior, hoy):
-        momento = datetime.combine(ligas.dia_de_cierre(mes), time(0), tzinfo=zona)
-        if momento not in momentos_de_cierre:
-            candidatas.append((momento, LIGA))
+        if ligas.rango_mes(mes)[0] < ligas.PRIMER_MES:
+            continue                # antes de que arranque La Liga no hay nada que cerrar ni pagar
+        for dia, tipo in ((ligas.dia_de_cierre(mes), LIGA), (ligas.dia_de_pago(mes), PAGO_LIGA)):
+            momento = datetime.combine(dia, time(0), tzinfo=zona)
+            if momento not in momentos_de_cierre:
+                candidatas.append((momento, tipo))
 
     return min((c for c in candidatas if c[0] > ahora), key=lambda c: c[0])
 
@@ -78,9 +86,15 @@ def ejecutar(tipo: str, momento: datetime):
     """Hace la corrida `tipo` como si fuera `momento`."""
     hoy = timezone.localtime(momento).date()
     if tipo == CIERRE:
-        return {"semanas": goals.ponerse_al_dia(hoy), "liga": ligas.ponerse_al_dia(hoy)}
+        return {
+            "semanas": goals.ponerse_al_dia(hoy),
+            "liga": ligas.ponerse_al_dia(hoy),
+            "pagos": ligas.pagar_al_dia(hoy),
+        }
     if tipo == LIGA:
         return ligas.ponerse_al_dia(hoy)
+    if tipo == PAGO_LIGA:
+        return ligas.pagar_al_dia(hoy)
     if tipo == CORRECCION:
         lunes_anterior = inicio_semana(hoy) - timedelta(days=7)
         return goals.cerrar_semana(lunes_anterior, hoy, correccion=True)

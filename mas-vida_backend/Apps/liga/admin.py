@@ -18,7 +18,7 @@ class PremioPodioLigaAdmin(admin.ModelAdmin):
 
 @admin.register(LigaMensual)
 class LigaMensualAdmin(admin.ModelAdmin):
-    list_display = ("mes", "total_participantes", "cerrada_en")
+    list_display = ("mes", "total_participantes", "cerrada_en", "pagada_en")
 
 
 @admin.register(DesgloseLigaMensual)
