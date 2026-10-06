@@ -174,6 +174,23 @@ class CasosQueKnoxDejaEn500Tests(APITestCase):
         )
 
 
+class AdminDeTokensTests(TestCase):
+    """En el admin solo quedan las sesiones de Knox: un token de DRF ya no sirve."""
+
+    def setUp(self):
+        self.client.force_login(User.objects.create_superuser("admin", password="x"))
+
+    def test_no_aparece_la_seccion_de_tokens_de_drf(self):
+        from django.contrib import admin
+        from rest_framework.authtoken.models import TokenProxy
+        self.assertFalse(admin.site.is_registered(TokenProxy))
+        self.assertEqual(self.client.get("/admin/authtoken/tokenproxy/").status_code, 404)
+
+    def test_las_sesiones_de_knox_siguen_en_el_admin(self):
+        token_de(crear())
+        self.assertEqual(self.client.get("/admin/knox/authtoken/").status_code, 200)
+
+
 class GuardadoComoHashTests(APITestCase):
     def test_en_la_base_no_queda_la_clave_del_token(self):
         clave = entrar_y_clave()
