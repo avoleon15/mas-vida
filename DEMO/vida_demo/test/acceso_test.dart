@@ -96,12 +96,29 @@ void main() {
       expect(todo(), isNot(contains('descuento en tu prima')));
     });
 
-    test('monedas: vencen por temporada, sin tope, cupones a 60 días', () {
+    test('monedas: vencen por temporada, sin tope, cupones a 3 semanas', () {
       expect(todo(), contains('4 temporadas de 13 semanas'));
+      expect(todo(), contains('la última tiene 14'));
       expect(todo(), contains('No hay límite'));
       expect(todo(), isNot(contains('90 días')));
       expect(todo(), isNot(contains('hasta 100')));
-      expect(todo(), contains('60 días'));
+      expect(todo(), contains('3 semanas (21 días)'));
+      // Hasta el 5 de octubre de 2026 eran 60 días.
+      expect(todo(), isNot(contains('60 días')));
+    });
+
+    test('no prometen lo que ya no existe (revisión del 6 de octubre)', () {
+      // La Liga es un solo grupo, sin franjas de edad (2 de octubre).
+      expect(todo(), isNot(contains('grupos de edad')));
+      // Los pasos se eligen por hora, no por prioridad del reloj (1 de octubre).
+      expect(todo(), isNot(contains('tienen prioridad')));
+      expect(todo(), contains('en cada hora cuenta el dispositivo'));
+      // Los demás ven también los puntos (2 de octubre), nunca los pasos.
+      expect(todo(), isNot(contains('tu nombre y tu posición')));
+      expect(todo(), contains('tu posición en la tabla y tus puntos'));
+      expect(todo(), contains('Nunca ven tus pasos'));
+      // Solo mayores de 18 (6 de octubre).
+      expect(todo(), contains('solo para mayores de 18 años'));
     });
 
     test('siempre de tú, nunca de vos', () {
@@ -260,6 +277,19 @@ void main() {
 
       // 2. Tu edad: sin girar la rueda no se puede seguir.
       expect(find.text('Paso 2 de 4'), findsOneWidget);
+      // La Liga ya no se arma por edad (2 de octubre): la edad solo ajusta la
+      // intensidad y la meta de pasos.
+      expect(
+        find.textContaining('gente de tu edad', skipOffstage: false),
+        findsNothing,
+      );
+      expect(
+        find.text(
+          'Tu meta semanal de pasos depende de tu edad.',
+          skipOffstage: false,
+        ),
+        findsOneWidget,
+      );
       await siguiente(tester);
       expect(find.text('Paso 2 de 4'), findsOneWidget);
 

@@ -215,7 +215,7 @@ class _HistorialSemanas extends StatelessWidget {
     return _Tarjeta(
       children: [
         for (var i = 0; i < conMonedas.length; i++) ...[
-          _FilaSemana(semana: conMonedas[i]),
+          FilaSemanaMonedas(semana: conMonedas[i]),
           if (i != conMonedas.length - 1) const _Separador(),
         ],
       ],
@@ -223,15 +223,20 @@ class _HistorialSemanas extends StatelessWidget {
   }
 }
 
-class _FilaSemana extends StatelessWidget {
-  const _FilaSemana({required this.semana});
+/// Una semana en el historial: qué objetivos cumpliste y cuánto pagó cada uno.
+///
+/// Cada objetivo paga por separado (CLAUDE.md, "Las 2 monedas"): cumplir solo
+/// los pasos paga los pasos. Pública solo para poder probarla.
+@visibleForTesting
+class FilaSemanaMonedas extends StatelessWidget {
+  const FilaSemanaMonedas({super.key, required this.semana});
 
   final SemanaObjetivos semana;
 
   @override
   Widget build(BuildContext context) {
-    // MONEDAS que pagó ESA semana: las suyas si cerró con los dos
-    // objetivos, cero en cualquier otro caso.
+    // MONEDAS que pagó ESA semana: las de cada objetivo cumplido, si ya
+    // cerró. Una semana en curso todavía no pagó nada.
     final monedas = semana.monedasGanadas;
     final cumplidos = semana.objetivos.where((o) => o.completo).toList();
     final estiloNota = Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -256,24 +261,17 @@ class _FilaSemana extends StatelessWidget {
               if (cumplidos.isEmpty)
                 Text('No cumpliste ningún objetivo', style: estiloNota)
               else
-                // Qué objetivos cumpliste. Sin monto al lado: un objetivo
-                // suelto no paga nada. Lo que paga es cumplir los dos, y
-                // eso se dice abajo.
+                // Qué objetivos cumpliste y cuánto pagó cada uno. En una
+                // semana que todavía no cierra, solo "cumplido": las
+                // monedas se pagan al cerrar.
                 for (final o in cumplidos)
-                  Text('${o.nombre} · cumplido', style: estiloNota),
-              if (monedas > 0)
-                Text(
-                  'Cumpliste los dos: por eso pagó $monedas monedas',
-                  style: estiloNota?.copyWith(
-                    color: AppColors.accentSecondary,
-                    fontWeight: FontWeight.w700,
+                  Text(
+                    semana.estado == EstadoSemana.cerrada && o.monedas > 0
+                        ? '${o.nombre} · +${o.monedas} '
+                              '${o.monedas == 1 ? 'moneda' : 'monedas'}'
+                        : '${o.nombre} · cumplido',
+                    style: estiloNota,
                   ),
-                )
-              else if (semana.estado == EstadoSemana.cerrada)
-                Text(
-                  'No cumpliste los dos: no hubo monedas',
-                  style: estiloNota,
-                ),
             ],
           ),
         ),

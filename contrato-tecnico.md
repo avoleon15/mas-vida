@@ -2479,9 +2479,14 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 - **Monedas de La Liga — resuelto (3 oct):** van a los 3 primeros, como ya
   decían los términos y `CLAUDE.md`. Quedan abiertos cuántas monedas da cada
   puesto y qué pasa con un empate total (ver "La Liga y Tus Ligas").
-- **Textos de los términos:** dicen que los demás ven "tu nombre y tu posición"
-  (desde el 2 oct también ven los puntos) y "4 temporadas de 13 semanas" (la
-  season 4 de 2026 tiene 14).
+- ~~Textos de los términos~~ — **corregidos el 6 oct (A37)**: ya no hablan de grupos
+  de edad en La Liga ni de "prioridad del reloj" (los pasos se eligen por hora);
+  dicen que los demás ven nombre público, posición y puntos (nunca pasos), "4
+  temporadas de 13 semanas; en los años con 53 semanas, la última tiene 14", y
+  cupones de 3 semanas. El registro dejó de prometer "compites con gente de tu
+  edad" y la hoja de monedas de decir que hay que cumplir los dos objetivos (cada
+  uno paga por separado). La versión del texto es del 6 oct 2026
+  (`versionTerminos`). **Sigue [PENDIENTE]** la revisión legal del texto completo.
 
 *De la reunión del 2 oct:*
 

@@ -13,7 +13,8 @@ import 'ayudas.dart';
 // Lo que se protege: que los códigos comprados se puedan volver a
 // encontrar (antes se veían una sola vez, en el canje exitoso), que el
 // que vence primero vaya arriba, que lo usado no se confunda con lo que
-// se puede usar, y que un cupón dure 60 días.
+// se puede usar, y que un cupón dure 3 semanas (21 días; hasta el 5 de
+// octubre de 2026 eran 60).
 // ============================================================
 
 List<CuponCanjeado> get _cupones => Datos.i.catalogo.cupones;
@@ -159,7 +160,7 @@ void main() {
     expect(fueALaTienda, isTrue);
   });
 
-  test('canjear deja el cupón guardado, arriba y por 60 días', () {
+  test('canjear deja el cupón guardado, arriba y por 21 días', () {
     final premio = Datos.i.catalogo.premios.first;
     final antes = _cupones.length;
     final cupon = registrarCanje(premio, ahora: DateTime(2026, 9, 8));
@@ -168,16 +169,26 @@ void main() {
     expect(_cupones.first.id, cupon.id);
     expect(cupon.activo, isTrue);
     expect(cupon.comercio, premio.nombre);
-    expect(cupon.vence, '2026-11-07');
-    expect(cupon.diasParaVencer, 60);
+    expect(cupon.vence, '2026-09-29');
+    expect(cupon.diasParaVencer, 21);
     _cupones.remove(cupon);
   });
 
-  test('el mock no trae ningún cupón que dure más de 60 días', () {
+  test('los 21 días son de calendario aunque cambie la hora en el medio', () {
+    // Con `Duration(days: 21)`, en una zona que atrasa el reloj el 1 de
+    // noviembre el cupón vencía un día antes (20 días y 23 horas).
+    final premio = Datos.i.catalogo.premios.first;
+    final cupon = registrarCanje(premio, ahora: DateTime(2026, 10, 20));
+
+    expect(cupon.vence, '2026-11-10');
+    _cupones.remove(cupon);
+  });
+
+  test('el mock no trae ningún cupón que dure más de 21 días', () {
     for (final c in _cupones) {
       final desde = DateTime.parse(c.canjeado);
       final hasta = DateTime.parse(c.vence);
-      expect(hasta.difference(desde).inDays, 60, reason: c.id);
+      expect(hasta.difference(desde).inDays, 21, reason: c.id);
     }
   });
 }

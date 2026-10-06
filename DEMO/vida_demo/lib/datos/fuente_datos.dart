@@ -282,16 +282,19 @@ ApiVidaRepository? _referenciaApi;
 // acá, en memoria, igual que el resto del mock.
 // ============================================================
 
-/// Cuánto dura un cupón canjeado (CLAUDE.md): 60 días, aparte de las
-/// monedas. Con el backend real la fecha la manda el servidor.
-const int diasDeUnCupon = 60;
+/// Cuánto dura un cupón, canjeado o ganado (CLAUDE.md): 3 semanas, es decir
+/// 21 días, aparte de las monedas. Hasta el 5 de octubre de 2026 eran 60 días.
+/// Con el backend real la fecha la manda el servidor.
+const int diasDeUnCupon = 21;
 
 final List<CuponCanjeado> _canjeadosEnEstaSesion = [];
 
 /// Canjea [premio] y devuelve el cupón que queda guardado.
 CuponCanjeado registrarCanje(Premio premio, {DateTime? ahora}) {
   final hoy = ahora ?? DateTime.now();
-  final vence = hoy.add(const Duration(days: diasDeUnCupon));
+  // Días de calendario, no de reloj: con `Duration` un cambio de hora (en
+  // zonas con horario de verano) dejaba el cupón en 20 días y 23 horas.
+  final vence = DateTime(hoy.year, hoy.month, hoy.day + diasDeUnCupon);
   final azar = Random();
   const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   String bloque(int n) =>
