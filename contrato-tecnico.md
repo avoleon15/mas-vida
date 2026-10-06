@@ -220,6 +220,9 @@ REST Framework: uno por cuenta, en texto plano y sin tope). Ver
   días (se usó después del día 60) cuenta como usada hace poco.
 - **Vence a los 30 días SIN uso y cada uso lo renueva:** quien abre la app seguido no
   se topa con el vencimiento. El vencimiento se escribe a lo más una vez por minuto.
+  **[PENDIENTE] (Alvaro y Luis):** si se deja en un minuto (lo de Knox) o en una hora
+  (lo que Luis había elegido antes de A35, para escribir menos en la base). Se cambia
+  en `REST_KNOX["MIN_REFRESH_INTERVAL"]`.
 - **Tope de 90 días:** aunque se use a diario, a los 90 días de iniciar sesión hay que
   volver a entrar. Así un token robado no sirve para siempre.
 - Un token vencido responde `401` en **todos** los endpoints (también `sync`) y la
