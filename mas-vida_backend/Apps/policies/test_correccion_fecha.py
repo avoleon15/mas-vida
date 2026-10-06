@@ -8,6 +8,7 @@ from django.apps import apps
 from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.forms.models import model_to_dict
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -168,6 +169,13 @@ class UnaCorreccionNoCambiaElVeredictoTests(TestCase):
         corregir(poliza, date(1980, 5, 17))
         self.assertEqual(goals.progreso(ana, goals.objetivo_de_la_semana(lunes)).pasos, 70_000)
 
+    def test_el_corte_es_el_mismo_en_los_puntos_y_en_las_ligas_aunque_falte_la_fecha(self):
+        ana = crear_usuario(declarada=date(1988, 5, 17))
+        poliza = poliza_de(ana, REAL, retroactivo=RETRO.DENEGADO, corte=date(2026, 9, 24))
+        PolizaVinculada.objects.filter(pk=poliza.pk).update(birth_date_confirmada=None)
+        self.assertEqual(polizas.fecha_corte_sin_retroactivo(ana), date(2026, 9, 24))
+        self.assertEqual(polizas.cortes_de_retroactivo([ana.pk]), {ana.pk: date(2026, 9, 24)})
+
     def test_una_fila_sin_veredicto_sigue_calculandose_con_la_regla(self):
         ana = crear_usuario(declarada=date(1988, 5, 17))
         poliza_de(ana, REAL, retroactivo="")             # creada a mano o anterior a este campo
@@ -316,6 +324,25 @@ class AdminCorrigeLaFechaTests(TestCase):
             list(CorreccionDeNacimiento.objects.values_list("fecha_anterior", "fecha_nueva")),
             [(REAL, date(1989, 1, 1)), (date(1989, 1, 1), date(1988, 1, 1))],
         )
+
+    def formulario(self, poliza, **cambios):
+        Form = self.admin.get_form(self.request(), poliza)
+        datos = {**model_to_dict(poliza, fields=list(Form.base_fields)), **cambios}
+        return Form(data={k: ("" if v is None else v) for k, v in datos.items()}, instance=poliza)
+
+    def test_una_poliza_verificada_no_puede_quedar_sin_fecha_confirmada(self):
+        form = self.formulario(self.poliza, birth_date_confirmada=None)
+        self.assertFalse(form.is_valid())
+        self.assertIn("birth_date_confirmada", form.errors)
+
+    def test_cambiar_la_fecha_por_otra_si_se_puede(self):
+        form = self.formulario(self.poliza, birth_date_confirmada=date(1989, 1, 1))
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_una_pendiente_puede_quedar_sin_fecha_mientras_se_llena(self):
+        pendiente = poliza_de(crear_usuario("beto"), None, estado=PENDIENTE, numero="P-OTRA")
+        form = self.formulario(pendiente)
+        self.assertTrue(form.is_valid(), form.errors)
 
     def test_el_veredicto_no_se_puede_editar_a_mano(self):
         self.assertIn("retroactivo", self.admin.readonly_fields)

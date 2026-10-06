@@ -251,7 +251,7 @@ def cortes_de_retroactivo(usuario_pks) -> dict[int, date]:
     """
     filas = (
         PolizaVinculada.objects
-        .filter(usuario__in=list(usuario_pks), estado_verificacion=VERIFICADA, birth_date_confirmada__isnull=False)
+        .filter(usuario__in=list(usuario_pks), estado_verificacion=VERIFICADA)
         .select_related("usuario")
     )
     cortes = {}

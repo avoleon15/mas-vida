@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin, messages
 from django.utils import timezone
 
@@ -16,6 +17,23 @@ class CorreccionDeNacimientoInline(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):
         return False
+
+
+class PolizaVinculadaForm(forms.ModelForm):
+    class Meta:
+        model = PolizaVinculada
+        fields = "__all__"
+
+    def clean_birth_date_confirmada(self):
+        fecha = self.cleaned_data.get("birth_date_confirmada")
+        # Sin fecha, los puntos volverían a calcularse con la del registro: quien mintió
+        # recuperaría la ventaja (bono 60+, FCmáx más baja) desde ese momento.
+        if fecha is None and self.instance.pk and self.instance.estado_verificacion == polizas.VERIFICADA:
+            raise forms.ValidationError(
+                "Una póliza verificada no puede quedar sin fecha de nacimiento confirmada. "
+                "Si la aseguradora la corrigió, escribe la fecha correcta."
+            )
+        return fecha
 
 
 @admin.register(PolizaVinculada)
@@ -41,6 +59,7 @@ class PolizaVinculadaAdmin(admin.ModelAdmin):
         "estado_verificacion", "motivo_rechazo", "fecha_vinculacion", "fecha_verificacion",
         "retroactivo", "corte_retroactivo",
     )
+    form = PolizaVinculadaForm
     inlines = [CorreccionDeNacimientoInline]
     actions = ["verificar_polizas", "rechazar_polizas"]
 
