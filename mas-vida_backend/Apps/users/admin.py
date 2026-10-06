@@ -1,7 +1,15 @@
 from django.contrib import admin
+from rest_framework.authtoken.models import TokenProxy
 
 from Apps.policies.models import PolizaVinculada
 from .models import IntentoFallido, Usuario
+
+# Desde A35 las sesiones son de Knox ("Auth tokens" en el admin). Un token de DRF
+# creado aquí ya no sirve para entrar, así que su sección se quita para no
+# confundir. `rest_framework.authtoken` sigue instalada por sus migraciones y por el
+# formulario del login; su comando `drf_create_token` tampoco sirve ya.
+if admin.site.is_registered(TokenProxy):
+    admin.site.unregister(TokenProxy)
 
 
 class PolizaVinculadaInline(admin.StackedInline):

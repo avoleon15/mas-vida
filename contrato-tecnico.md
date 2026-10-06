@@ -162,8 +162,9 @@ campo dentro del JSON.
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
 (credenciales incorrectas en el login). `429` si se pasó el límite de intentos
-(ver "Límite de intentos" abajo). El login no lee el encabezado `Authorization`:
-un token viejo o inválido no impide iniciar sesión.
+(ver "Límite de intentos" abajo). El login y el registro no leen el encabezado
+`Authorization`: un token viejo o inválido no impide iniciar sesión ni crear la
+cuenta.
 
 ### Cerrar sesión: `POST /api/v1/logout` y `POST /api/v1/logout/todos` (A35, 4 oct 2026)
 
@@ -218,7 +219,9 @@ REST Framework: uno por cuenta, en texto plano y sin tope). Ver
   mide por el vencimiento, que cada uso corre; una sesión que ya llegó al tope de 90
   días (se usó después del día 60) cuenta como usada hace poco.
 - **Vence a los 30 días SIN uso y cada uso lo renueva:** quien abre la app seguido no
-  se topa con el vencimiento. El vencimiento se escribe a lo más una vez por minuto.
+  se topa con el vencimiento. El vencimiento se escribe a lo más **una vez por hora**
+  (decidido el 5 oct 2026, como lo tenía Luis antes de A35): sobre 30 días no se nota
+  y la base se escribe mucho menos. Se cambia en `REST_KNOX["MIN_REFRESH_INTERVAL"]`.
 - **Tope de 90 días:** aunque se use a diario, a los 90 días de iniciar sesión hay que
   volver a entrar. Así un token robado no sirve para siempre.
 - Un token vencido responde `401` en **todos** los endpoints (también `sync`) y la

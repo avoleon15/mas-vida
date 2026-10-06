@@ -94,17 +94,17 @@ class VidaDelTokenTests(APITestCase):
         with en(dias=90, minutos=1):
             self.assertEqual(self.c.get(PERFIL).status_code, 401)
 
-    def test_el_vencimiento_se_escribe_a_lo_mas_una_vez_por_minuto(self):
+    def test_el_vencimiento_se_escribe_a_lo_mas_una_vez_por_hora(self):
         token = AuthToken.objects.get(user=self.user)
         with en(dias=1):
             self.c.get(PERFIL)
         token.refresh_from_db()
         primero = token.expiry
-        with en(dias=1, minutos=0.5):
+        with en(dias=1, minutos=50):
             self.c.get(PERFIL)
         token.refresh_from_db()
         self.assertEqual(token.expiry, primero)
-        with en(dias=1, minutos=2):
+        with en(dias=1, horas=2):
             self.c.get(PERFIL)
         token.refresh_from_db()
         self.assertGreater(token.expiry, primero)
@@ -174,13 +174,36 @@ class CasosQueKnoxDejaEn500Tests(APITestCase):
         )
 
 
+class AdminDeTokensTests(TestCase):
+    """En el admin solo quedan las sesiones de Knox: un token de DRF ya no sirve."""
+
+    def setUp(self):
+        self.client.force_login(User.objects.create_superuser("admin", password="x"))
+
+    def test_no_aparece_la_seccion_de_tokens_de_drf(self):
+        from django.contrib import admin
+        from rest_framework.authtoken.models import TokenProxy
+        self.assertFalse(admin.site.is_registered(TokenProxy))
+        self.assertEqual(self.client.get("/admin/authtoken/tokenproxy/").status_code, 404)
+
+    def test_las_sesiones_de_knox_siguen_en_el_admin(self):
+        token_de(crear())
+        self.assertEqual(self.client.get("/admin/knox/authtoken/").status_code, 200)
+
+
 class GuardadoComoHashTests(APITestCase):
     def test_en_la_base_no_queda_la_clave_del_token(self):
         clave = entrar_y_clave()
-        token = AuthToken.objects.get()
-        self.assertNotIn(clave, (token.digest, token.token_key))
-        self.assertEqual(len(token.digest), 128)            # SHA-512
         self.assertEqual(len(clave), 64)
+        # Ningún campo guardado contiene la clave (ni siquiera como parte de un texto).
+        # Knox guarda los primeros 15 caracteres para encontrar la fila: no alcanzan
+        # para entrar.
+        for campo, valor in AuthToken.objects.values().get().items():
+            with self.subTest(campo=campo):
+                self.assertNotIn(clave, str(valor))
+        token = AuthToken.objects.get()
+        self.assertEqual(token.token_key, clave[:15])
+        self.assertEqual(len(token.digest), 128)            # SHA-512
 
     def test_el_token_viejo_de_drf_ya_no_sirve(self):
         from rest_framework.authtoken.models import Token
@@ -228,6 +251,14 @@ class IniciarSesionTests(APITestCase):
             self.assertEqual(cliente(nuevo).get(PERFIL).status_code, 200)
         with en(dias=60):
             self.assertEqual(cliente(nuevo).get(PERFIL).status_code, 200)    # 29 días después
+
+    def test_el_registro_ignora_un_token_viejo_en_el_encabezado(self):
+        # Como el login: un token vencido que quedó en la app no impide crear la cuenta.
+        c = cliente("token-que-ya-vencio")
+        r = c.post(REGISTRO, {
+            "username": "nueva@correo.com", "password": CLAVE, "birth_date": "1992-01-01",
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
 
     def test_contrasena_mala_da_400(self):
         malo = entrar(password="mala")
@@ -374,6 +405,7 @@ class DiasDeVidaDeEntornoTests(TestCase):
         self.assertEqual(settings.REST_KNOX["TOKEN_TTL"], timedelta(days=settings.DIAS_DE_VIDA_DEL_TOKEN))
         self.assertEqual(settings.REST_KNOX["AUTO_REFRESH_MAX_TTL"], timedelta(days=90))
         self.assertTrue(settings.REST_KNOX["AUTO_REFRESH"])
+        self.assertEqual(settings.REST_KNOX["MIN_REFRESH_INTERVAL"], 3600)       # una hora
         self.assertNotIn("TOKEN_LIMIT_PER_USER", settings.REST_KNOX)
 
 

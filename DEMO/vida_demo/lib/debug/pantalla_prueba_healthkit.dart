@@ -31,6 +31,13 @@
 // POST /api/v1/login. "Cerrar sesion" -> estado=ok, y el boton 2 vuelve a dar
 // encolado (sin sesion). El token nunca se escribe en el log: solo cuantos
 // caracteres tiene.
+//
+// usuario_id (opcional, desde A35): el que devuelve el login. Con el, Swift
+// vacia la cola solo si entra OTRA persona. Para probarlo: entregar token A +
+// usuario X, encolar un dia (boton 2 con el backend apagado), entregar otro
+// token del MISMO usuario X -> el dia sigue en la cola; con un usuario Y -> se
+// vacia. Vacio = no se manda (Swift compara el token, como antes de A35). El
+// usuario_id no es secreto: si se escribe en el log.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +56,7 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
   final _bridge = HealthKitBridge();
   final _scroll = ScrollController();
   final _token = TextEditingController();
+  final _usuarioId = TextEditingController();
   final List<String> _log = [];
 
   // Resultado mas reciente de cada boton, por separado. Un log unico se
@@ -106,20 +114,24 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
     });
   }
 
-  Future<void> _actualizarSesion(String? token) =>
-      _correr('SESION', (tag) async {
-        // Solo el largo: el token es una contrasena.
-        _anotar(
-          tag,
-          token == null ? 'token=null' : 'token (${token.length} caracteres)',
-        );
-        // El wrapper nunca lanza: un canal sin registrar llega como
-        // `noDisponible`, no como MissingPluginException.
-        final estado = await _bridge.actualizarSesion(token);
-        final texto = 'estado=${estado.name}';
-        _fijar(tag, texto, estado == EstadoSesionNativa.ok);
-        _anotar(tag, texto);
-      });
+  Future<void> _actualizarSesion(
+    String? token, {
+    String? usuarioId,
+  }) => _correr('SESION', (tag) async {
+    // Solo el largo: el token es una contrasena. El usuario_id no es
+    // secreto.
+    _anotar(
+      tag,
+      '${token == null ? 'token=null' : 'token (${token.length} caracteres)'}'
+      '  usuario_id=${usuarioId ?? '(no se manda)'}',
+    );
+    // El wrapper nunca lanza: un canal sin registrar llega como
+    // `noDisponible`, no como MissingPluginException.
+    final estado = await _bridge.actualizarSesion(token, usuarioId: usuarioId);
+    final texto = 'estado=${estado.name}';
+    _fijar(tag, texto, estado == EstadoSesionNativa.ok);
+    _anotar(tag, texto);
+  });
 
   Future<void> _pedirPermisos() => _correr('PERMISOS', (tag) async {
     final r = await _bridge.solicitarPermisos();
@@ -151,6 +163,7 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
   @override
   void dispose() {
     _token.dispose();
+    _usuarioId.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -233,6 +246,17 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
                   isDense: true,
                 ),
               ),
+              TextField(
+                controller: _usuarioId,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'usuario_id (opcional)',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  isDense: true,
+                ),
+              ),
               const SizedBox(height: 6),
               Row(
                 children: [
@@ -245,7 +269,12 @@ class _PantallaPruebaHealthKitState extends State<PantallaPruebaHealthKit> {
                       builder: (_, valor, _) => FilledButton(
                         onPressed: _ocupado || valor.text.trim().isEmpty
                             ? null
-                            : () => _actualizarSesion(_token.text),
+                            : () => _actualizarSesion(
+                                _token.text,
+                                usuarioId: _usuarioId.text.trim().isEmpty
+                                    ? null
+                                    : _usuarioId.text.trim(),
+                              ),
                         child: const Text('Entregar token'),
                       ),
                     ),
