@@ -4,6 +4,13 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 6 oct 2026** (cuenta y privacidad, etapa 14): el correo **no distingue
+mayúsculas** y no se repite entre cuentas; hay **consentimiento** para compartir los
+datos con la aseguradora (`/api/v1/consentimiento`, obligatorio para usar la app; el
+bloqueo del sync está apagado hasta que Swift lo maneje); y **baja de cuenta**
+(`POST /api/v1/cuenta/baja`), que borra lo personal y conserva lo anónimo. Ver "Registro
+y login", "Consentimiento con la aseguradora" y "Baja de cuenta".
+
 **Actualizado el 6 oct 2026** (ciclos, monedas y cupones): el podio de La Liga se
 **paga el día 9** (el mes se sigue cerrando el día 2) para que las monedas y el cupón
 caigan en la season siguiente, y los **cupones duran 3 semanas (21 días)**, los
@@ -174,6 +181,19 @@ cumple 18 hoy puede registrarse; quien los cumple mañana, no. La regla vive en
 llamando a la API directo. **[PENDIENTE]** que legal y la aseguradora confirmen los
 18 (no cambia el código).
 
+**El correo no distingue mayúsculas** (6 oct 2026). En las cuentas con contraseña el
+correo va en `username`. `Ana@Correo.com` y `ana@correo.com` son la misma cuenta:
+- El registro rechaza un correo que ya usa otra cuenta, sin importar las mayúsculas, y
+  también si lo tiene una cuenta de Google o Apple (en su `email`). Mismo `400` de
+  usuario repetido.
+- El login entra escribiéndolo con cualquier mayúscula (y sin espacios sobrantes). La
+  contraseña sí distingue mayúsculas.
+- Se guarda como lo escribió la persona; solo cambia cómo se compara. Dos índices
+  únicos en la base (`LOWER(username)` y `LOWER(email)` cuando no está vacío) lo
+  garantizan aunque dos registros lleguen a la vez (el segundo recibe el `400`, no un
+  `500`). Si la base ya tenía cuentas repetidas, la migración `users/0007` se detiene
+  y las lista para resolverlas a mano.
+
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
 contraseña débil, fecha de nacimiento futura, menor de 18 o mayor de 120 años) o
 `{ "non_field_errors": [...] }`
@@ -198,7 +218,8 @@ mala, esperar dejaba la pantalla quieta hasta 5 s. La petición sale con el toke
 aunque la copia ya se haya borrado. Si no llega (sin red, el token ya había vencido,
 o la app se cerró en ese instante), el token queda en el servidor hasta que venza.
 `logout/todos` es para "Cerrar sesión en todos los dispositivos" y, más
-adelante, para cambiar la contraseña o borrar la cuenta (OWASP; App Store 5.1.1(v)).
+adelante, para cambiar la contraseña. Borrar la cuenta ya cierra todas las sesiones
+(ver "Baja de cuenta").
 
 ### Inicio de sesión con Google y Apple (decidido 2 oct 2026)
 
@@ -218,8 +239,9 @@ ofrecerlo si se ofrece Google (guía 4.8).
 - **[PENDIENTE] (Luis y Daniel):** la forma de los endpoints (propuesta:
   `POST /api/v1/login/google` y `POST /api/v1/login/apple` con la credencial
   del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
-  cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
-  cuentas distintas).
+  cuenta con ese correo. El correo ya no distingue mayúsculas (6 oct): el login con
+  Google o Apple tiene que revisar `cuentas.correo_en_uso()` antes de crear la cuenta
+  (el índice único lo impide igual, pero con un error feo).
 - **Mientras no existan los endpoints, la app no muestra los botones** "Continuar con
   Apple" y "Continuar con Google" (A37, 6 oct 2026; antes se veían y avisaban "Muy
   pronto"): un botón de Apple que no entra es motivo de rechazo en la App Store, y
@@ -681,7 +703,7 @@ Swift decide **por el código de estado**, nunca por el texto:
 | `200` | Guardado | Confirma el día |
 | `400` | Payload inválido | Error permanente: no se reintenta |
 | `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar), **corta la vuelta** (lo que quedaba fallaría igual) y el día queda pendiente: en la cola, o detrás de la marca de "último día enviado". No se pierde nada |
-| `403` con `consentimiento_requerido` | La persona todavía no aceptó el consentimiento | **Igual que el `401`: no es permanente.** El día queda pendiente y sale solo cuando acepte (ver "Consentimiento pendiente") |
+| `403` con `{"error": "consentimiento_requerido", "version": "1"}` | La persona no tiene el consentimiento vigente (solo con el bloqueo encendido) | **Igual que el `401`: no es permanente.** El día queda pendiente y sale solo cuando acepte (ver "Consentimiento pendiente") |
 | `403` (cualquier otro) | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
 | `408`, `429`, `5xx` | Tiempo agotado, demasiadas peticiones o caída del servidor | Se reintenta (el día va a la cola) |
 | `422` | `fuera_de_ventana` | Ver "Ventana de aceptación de datos rezagados" |
@@ -694,14 +716,16 @@ intentaron siguen detrás de la marca, no se pierden).
 
 #### Consentimiento pendiente (`403 consentimiento_requerido`)
 
-**El servidor todavía no manda este `403`** (el bloqueo está apagado y no está en
-`dev`). Swift ya lo trata como pendiente, para que se pueda encender sin perder
-nada: **no encender el bloqueo hasta que esta versión de Swift esté instalada.**
+**El servidor ya lo tiene** (PR #51, 6 oct) y viene **apagado**:
+`CONSENTIMIENTO_OBLIGATORIO=true` lo enciende (ver "Consentimiento"). Con A38 Swift lo
+trata como pendiente, así que se puede encender sin perder nada **en cuanto esta
+versión de Swift esté instalada y Flutter tenga la pantalla de consentimiento** (los dos
+requisitos de esa sección).
 
-- Swift lo reconoce por el código `403` **y** el motivo `consentimiento_requerido`
-  (`{ "error": "consentimiento_requerido", ... }`, como los demás rechazos con motivo;
-  si la forma fuera otra pero el texto trae el motivo, también). Cualquier otro `403`
-  sigue siendo permanente. **[PENDIENTE]** confirmar la forma exacta con Luis.
+- Swift lo reconoce por el código `403` **y** el motivo `consentimiento_requerido`, tal
+  como lo manda el servidor (`{"error": "consentimiento_requerido", "version": "1"}`;
+  la `version` se ignora). Si la forma cambiara pero el texto trajera el motivo,
+  también se reconoce. Cualquier otro `403` sigue siendo permanente.
 - Mientras el consentimiento esté pendiente la **marca de último día enviado no se
   mueve**, y cada vez que la app abre Swift vuelve a calcular los mismos días desde la
   marca (la primera vez, los últimos 7) y a leerlos de HealthKit. Por eso, **cuando la
@@ -1688,6 +1712,84 @@ usuario sale del token.
 
 ---
 
+## Consentimiento con la aseguradora (hecho 6 oct 2026)
+
+La persona acepta, en una pantalla propia, que +Vida le pase a la aseguradora sus datos
+**del día y por persona**: pasos totales, ritmo cardíaco promedio y workouts (nunca el
+dato crudo de Salud). **Es obligatorio para usar la app** (decidido el 6 oct 2026): quien
+no lo acepta, o lo revoca, no puede usarla. El texto vive en la app; el servidor solo
+conoce su **versión**.
+
+| Petición | Cuerpo | Respuesta |
+|---|---|---|
+| `GET /api/v1/consentimiento` | — | `200` con el estado (abajo) |
+| `POST /api/v1/consentimiento` | `{ "version": "1" }` | `200` con el estado. Idempotente. `409` `{"error": "version_desactualizada", "version_vigente": "2"}` si el texto cambió; `400` `{"version": [...]}` si falta |
+| `POST /api/v1/consentimiento/revocar` | — | `200` con el estado. Idempotente |
+
+```json
+{
+  "obligatorio": false,
+  "version_vigente": "1",
+  "aceptado": true,
+  "version_aceptada": "1",
+  "aceptado_en": "2026-10-06T09:30:00-06:00",
+  "revocado_en": null
+}
+```
+
+- Con token; `403` si la cuenta no tiene perfil. `aceptado` es lo que decide si la app
+  muestra la pantalla: `true` solo con la versión vigente aceptada y sin revocar.
+- `version_aceptada`, `aceptado_en` y `revocado_en` son de la última aceptación (o
+  `null` si nunca aceptó).
+- Cada aceptación es una fila nueva (`Consentimiento`): el historial no se borra.
+  Revocar la marca con la fecha. En el admin se ve, solo de lectura.
+- **Cuando cambie el texto** se sube `VERSION_VIGENTE` en `services/consentimiento.py`:
+  lo aceptado antes deja de valer y la app vuelve a pedirlo. Solo los cambios de fondo
+  (qué datos, con quién, para qué) deberían subirla.
+- **Reporte a la aseguradora:** solo entra quien tiene el consentimiento vigente
+  (`consentimiento.con_consentimiento_vigente(usuarios)`). El reporte todavía es un
+  Excel manual: hay que filtrarlo igual a mano.
+- **Bloqueo del sync:** con `CONSENTIMIENTO_OBLIGATORIO=true` (variable de entorno),
+  `POST /sync` sin consentimiento vigente responde `403`
+  `{"error": "consentimiento_requerido", "version": "1"}` **antes de guardar nada**. El
+  resto de la API sigue abierto (la persona tiene que poder entrar y aceptarlo). **Viene
+  apagado** y no se enciende hasta que:
+  1. ~~**Swift** trate ese `403` como el `401`~~ — **hecho en A38** (7 oct): el día queda
+     pendiente y se corta la vuelta, como con el `401`. Antes lo trataba como rechazo
+     permanente y sacaba de la cola los días que solo vivían ahí (ver "Consentimiento
+     pendiente" en "Errores de `POST /api/v1/sync`").
+  2. **Flutter** tenga la pantalla, que no se puede saltar, con el texto nuevo.
+  Las cuentas que ya existen no tienen consentimiento (no se les inventa uno): al
+  encenderlo, todas lo aceptan desde la app.
+- **[PENDIENTE]:** el texto. El actual (D11) promete menos de lo que se comparte; hay que
+  reescribirlo y que lo apruebe quien vea lo legal. Esa es la versión `"1"`.
+
+## Baja de cuenta — `POST /api/v1/cuenta/baja` (hecho 6 oct 2026)
+
+Apple exige que la cuenta se pueda borrar desde la app (App Store 5.1.1(v)). Con token.
+
+- Cuerpo `{ "password": "..." }` en las cuentas con contraseña: `400`
+  `{"password": [...]}` si falta o no es la correcta. Las contraseñas malas cuentan para
+  el mismo límite del login (5 por minuto, `429`). Una cuenta sin contraseña (Google o
+  Apple) no la pide.
+- `204` sin cuerpo. Desde ahí el token ya no sirve (se cierran **todas** las sesiones) y
+  la app vuelve al inicio, como con el `401`.
+- **Se borra lo personal:** el correo (el `username` pasa a `baja-<usuario_id>` y queda
+  libre para una cuenta nueva), el nombre, la contraseña (queda inutilizable), la póliza
+  (queda libre para otra cuenta), los nombres de fuente y de dispositivo de las muestras
+  (pueden decir "Apple Watch de Ana") y la fecha de nacimiento exacta (queda el 1 de
+  enero de su año). Se revoca el consentimiento y sale de Tus Ligas (si era el último
+  miembro, el grupo se borra).
+- **Se conserva lo anónimo:** puntos y monedas (los ledgers no se tocan), resúmenes
+  diarios, muestras de salud, cupones y tablas de ligas ya cerradas. El `usuario_id` es
+  aleatorio y no identifica a nadie.
+- Quien se dio de baja ya no entra a La Liga, no cobra un podio cerrado y sin pagar, y no
+  se le cierra la semana. No se puede deshacer: para volver, se registra de nuevo y
+  arranca de cero.
+- **[PENDIENTE] (paquete 9):** en las cuentas de Apple, la baja también tiene que revocar
+  el token de Apple (lo exige Apple), y la baja de una cuenta de Google o Apple tendría
+  que pedir una credencial fresca del proveedor en vez de la contraseña.
+
 ## Perfil — `GET /api/v1/perfil` (hecho 4 oct 2026)
 
 Los datos de la propia cuenta para la pantalla de Perfil. Con token; `403` si la
@@ -2631,8 +2733,8 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
   pruebas vieja se vuelve a sincronizar.
 - ~~Logout en el servidor~~ — **hecho** (4 oct): `POST /api/v1/logout` cierra este
   teléfono y `POST /api/v1/logout/todos` todos (A35, un token por sesión con Knox).
-  **[PENDIENTE]:** que cambiar la contraseña y borrar la cuenta cierren todas las
-  sesiones (todavía no existen esos endpoints).
+  Borrar la cuenta ya cierra todas las sesiones (6 oct). **[PENDIENTE]:** que cambiar
+  la contraseña también lo haga (todavía no existe ese endpoint).
 - **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
   Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
 - **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct; cambiado

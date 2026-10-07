@@ -123,6 +123,23 @@ def _dias_de_vida_del_token():
 
 DIAS_DE_VIDA_DEL_TOKEN = _dias_de_vida_del_token()
 
+
+def _bool_de_entorno(nombre, defecto=False):
+    crudo = os.environ.get(nombre, "").strip().casefold()
+    if crudo == "":
+        return defecto
+    if crudo in ("1", "true", "si", "sí", "yes", "on"):
+        return True
+    if crudo in ("0", "false", "no", "off"):
+        return False
+    raise ImproperlyConfigured(f"{nombre} tiene que ser sí o no (llegó {crudo!r}).")
+
+
+# Si es True, `POST /sync` rechaza (403 consentimiento_requerido) a quien no tiene el
+# consentimiento vigente. Va APAGADO hasta que Swift deje ese día en la cola en vez de
+# descartarlo (hoy trata cualquier 4xx como rechazo permanente) y Flutter tenga la pantalla.
+CONSENTIMIENTO_OBLIGATORIO = _bool_de_entorno("CONSENTIMIENTO_OBLIGATORIO")
+
 # Aunque se use a diario, a los 90 días de iniciar sesión hay que volver a entrar:
 # un token robado no sirve para siempre. Si DIAS_DE_VIDA_DEL_TOKEN es mayor, manda este.
 DIAS_MAXIMOS_DE_SESION = 90

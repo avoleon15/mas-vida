@@ -3,10 +3,11 @@ import uuid
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from rest_framework import serializers
 
+from services import cuentas
 from services.edad import problema_con_la_fecha_de_nacimiento
 
 from .models import Usuario
@@ -24,7 +25,8 @@ class RegistroSerializer(serializers.Serializer):
     birth_date = serializers.DateField()
 
     def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
+        # Sin distinguir mayúsculas, y también contra el correo de las cuentas de Google/Apple.
+        if cuentas.correo_en_uso(value):
             raise serializers.ValidationError(
                 "Este nombre de usuario ya existe."
             )
@@ -53,10 +55,15 @@ class RegistroSerializer(serializers.Serializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        user = User.objects.create_user(
-            username=validated_data["username"],
-            password=validated_data["password"],
-        )
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(
+                    username=validated_data["username"],
+                    password=validated_data["password"],
+                )
+        except IntegrityError:
+            # Dos registros del mismo correo a la vez: la base deja pasar a uno.
+            raise serializers.ValidationError({"username": ["Este nombre de usuario ya existe."]})
 
         # El identificador público lo genera el servidor: el cliente no lo
         # elige, así no puede repetirlo ni adivinar el de otra persona.
