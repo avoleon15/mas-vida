@@ -260,9 +260,9 @@ final class MarcaEnvios {
 /// Cómo terminó una vuelta.
 enum FinDeVuelta: Equatable {
     case completa
-    /// Sin red, servidor caído, token rechazado o Salud bloqueada: lo que
-    /// quedaba fallaría igual. No se pierde nada: lo que no se intentó sigue
-    /// en la cola o detrás de la marca.
+    /// Sin red, servidor caído, token rechazado, consentimiento pendiente o
+    /// Salud bloqueada: lo que quedaba fallaría igual. No se pierde nada: lo
+    /// que no se intentó sigue en la cola o detrás de la marca.
     case cortadaPorFalloGeneral
     /// El servidor rechazó un día de forma permanente.
     case cortadaPorRechazo

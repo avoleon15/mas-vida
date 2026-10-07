@@ -136,8 +136,9 @@ def _bool_de_entorno(nombre, defecto=False):
 
 
 # Si es True, `POST /sync` rechaza (403 consentimiento_requerido) a quien no tiene el
-# consentimiento vigente. Va APAGADO hasta que Swift deje ese día en la cola en vez de
-# descartarlo (hoy trata cualquier 4xx como rechazo permanente) y Flutter tenga la pantalla.
+# consentimiento vigente. Va APAGADO hasta que Flutter tenga la pantalla y la versión de
+# Swift con A38 esté instalada (esa versión deja el día pendiente en vez de descartarlo;
+# antes trataba cualquier 4xx como rechazo permanente).
 CONSENTIMIENTO_OBLIGATORIO = _bool_de_entorno("CONSENTIMIENTO_OBLIGATORIO")
 
 # Aunque se use a diario, a los 90 días de iniciar sesión hay que volver a entrar:

@@ -702,14 +702,49 @@ Swift decide **por el código de estado**, nunca por el texto:
 |---|---|---|
 | `200` | Guardado | Confirma el día |
 | `400` | Payload inválido | Error permanente: no se reintenta |
-| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar) y el día queda pendiente; **no corta los demás días** ni saca el día de la cola |
-| `403` | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
-| `403` | `{"error": "consentimiento_requerido", "version": "1"}`: no tiene el consentimiento vigente (solo con el bloqueo encendido) | **[PENDIENTE] (Swift):** tiene que tratarse como el `401`: el día queda pendiente y no corta la vuelta. Hoy Swift lo trataría como permanente y **borraría el día** |
+| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar), **corta la vuelta** (lo que quedaba fallaría igual) y el día queda pendiente: en la cola, o detrás de la marca de "último día enviado". No se pierde nada |
+| `403` con `{"error": "consentimiento_requerido", "version": "1"}` | La persona no tiene el consentimiento vigente (solo con el bloqueo encendido) | **Igual que el `401`: no es permanente.** El día queda pendiente y sale solo cuando acepte (ver "Consentimiento pendiente") |
+| `403` (cualquier otro) | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
 | `408`, `429`, `5xx` | Tiempo agotado, demasiadas peticiones o caída del servidor | Se reintenta (el día va a la cola) |
 | `422` | `fuera_de_ventana` | Ver "Ventana de aceptación de datos rezagados" |
 
-Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep), salvo
-la de `consentimiento_requerido`, que es lo que Swift tiene que agregar.
+Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep; la del
+`403` de consentimiento desde A38, 6 oct 2026). La fila de `401` decía que "no corta
+los demás días", y contradecía al código y a "Notas para Alvaro" y "Ventana de
+aceptación de datos rezagados": con un `401` la vuelta se corta (los días que no se
+intentaron siguen detrás de la marca, no se pierden).
+
+#### Consentimiento pendiente (`403 consentimiento_requerido`)
+
+**El servidor ya lo tiene** (PR #51, 6 oct) y viene **apagado**:
+`CONSENTIMIENTO_OBLIGATORIO=true` lo enciende (ver "Consentimiento"). Con A38 Swift lo
+trata como pendiente, así que se puede encender sin perder nada **en cuanto esta
+versión de Swift esté instalada y Flutter tenga la pantalla de consentimiento** (los dos
+requisitos de esa sección).
+
+- Swift lo reconoce por el código `403` **y** el motivo `consentimiento_requerido`, tal
+  como lo manda el servidor (`{"error": "consentimiento_requerido", "version": "1"}`;
+  la `version` se ignora). Si la forma cambiara pero el texto trajera el motivo,
+  también se reconoce. Cualquier otro `403` sigue siendo permanente.
+- Mientras el consentimiento esté pendiente la **marca de último día enviado no se
+  mueve**, y cada vez que la app abre Swift vuelve a calcular los mismos días desde la
+  marca (la primera vez, los últimos 7) y a leerlos de HealthKit. Por eso, **cuando la
+  persona acepta, se mandan solos** los días de la espera que sigan dentro de la
+  ventana: ningún día se borra por haber recibido este `403`.
+- Los días que estaban en la **cola de reintentos** (porque fallaron antes por red) y
+  son anteriores a la marca solo viven ahí: tratar el `403` como permanente los sacaba
+  de la cola y no volvían. Este es el caso que el cambio protege.
+- **Cuántos días llegan si la persona acepta tarde** (medido contra el servidor real
+  con el bloqueo encendido y una apertura de la app por día): la primera apertura deja en
+  la cola el día más viejo de la ventana, y ese día "ancla" lo que se manda al aceptar.
+  Quien acepta hasta **8 días** después de instalar recibe **todo lo que el servidor aún
+  acepta** (de 7 a 15 días, según cuánto tardó). Si tarda 9 o más, el ancla caduca (la
+  cola olvida lo de más de 14 días) y se mandan entre 7 y 11 días, según cuándo se volvió
+  a dejar en la cola. **Antes de A38 eran siempre 7.** Esto lo fija la prueba
+  `ConsentimientoRecorridoCompletoTests`. **[PENDIENTE]** (Alvaro) si la primera vez pasa
+  a 14 días, para que no dependa de este ancla.
+- Para Flutter, el envío manual de "hoy" con el consentimiento pendiente responde
+  `encolado` (como con el `401`), no `error_permanente`.
 
 #### Qué hace el servidor con datos raros
 
@@ -1349,7 +1384,7 @@ Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 | `estado` | Qué significa | Qué hace Flutter |
 |---|---|---|
 | `ok` | Guardado en Luis. `sincronizado_en` viene con el timestamp | Confirmación normal |
-| `encolado` | Sin red o backend caído — el día quedó en cola local, se reintenta solo al volver a primer plano | Aviso suave, **no** como falla — el dato no se perdió |
+| `encolado` | Sin red, backend caído, sin sesión o consentimiento pendiente (`403`) — el día quedó en cola local, se reintenta solo al volver a primer plano | Aviso suave, **no** como falla — el dato no se perdió |
 | `sin_acceso_a_salud` | No se pudo leer HealthKit — casi siempre permisos | Guiar a Ajustes › Salud › +Vida |
 | `error_permanente` | URL mal configurada o backend rechazó el payload (4xx) — no se reintenta | Usuario no puede resolverlo; registrar y reportar |
 
@@ -1448,12 +1483,14 @@ Una vuelta a la vez. Qué manda:
   llegó y lo que el servidor rechazó por viejo (`422`). Un día vacío no la mueve:
   puede ser un permiso de Salud que todavía no se dio.
 - **Fallo general → se corta la vuelta.** Sin red, servidor caído, token
-  rechazado o Salud bloqueada fallan igual para todos los días: tras el primero
+  rechazado, consentimiento pendiente (`403 consentimiento_requerido`) o Salud
+  bloqueada fallan igual para todos los días: tras el primero
   no se intenta ninguno más, y si la cola se cortó así no se sigue con la marca.
   No se pierde nada (lo que no se intentó sigue en la cola o detrás de la
   marca). Así, con el servidor caído hay **un** intento por apertura, no uno por
   día.
-- **Rechazo permanente** (otro `4xx`) → se saca ese día y se corta la vuelta.
+- **Rechazo permanente** (otro `4xx`, incluido cualquier `403` que no sea de
+  consentimiento) → se saca ese día y se corta la vuelta.
 - **Sin sesión** → no se manda nada y la marca no se mueve.
 - **Antes de dar el permiso de Salud**, HealthKit no deja leer: los días quedan
   en la cola y salen solos cuando se concede.
@@ -1547,7 +1584,7 @@ código, sigue siendo un rechazo normal). Una sola regla para los tres caminos:
 
 | Qué pasó | Ese día | La vuelta |
 |---|---|---|
-| Sin red, `401`, `408`, `429`, `5xx`, Salud bloqueada | Queda pendiente | **Se corta** (fallaría igual) |
+| Sin red, `401`, `403` de consentimiento, `408`, `429`, `5xx`, Salud bloqueada | Queda pendiente | **Se corta** (fallaría igual) |
 | `422` de la ventana | Se descarta | Sigue |
 | Respuesta `2xx` ilegible | Cuenta como enviado (y va al log) | Sigue |
 | Otro `4xx` | Se descarta | Se corta |
@@ -1722,8 +1759,10 @@ conoce su **versión**.
   `{"error": "consentimiento_requerido", "version": "1"}` **antes de guardar nada**. El
   resto de la API sigue abierto (la persona tiene que poder entrar y aceptarlo). **Viene
   apagado** y no se enciende hasta que:
-  1. **Swift** trate ese `403` como el `401` (el día queda en la cola). Hoy lo trataría
-     como rechazo permanente y borraría ese día de la cola.
+  1. ~~**Swift** trate ese `403` como el `401`~~ — **hecho en A38** (7 oct): el día queda
+     pendiente y se corta la vuelta, como con el `401`. Antes lo trataba como rechazo
+     permanente y sacaba de la cola los días que solo vivían ahí (ver "Consentimiento
+     pendiente" en "Errores de `POST /api/v1/sync`").
   2. **Flutter** tenga la pantalla, que no se puede saltar, con el texto nuevo.
   Las cuentas que ya existen no tienen consentimiento (no se les inventa uno): al
   encenderlo, todas lo aceptan desde la app.

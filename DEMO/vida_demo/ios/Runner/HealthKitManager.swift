@@ -776,8 +776,9 @@ final class HealthKitManager {
 
         // Primero la cola: días que fallaron antes, que pueden ser más viejos
         // que la marca. Si se cortó por un fallo general (sin red, servidor
-        // caído, token rechazado), los días nuevos fallarían igual: se
-        // intentan la próxima vez, desde la marca, que no se movió.
+        // caído, token rechazado, consentimiento pendiente), los días nuevos
+        // fallarían igual: se intentan la próxima vez, desde la marca, que no
+        // se movió.
         guard await reintentarPendientes() != .cortadaPorFalloGeneral else {
             errorPonerseAlDia = errorReintento
             return
