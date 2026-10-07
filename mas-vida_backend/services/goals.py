@@ -250,7 +250,8 @@ def cerrar_semana(lunes: date, hoy: date, correccion: bool = False) -> dict:
             f"{primer_dia_de_cierre(lunes).isoformat()}"
         )
 
-    usuarios = list(Usuario.objects.all())
+    # Quien dio de baja su cuenta ya no tiene semana que cerrar.
+    usuarios = list(Usuario.objects.filter(dado_de_baja_en__isnull=True))
     avance = _progreso_de_todos(usuarios, objetivo)
     patrocinio = patrocinios.de_semana(lunes)
     numero_en_la_season = numero_semana_en_season(lunes)

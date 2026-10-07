@@ -222,7 +222,7 @@ def usuarios(pks) -> dict[int, Usuario]:
 
 def participantes_la_liga():
     """Todos los usuarios con póliza verificada: un solo grupo."""
-    return Usuario.objects.filter(poliza__estado_verificacion=VERIFICADA)
+    return Usuario.objects.filter(poliza__estado_verificacion=VERIFICADA, dado_de_baja_en__isnull=True)
 
 
 def puede_entrar_a_la_liga(usuario) -> bool:
@@ -306,7 +306,8 @@ def pagar_la_liga(mes: date, hoy: date) -> dict:
         patrocinio = patrocinios.de_liga(inicio)
         ganadores = (
             DesgloseLigaMensual.objects
-            .filter(liga_mensual=liga, monedas__gt=0)
+            # Quien dio de baja su cuenta entre el cierre y el pago no cobra.
+            .filter(liga_mensual=liga, monedas__gt=0, usuario__dado_de_baja_en__isnull=True)
             .select_related("usuario")
             .order_by("posicion_final", "pk")
         )

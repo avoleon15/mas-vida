@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import daily_scoring
+from services import consentimiento, daily_scoring
 
 from .models import Muestra, MuestraBPM, ResumenDiario, Sesion
 from .serializers import SyncSerializer
@@ -43,6 +43,14 @@ def sync(request):
     except Usuario.DoesNotExist:
         return Response(
             {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Apagado por defecto (settings.CONSENTIMIENTO_OBLIGATORIO). Antes de leer el payload:
+    # sin consentimiento no se guarda ningún dato de salud.
+    if consentimiento.obligatorio() and not consentimiento.vigente(usuario):
+        return Response(
+            {"error": "consentimiento_requerido", "version": consentimiento.VERSION_VIGENTE},
             status=status.HTTP_403_FORBIDDEN,
         )
 
