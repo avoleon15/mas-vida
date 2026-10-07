@@ -442,11 +442,11 @@ final class ApiErrorReintentableTests: XCTestCase {
   }
 }
 
-/// El `422` de la ventana de 14 días se distingue de cualquier otro rechazo:
-/// solo con ESE motivo se puede descartar el día y seguir con los demás.
-final class ApiClientVentanaTests: XCTestCase {
+/// Base de las pruebas que mandan un envío a un servidor falso y miran el error
+/// que sale: `cliente` ya apunta a `ProtocoloEspia` y `errorAl` lo usa.
+class PruebaConServidorFalso: XCTestCase {
 
-  private var cliente: ApiClient!
+  var cliente: ApiClient!
 
   override func setUp() {
     super.setUp()
@@ -463,7 +463,7 @@ final class ApiClientVentanaTests: XCTestCase {
   }
 
   /// Responde `status` con `cuerpo` y devuelve el error que lanzó el envío.
-  private func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
+  func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
     ProtocoloEspia.status = status
     ProtocoloEspia.respuesta = Data(cuerpo.utf8)
     do {
@@ -473,6 +473,11 @@ final class ApiClientVentanaTests: XCTestCase {
       return error
     }
   }
+}
+
+/// El `422` de la ventana de 14 días se distingue de cualquier otro rechazo:
+/// solo con ESE motivo se puede descartar el día y seguir con los demás.
+final class ApiClientVentanaTests: PruebaConServidorFalso {
 
   func testEl422DeLaVentanaSeReconoce_ConSuFecha() async {
     // Tal cual lo arma Apps/activities/views.py.
@@ -1590,39 +1595,12 @@ final class FCParaEnviarTests: XCTestCase {
 /// El `403 consentimiento_requerido`: el servidor todavía no deja recibir datos de
 /// quien no aceptó el consentimiento. Es "pendiente", no "rechazado": el día no se
 /// pierde y sale solo cuando la persona acepte.
-final class ApiClientConsentimientoTests: XCTestCase {
+final class ApiClientConsentimientoTests: PruebaConServidorFalso {
 
-  private var cliente: ApiClient!
-
-  override func setUp() {
-    super.setUp()
-    ProtocoloEspia.reiniciar()
-    let almacen = AlmacenEnMemoria()
-    almacen.token = "abc123-secreto"
-    let configuracion = URLSessionConfiguration.ephemeral
-    configuracion.protocolClasses = [ProtocoloEspia.self]
-    cliente = ApiClient(
-      baseURL: URL(string: "http://servidor.prueba")!,
-      session: URLSession(configuration: configuracion),
-      almacen: almacen
-    )
-  }
-
-  private func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
-    ProtocoloEspia.status = status
-    ProtocoloEspia.respuesta = Data(cuerpo.utf8)
-    do {
-      _ = try await cliente.enviarSincronizacion(payloadDePrueba())
-      return nil
-    } catch {
-      return error
-    }
-  }
-
-  func testElMotivoSeReconoce_YSeReintenta() async {
+  func testElCuerpoTalComoLoMandaElServidor_SeReconoceYSeReintenta() async {
+    // Tal cual lo arma Apps/activities/views.py (PR #51).
     let error = await errorAl(
-      responder: 403,
-      #"{"error":"consentimiento_requerido","mensaje":"Acepta el consentimiento para continuar."}"#)
+      responder: 403, #"{"error":"consentimiento_requerido","version":"1"}"#)
 
     guard case .consentimientoRequerido? = error as? ApiError else {
       return XCTFail("Debió ser consentimientoRequerido, fue: \(String(describing: error))")
@@ -1631,9 +1609,19 @@ final class ApiClientConsentimientoTests: XCTestCase {
     XCTAssertEqual(AccionDiaFallido.para(error!), .reintentarDespues)
   }
 
+  func testUnMensajeDeMas_NoImporta() async {
+    let error = await errorAl(
+      responder: 403,
+      #"{"error":"consentimiento_requerido","mensaje":"Acepta el consentimiento para continuar."}"#)
+
+    guard case .consentimientoRequerido? = error as? ApiError else {
+      return XCTFail("Debió ser consentimientoRequerido, fue: \(String(describing: error))")
+    }
+  }
+
   func testSiLaFormaEsOtra_PeroTraeElMotivo_IgualSeReconoce() async {
-    // Todavía no está en `dev` cómo lo manda Luis: perder el día por una
-    // diferencia de forma sería peor que reintentarlo de más.
+    // El servidor lo manda como `{"error": ..., "version": ...}`. Si la forma
+    // cambiara, perder el día sería peor que reintentarlo de más.
     for cuerpo in [
       #"{"detail":"consentimiento_requerido"}"#,
       #"{"codigo":"consentimiento_requerido","version":"2026-10-06"}"#,
@@ -1754,8 +1742,8 @@ final class ConsentimientoPendienteTests: XCTestCase {
     XCTAssertEqual(cola.pendientes(), [])
   }
 
-  func testComoPermanente_ElMismoDiaSiSePerdia() async {
-    // Contraste: así se portaba el 403 antes del cambio (cualquier permanente).
+  func testContraste_UnPermanenteGenerico_SacaElDiaDeLaCola() async {
+    // Así se portaba el 403 de consentimiento antes de A38 (cualquier permanente).
     marca.registrarEnviado("2026-10-10")
     cola.encolar(fecha: "2026-10-08")
 

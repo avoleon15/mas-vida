@@ -1379,7 +1379,7 @@ Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 | `estado` | Qué significa | Qué hace Flutter |
 |---|---|---|
 | `ok` | Guardado en Luis. `sincronizado_en` viene con el timestamp | Confirmación normal |
-| `encolado` | Sin red o backend caído — el día quedó en cola local, se reintenta solo al volver a primer plano | Aviso suave, **no** como falla — el dato no se perdió |
+| `encolado` | Sin red, backend caído, sin sesión o consentimiento pendiente (`403`) — el día quedó en cola local, se reintenta solo al volver a primer plano | Aviso suave, **no** como falla — el dato no se perdió |
 | `sin_acceso_a_salud` | No se pudo leer HealthKit — casi siempre permisos | Guiar a Ajustes › Salud › +Vida |
 | `error_permanente` | URL mal configurada o backend rechazó el payload (4xx) — no se reintenta | Usuario no puede resolverlo; registrar y reportar |
 

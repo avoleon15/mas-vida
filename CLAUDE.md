@@ -942,8 +942,9 @@ reporte mensual acordado con Diego (18 de septiembre de 2026).
 de 2026): quien no lo acepta, o lo revoca, no puede usarla. El servidor guarda
 cuándo se aceptó, qué versión del texto y si se revocó, y solo quien lo tiene
 vigente entra al reporte de la aseguradora (`contrato-tecnico.md`,
-"Consentimiento con la aseguradora"). El bloqueo del sync está apagado hasta
-que Swift y Flutter lo manejen.
+"Consentimiento con la aseguradora"). El bloqueo del sync sigue apagado: Swift ya lo
+maneja (A38, 7 de octubre de 2026; el `403` deja el día pendiente) y falta la pantalla
+de consentimiento de Flutter, además de que esa versión de Swift esté instalada.
 
 [PENDIENTE] El texto de consentimiento actual de la app (D11) promete algo
 más estricto que esto — solo agregados de cohorte, nada a nivel de persona —

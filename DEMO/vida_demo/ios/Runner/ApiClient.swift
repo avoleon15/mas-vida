@@ -41,8 +41,9 @@ enum ApiError: LocalizedError {
     /// payload ni de la cuenta. `fecha` es la que devolvió el servidor.
     case fueraDeVentana(fecha: String?)
 
-    /// El servidor respondió `403 {"error": "consentimiento_requerido"}`: la
-    /// persona todavía no aceptó el consentimiento. No dice nada malo del día
+    /// El servidor respondió `403 {"error": "consentimiento_requerido",
+    /// "version": "1"}` (bloqueo del sync, apagado por defecto): la persona no
+    /// tiene el consentimiento vigente. No dice nada malo del día
     /// ni de la cuenta, y se arregla cuando acepte (como el `401` cuando
     /// vuelve a entrar), así que el día queda pendiente y NO se descarta.
     /// Cualquier otro `403` (por ejemplo, la cuenta sin perfil) sigue siendo
@@ -430,11 +431,11 @@ final class ApiClient {
     /// otro `403` sigue siendo `servidor(403)`: un permanente genérico (la cuenta
     /// sin perfil, por ejemplo), que no se puede dejar pendiente.
     ///
-    /// La forma esperada es la de los demás rechazos con motivo:
-    /// `{"error": "consentimiento_requerido", ...}`. Si el servidor la manda
-    /// distinta pero el texto trae el motivo, también se toma: perder el día
-    /// por una diferencia de forma sería lo peor de las dos equivocaciones.
-    /// [PENDIENTE] confirmar la forma exacta con Luis (todavía no está en `dev`).
+    /// Así lo manda el servidor (`Apps/activities/views.py`):
+    /// `{"error": "consentimiento_requerido", "version": "1"}`; la `version` se
+    /// ignora. Si algún día la forma cambiara pero el texto trajera el motivo,
+    /// también se toma: perder el día por una diferencia de forma sería lo peor
+    /// de las dos equivocaciones.
     static func rechazoPorConsentimiento(codigo: Int, cuerpo: Data) -> ApiError? {
         guard codigo == 403 else { return nil }
         if let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo) {
