@@ -556,6 +556,24 @@ final class AccionDiaFallidoTests: XCTestCase {
     }
   }
 
+  func testElConsentimientoPendiente_SeReintentaComoElTokenRechazado() {
+    // El 403 de `consentimiento_requerido` se arregla cuando la persona acepta,
+    // igual que el 401 cuando vuelve a entrar: el día no se descarta.
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.consentimientoRequerido), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.consentimientoRequerido),
+                   AccionDiaFallido.para(servidor(401)))
+    XCTAssertTrue(ApiError.consentimientoRequerido.esReintentable)
+  }
+
+  func testUn403QueNoEsDeConsentimiento_SigueSiendoPermanente() {
+    // Por ejemplo, la cuenta sin perfil: reintentar no lo arregla.
+    for cuerpo in [nil, "", #"{"mensaje":"El usuario autenticado no tiene un perfil asociado."}"#] {
+      XCTAssertEqual(
+        AccionDiaFallido.para(ApiError.servidor(codigo: 403, cuerpo: cuerpo)),
+        .descartarYCortar, "cuerpo: \(String(describing: cuerpo))")
+    }
+  }
+
   func testEl422DeLaVentana_SeDescartaYSigue() {
     XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: "2026-09-01")), .descartarYSeguir)
     XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: nil)), .descartarYSeguir)
@@ -1566,5 +1584,217 @@ final class FCParaEnviarTests: XCTestCase {
     XCTAssertFalse(ReglasWorkout.esSinDatos(HKError(.errorAuthorizationDenied)))
     XCTAssertFalse(ReglasWorkout.esSinDatos(HKError(.errorDatabaseInaccessible)))
     XCTAssertFalse(ReglasWorkout.esSinDatos(NSError(domain: "otro", code: 11)))
+  }
+}
+
+/// El `403 consentimiento_requerido`: el servidor todavía no deja recibir datos de
+/// quien no aceptó el consentimiento. Es "pendiente", no "rechazado": el día no se
+/// pierde y sale solo cuando la persona acepte.
+final class ApiClientConsentimientoTests: XCTestCase {
+
+  private var cliente: ApiClient!
+
+  override func setUp() {
+    super.setUp()
+    ProtocoloEspia.reiniciar()
+    let almacen = AlmacenEnMemoria()
+    almacen.token = "abc123-secreto"
+    let configuracion = URLSessionConfiguration.ephemeral
+    configuracion.protocolClasses = [ProtocoloEspia.self]
+    cliente = ApiClient(
+      baseURL: URL(string: "http://servidor.prueba")!,
+      session: URLSession(configuration: configuracion),
+      almacen: almacen
+    )
+  }
+
+  private func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
+    ProtocoloEspia.status = status
+    ProtocoloEspia.respuesta = Data(cuerpo.utf8)
+    do {
+      _ = try await cliente.enviarSincronizacion(payloadDePrueba())
+      return nil
+    } catch {
+      return error
+    }
+  }
+
+  func testElMotivoSeReconoce_YSeReintenta() async {
+    let error = await errorAl(
+      responder: 403,
+      #"{"error":"consentimiento_requerido","mensaje":"Acepta el consentimiento para continuar."}"#)
+
+    guard case .consentimientoRequerido? = error as? ApiError else {
+      return XCTFail("Debió ser consentimientoRequerido, fue: \(String(describing: error))")
+    }
+    XCTAssertEqual((error as? ApiError)?.esReintentable, true)
+    XCTAssertEqual(AccionDiaFallido.para(error!), .reintentarDespues)
+  }
+
+  func testSiLaFormaEsOtra_PeroTraeElMotivo_IgualSeReconoce() async {
+    // Todavía no está en `dev` cómo lo manda Luis: perder el día por una
+    // diferencia de forma sería peor que reintentarlo de más.
+    for cuerpo in [
+      #"{"detail":"consentimiento_requerido"}"#,
+      #"{"codigo":"consentimiento_requerido","version":"2026-10-06"}"#,
+      "consentimiento_requerido",
+    ] {
+      let error = await errorAl(responder: 403, cuerpo)
+
+      guard case .consentimientoRequerido? = error as? ApiError else {
+        return XCTFail("Con \(cuerpo) debió ser consentimientoRequerido, fue: \(String(describing: error))")
+      }
+    }
+  }
+
+  func testOtro403_SigueSiendoPermanente() async {
+    for cuerpo in [
+      #"{"mensaje":"El usuario autenticado no tiene un perfil asociado."}"#,  // cuenta sin perfil
+      #"{"error":"otra_cosa"}"#,                                               // otro motivo
+      #"<html>Forbidden</html>"#,                                              // no es JSON
+      "",                                                                      // sin cuerpo
+    ] {
+      let error = await errorAl(responder: 403, cuerpo)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(cuerpo) debió ser servidor(403), fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, 403)
+      XCTAssertEqual(AccionDiaFallido.para(error!), .descartarYCortar, cuerpo)
+    }
+  }
+
+  func testEl403QueDiceOtroMotivo_NoSeConfundeConElDeConsentimiento() async {
+    // Un `error` distinto pesa más que un texto suelto: no se reintenta por
+    // casualidad.
+    let error = await errorAl(
+      responder: 403, #"{"error":"cuenta_suspendida","nota":"no es consentimiento_requerido"}"#)
+
+    guard case .servidor(let codigo, _)? = error as? ApiError else {
+      return XCTFail("Debió ser servidor(403), fue: \(String(describing: error))")
+    }
+    XCTAssertEqual(codigo, 403)
+  }
+
+  func testElMismoCuerpoConOtroCodigo_NoEsDeConsentimiento() async {
+    for status in [400, 401, 404, 422, 500] {
+      let error = await errorAl(responder: status, #"{"error":"consentimiento_requerido"}"#)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(status) debió ser servidor, fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, status)
+    }
+  }
+
+  func testElMensajeEsClaro_YNoTraeElToken() async {
+    let error = await errorAl(responder: 403, #"{"error":"consentimiento_requerido"}"#)
+
+    let mensaje = error?.localizedDescription ?? ""
+    XCTAssertTrue(mensaje.lowercased().contains("consentimiento"))
+    XCTAssertFalse(mensaje.contains("abc123-secreto"))
+  }
+}
+
+/// Lo que pasa con los días mientras el consentimiento está pendiente, y cuando se
+/// acepta. Es la razón del cambio: el servidor deja de aceptar días y ninguno se
+/// puede perder en el camino (revisión del 6 de octubre de 2026).
+@MainActor
+final class ConsentimientoPendienteTests: XCTestCase {
+
+  private var defaults: UserDefaults!
+  private var nombre: String!
+  private var marca: MarcaEnvios!
+  private var cola: SyncQueue!
+
+  override func setUp() {
+    super.setUp()
+    nombre = "pruebas.consentimiento.\(UUID().uuidString)"
+    defaults = UserDefaults(suiteName: nombre)
+    let hoy = { FormatoFechas.diaCalendario.date(from: "2026-10-14")!.addingTimeInterval(15 * 3600) }
+    marca = MarcaEnvios(almacen: defaults, hoy: hoy)
+    cola = SyncQueue(almacen: defaults, hoy: hoy)
+  }
+
+  override func tearDown() {
+    defaults.removePersistentDomain(forName: nombre)
+    super.tearDown()
+  }
+
+  /// La vuelta de la cola de reintentos (`reintentarPendientes`), con `respuesta`
+  /// como servidor.
+  private func reintentar(_ respuesta: Result<Bool, Error>) async -> FinDeVuelta {
+    await RecorridoDias.recorrer(
+      cola.pendientes(),
+      enviar: { _ in try respuesta.get() },
+      registrar: { dia, desenlace in
+        self.cola.aplicar(desenlace.efectoEnReintento, a: dia)
+        if desenlace.avanzaMarca { self.marca.registrarEnviado(dia) }
+      }
+    )
+  }
+
+  func testUnDiaViejoEnLaCola_NoSePierdeConElConsentimientoPendiente() async {
+    // El caso que el 403 como "permanente" sí perdía: el día 8 falló antes por red,
+    // es anterior a la marca, y por eso nadie lo vuelve a calcular: solo vive en la
+    // cola.
+    marca.registrarEnviado("2026-10-10")
+    cola.encolar(fecha: "2026-10-08")
+
+    let fin = await reintentar(.failure(ApiError.consentimientoRequerido))
+
+    XCTAssertEqual(fin, .cortadaPorFalloGeneral)
+    XCTAssertEqual(cola.pendientes(), ["2026-10-08"], "El día sigue en la cola")
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-10", "La marca no se mueve")
+
+    // La persona acepta: el día sale solo.
+    let despues = await reintentar(.success(true))
+
+    XCTAssertEqual(despues, .completa)
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testComoPermanente_ElMismoDiaSiSePerdia() async {
+    // Contraste: así se portaba el 403 antes del cambio (cualquier permanente).
+    marca.registrarEnviado("2026-10-10")
+    cola.encolar(fecha: "2026-10-08")
+
+    let fin = await reintentar(.failure(ApiError.servidor(codigo: 403, cuerpo: "{}")))
+
+    XCTAssertEqual(fin, .cortadaPorRechazo)
+    XCTAssertEqual(cola.pendientes(), [], "Un 403 permanente saca el día de la cola")
+  }
+
+  func testLaVueltaSeCortaDeUnaVezComoConElToken() async {
+    var intentados: [String] = []
+    let fin = await RecorridoDias.recorrer(
+      ["d1", "d2", "d3"],
+      enviar: { dia in
+        intentados.append(dia)
+        throw ApiError.consentimientoRequerido
+      },
+      registrar: { _, _ in }
+    )
+
+    XCTAssertEqual(intentados, ["d1"], "Si el primero falla por el consentimiento, los demás también")
+    XCTAssertEqual(fin, .cortadaPorFalloGeneral)
+  }
+
+  func testConElConsentimientoPendiente_LaMarcaNoAvanza_YLosDiasSiguenAhi() async {
+    // Primera vez, sin marca: los últimos 7 días siguen siendo los candidatos
+    // aunque el servidor rechace todos los envíos.
+    let antes = marca.diasPorMandar()
+
+    _ = await RecorridoDias.recorrer(
+      antes,
+      enviar: { _ in throw ApiError.consentimientoRequerido },
+      registrar: { dia, desenlace in
+        self.cola.aplicar(desenlace.efectoAlPonerseAlDia, a: dia)
+        if desenlace.avanzaMarca { self.marca.registrarEnviado(dia) }
+      }
+    )
+
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar(), antes, "Cuando acepte, se mandan los mismos días")
   }
 }

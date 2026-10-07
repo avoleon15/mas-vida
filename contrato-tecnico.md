@@ -680,12 +680,42 @@ Swift decide **por el código de estado**, nunca por el texto:
 |---|---|---|
 | `200` | Guardado | Confirma el día |
 | `400` | Payload inválido | Error permanente: no se reintenta |
-| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar) y el día queda pendiente; **no corta los demás días** ni saca el día de la cola |
-| `403` | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
+| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar), **corta la vuelta** (lo que quedaba fallaría igual) y el día queda pendiente: en la cola, o detrás de la marca de "último día enviado". No se pierde nada |
+| `403` con `consentimiento_requerido` | La persona todavía no aceptó el consentimiento | **Igual que el `401`: no es permanente.** El día queda pendiente y sale solo cuando acepte (ver "Consentimiento pendiente") |
+| `403` (cualquier otro) | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
 | `408`, `429`, `5xx` | Tiempo agotado, demasiadas peticiones o caída del servidor | Se reintenta (el día va a la cola) |
 | `422` | `fuera_de_ventana` | Ver "Ventana de aceptación de datos rezagados" |
 
-Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep).
+Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep; la del
+`403` de consentimiento desde A38, 6 oct 2026). La fila de `401` decía que "no corta
+los demás días", y contradecía al código y a "Notas para Alvaro" y "Ventana de
+aceptación de datos rezagados": con un `401` la vuelta se corta (los días que no se
+intentaron siguen detrás de la marca, no se pierden).
+
+#### Consentimiento pendiente (`403 consentimiento_requerido`)
+
+**El servidor todavía no manda este `403`** (el bloqueo está apagado y no está en
+`dev`). Swift ya lo trata como pendiente, para que se pueda encender sin perder
+nada: **no encender el bloqueo hasta que esta versión de Swift esté instalada.**
+
+- Swift lo reconoce por el código `403` **y** el motivo `consentimiento_requerido`
+  (`{ "error": "consentimiento_requerido", ... }`, como los demás rechazos con motivo;
+  si la forma fuera otra pero el texto trae el motivo, también). Cualquier otro `403`
+  sigue siendo permanente. **[PENDIENTE]** confirmar la forma exacta con Luis.
+- Mientras el consentimiento esté pendiente la **marca de último día enviado no se
+  mueve**, y cada vez que la app abre Swift vuelve a calcular los mismos días desde la
+  marca (la primera vez, los últimos 7) y a leerlos de HealthKit. Por eso, **cuando la
+  persona acepta, se mandan solos** los días de la espera que sigan dentro de la
+  ventana: ningún día se borra por haber recibido este `403`.
+- Los días que estaban en la **cola de reintentos** (porque fallaron antes por red) y
+  son anteriores a la marca solo viven ahí: tratar el `403` como permanente los sacaba
+  de la cola y no volvían. Este es el caso que el cambio protege.
+- **Límite que no cambia:** la primera vez Swift manda como máximo los últimos **7
+  días**. Quien acepta más de 7 días después de instalar (sin haber mandado nunca nada)
+  pierde los días más viejos, con o sin este cambio. El servidor aceptaría hasta 14.
+  **[PENDIENTE]** (Alvaro) si la primera vez pasa a 14 días.
+- Para Flutter, el envío manual de "hoy" con el consentimiento pendiente responde
+  `encolado` (como con el `401`), no `error_permanente`.
 
 #### Qué hace el servidor con datos raros
 
@@ -1424,12 +1454,14 @@ Una vuelta a la vez. Qué manda:
   llegó y lo que el servidor rechazó por viejo (`422`). Un día vacío no la mueve:
   puede ser un permiso de Salud que todavía no se dio.
 - **Fallo general → se corta la vuelta.** Sin red, servidor caído, token
-  rechazado o Salud bloqueada fallan igual para todos los días: tras el primero
+  rechazado, consentimiento pendiente (`403 consentimiento_requerido`) o Salud
+  bloqueada fallan igual para todos los días: tras el primero
   no se intenta ninguno más, y si la cola se cortó así no se sigue con la marca.
   No se pierde nada (lo que no se intentó sigue en la cola o detrás de la
   marca). Así, con el servidor caído hay **un** intento por apertura, no uno por
   día.
-- **Rechazo permanente** (otro `4xx`) → se saca ese día y se corta la vuelta.
+- **Rechazo permanente** (otro `4xx`, incluido cualquier `403` que no sea de
+  consentimiento) → se saca ese día y se corta la vuelta.
 - **Sin sesión** → no se manda nada y la marca no se mueve.
 - **Antes de dar el permiso de Salud**, HealthKit no deja leer: los días quedan
   en la cola y salen solos cuando se concede.
@@ -1523,7 +1555,7 @@ código, sigue siendo un rechazo normal). Una sola regla para los tres caminos:
 
 | Qué pasó | Ese día | La vuelta |
 |---|---|---|
-| Sin red, `401`, `408`, `429`, `5xx`, Salud bloqueada | Queda pendiente | **Se corta** (fallaría igual) |
+| Sin red, `401`, `403` de consentimiento, `408`, `429`, `5xx`, Salud bloqueada | Queda pendiente | **Se corta** (fallaría igual) |
 | `422` de la ventana | Se descarta | Sigue |
 | Respuesta `2xx` ilegible | Cuenta como enviado (y va al log) | Sigue |
 | Otro `4xx` | Se descarta | Se corta |

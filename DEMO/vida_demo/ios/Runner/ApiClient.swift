@@ -41,12 +41,22 @@ enum ApiError: LocalizedError {
     /// payload ni de la cuenta. `fecha` es la que devolvió el servidor.
     case fueraDeVentana(fecha: String?)
 
+    /// El servidor respondió `403 {"error": "consentimiento_requerido"}`: la
+    /// persona todavía no aceptó el consentimiento. No dice nada malo del día
+    /// ni de la cuenta, y se arregla cuando acepte (como el `401` cuando
+    /// vuelve a entrar), así que el día queda pendiente y NO se descarta.
+    /// Cualquier otro `403` (por ejemplo, la cuenta sin perfil) sigue siendo
+    /// un permanente genérico.
+    case consentimientoRequerido
+
     var errorDescription: String? {
         switch self {
         case .sinSesion:
             return "No hay una sesión iniciada: el día queda pendiente hasta que la haya."
         case .fueraDeVentana(let fecha):
             return "El servidor ya no acepta el día \(fecha ?? "enviado"): tiene más de 14 días."
+        case .consentimientoRequerido:
+            return "Falta aceptar el consentimiento: el día queda pendiente hasta que se acepte."
         case .urlInvalida:
             return "La URL del backend no es válida."
         case .respuestaInvalida:
@@ -61,7 +71,8 @@ enum ApiError: LocalizedError {
     /// ¿Tiene sentido volver a intentar este día más tarde?
     ///
     /// Sí: sin sesión, `401` (el token falta o ya no vale; se arregla al volver
-    /// a iniciar sesión), `408`, `429` y `5xx`. No: URL mal configurada,
+    /// a iniciar sesión), el `403` de consentimiento (se arregla al aceptarlo),
+    /// `408`, `429` y `5xx`. No: URL mal configurada,
     /// respuesta ilegible, el `422` de la ventana (el día ya es demasiado
     /// viejo, y mañana lo será más) y cualquier otro `4xx` (el payload o la
     /// cuenta están mal y reintentar no lo arregla).
@@ -72,7 +83,7 @@ enum ApiError: LocalizedError {
         switch self {
         case .urlInvalida, .respuestaInvalida, .respuestaIlegible, .fueraDeVentana:
             return false
-        case .sinSesion:
+        case .sinSesion, .consentimientoRequerido:
             return true
         case .servidor(let codigo, _):
             return codigo == 401 || codigo >= 500 || codigo == 408 || codigo == 429
@@ -85,7 +96,8 @@ enum ApiError: LocalizedError {
 /// SyncQueue.swift y HealthKitManager.swift).
 enum AccionDiaFallido: Equatable {
     /// El día queda pendiente y se vuelve a intentar: sin red, sin sesión,
-    /// `401`, `408`, `429`, `5xx`, o HealthKit no se pudo leer.
+    /// `401`, el `403` de consentimiento, `408`, `429`, `5xx`, o HealthKit no
+    /// se pudo leer.
     case reintentarDespues
     /// Se saca de la cola y la vuelta SIGUE con los demás días. Solo el `422`
     /// de la ventana: el problema es de ese día (es demasiado viejo), no del
@@ -370,6 +382,9 @@ final class ApiClient {
             if let rechazo = Self.rechazoPorVentana(codigo: http.statusCode, cuerpo: datos) {
                 throw rechazo
             }
+            if let rechazo = Self.rechazoPorConsentimiento(codigo: http.statusCode, cuerpo: datos) {
+                throw rechazo
+            }
             throw ApiError.servidor(codigo: http.statusCode, cuerpo: String(data: datos, encoding: .utf8))
         }
 
@@ -405,5 +420,28 @@ final class ApiClient {
               let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo),
               rechazo.error == "fuera_de_ventana" else { return nil }
         return .fueraDeVentana(fecha: rechazo.fecha)
+    }
+
+    /// El motivo con el que el servidor rechaza un envío porque falta el
+    /// consentimiento.
+    static let motivoConsentimientoRequerido = "consentimiento_requerido"
+
+    /// `consentimientoRequerido` solo si es un `403` Y trae ese motivo. Cualquier
+    /// otro `403` sigue siendo `servidor(403)`: un permanente genérico (la cuenta
+    /// sin perfil, por ejemplo), que no se puede dejar pendiente.
+    ///
+    /// La forma esperada es la de los demás rechazos con motivo:
+    /// `{"error": "consentimiento_requerido", ...}`. Si el servidor la manda
+    /// distinta pero el texto trae el motivo, también se toma: perder el día
+    /// por una diferencia de forma sería lo peor de las dos equivocaciones.
+    /// [PENDIENTE] confirmar la forma exacta con Luis (todavía no está en `dev`).
+    static func rechazoPorConsentimiento(codigo: Int, cuerpo: Data) -> ApiError? {
+        guard codigo == 403 else { return nil }
+        if let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo) {
+            return rechazo.error == motivoConsentimientoRequerido ? .consentimientoRequerido : nil
+        }
+        guard let texto = String(data: cuerpo, encoding: .utf8),
+              texto.contains(motivoConsentimientoRequerido) else { return nil }
+        return .consentimientoRequerido
     }
 }
