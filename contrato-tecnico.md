@@ -734,10 +734,15 @@ requisitos de esa sección).
 - Los días que estaban en la **cola de reintentos** (porque fallaron antes por red) y
   son anteriores a la marca solo viven ahí: tratar el `403` como permanente los sacaba
   de la cola y no volvían. Este es el caso que el cambio protege.
-- **Límite que no cambia:** la primera vez Swift manda como máximo los últimos **7
-  días**. Quien acepta más de 7 días después de instalar (sin haber mandado nunca nada)
-  pierde los días más viejos, con o sin este cambio. El servidor aceptaría hasta 14.
-  **[PENDIENTE]** (Alvaro) si la primera vez pasa a 14 días.
+- **Cuántos días llegan si la persona acepta tarde** (medido contra el servidor real
+  con el bloqueo encendido y una apertura de la app por día): la primera apertura deja en
+  la cola el día más viejo de la ventana, y ese día "ancla" lo que se manda al aceptar.
+  Quien acepta hasta **8 días** después de instalar recibe **todo lo que el servidor aún
+  acepta** (de 7 a 15 días, según cuánto tardó). Si tarda 9 o más, el ancla caduca (la
+  cola olvida lo de más de 14 días) y se mandan entre 7 y 11 días, según cuándo se volvió
+  a dejar en la cola. **Antes de A38 eran siempre 7.** Esto lo fija la prueba
+  `ConsentimientoRecorridoCompletoTests`. **[PENDIENTE]** (Alvaro) si la primera vez pasa
+  a 14 días, para que no dependa de este ancla.
 - Para Flutter, el envío manual de "hoy" con el consentimiento pendiente responde
   `encolado` (como con el `401`), no `error_permanente`.
 

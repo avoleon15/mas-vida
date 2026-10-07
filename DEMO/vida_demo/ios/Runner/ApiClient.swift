@@ -438,8 +438,14 @@ final class ApiClient {
     /// de las dos equivocaciones.
     static func rechazoPorConsentimiento(codigo: Int, cuerpo: Data) -> ApiError? {
         guard codigo == 403 else { return nil }
-        if let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo) {
-            return rechazo.error == motivoConsentimientoRequerido ? .consentimientoRequerido : nil
+        // Si el cuerpo es un objeto con `error` de texto, ESE valor manda, sin importar cómo
+        // sean los demás campos (con `JSONDecoder` y `fecha` de otro tipo, el decodificador
+        // fallaba y caía al respaldo por texto: un 403 con otro `error` que mencionara el
+        // motivo en otro campo se tomaba por consentimiento). Lo encontraron las pruebas al
+        // azar de A38.
+        if let objeto = (try? JSONSerialization.jsonObject(with: cuerpo)) as? [String: Any],
+           let error = objeto["error"] as? String {
+            return error == motivoConsentimientoRequerido ? .consentimientoRequerido : nil
         }
         guard let texto = String(data: cuerpo, encoding: .utf8),
               texto.contains(motivoConsentimientoRequerido) else { return nil }
