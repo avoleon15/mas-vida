@@ -1,11 +1,11 @@
 {
-    "name": "vida_demo",
-    "short_name": "vida_demo",
+    "name": "+Vida",
+    "short_name": "+Vida",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F5F6FA",
+    "theme_color": "#012096",
+    "description": "Convertí tu actividad física en cashback sobre tu seguro médico y premios con comercios aliados.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

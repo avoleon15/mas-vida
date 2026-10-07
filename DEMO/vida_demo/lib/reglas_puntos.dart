@@ -1,22 +1,38 @@
 // ============================================================
-// Motor de cálculo de puntos de +Vida. Reglas oficiales del proyecto:
-// los puntos diarios se ganan por dos vías independientes (pasos y
-// ritmo cardíaco) y cada una tiene su propio tope — no se puede ganar
-// más que el máximo de su tabla.
+// Las tablas de puntos y niveles que la app DIBUJA.
 //
-// Esto es solo el motor de cálculo: no arma ninguna pantalla, solo
-// expone funciones puras para que las pantallas las usen sobre datos
-// de ejemplo (o, más adelante, sobre datos reales del backend).
+// Esto NO calcula los puntos de nadie: los calcula el servidor, y la
+// app nunca manda puntos, edad ni FCmáx (un iPhone modificado podría
+// acreditarse lo que quiera). Las pantallas leen los puntos ya hechos
+// del repositorio. Lo que vive acá son las tablas que se muestran: los
+// tramos de pasos del anillo, los niveles de la escalera y los techos.
+//
+// Fuente: contrato-v1-corregido.md y CLAUDE.md.
 // ============================================================
 
-/// Tope real de puntos que se pueden ganar EN UN DÍA: 200 de la vía
-/// pasos + 300 de la vía ritmo cardíaco (se suman, cada vía con su
-/// propio tope). Es la base para calcular los techos de semana, mes y
-/// año.
-const int puntosMaximosPorDia = 500;
+/// Techo diario absoluto, sumando TODAS las fuentes (pasos + intensidad).
+/// Un día que genere más se acredita en 200 y se marca con la bandera
+/// `tope_diario_aplicado`.
+const int techoDiario = 200;
 
-/// Un escalón de la tabla de puntos por pasos: a partir de
-/// [pasosMinimos] pasos en el día se ganan [puntos] puntos.
+/// Techo anual de los puntos por ACTIVIDAD FÍSICA (pasos + intensidad).
+///
+/// El chequeo médico está fuera de v1, así que en el piloto este es
+/// también el techo de los puntos del año. Consecuencia aceptada y
+/// documentada (CLAUDE.md): el nivel 4 arranca en 15.000 y queda FUERA
+/// DE ALCANCE en el piloto. No es un bug — no se arregla subiendo este
+/// techo ni bajando el piso del nivel 4.
+const int techoAnual = 12000;
+
+/// Piso mínimo de pasos para ganar cualquier punto.
+const int pisoPasos = 7000;
+
+// ------------------------------------------------------------
+// Puntos por pasos — función escalonada, no lineal.
+// ------------------------------------------------------------
+
+/// Un escalón de la tabla de pasos: desde [pasosMinimos] pasos en el día
+/// se ganan [puntos] puntos.
 class EscalonPasos {
   const EscalonPasos(this.pasosMinimos, this.puntos);
 
@@ -24,111 +40,110 @@ class EscalonPasos {
   final int puntos;
 }
 
-/// Tabla general (población menor de 65 años). Tope de esta vía: 200 pts.
-const List<EscalonPasos> _tablaPasosGeneral = [
-  EscalonPasos(15000, 200),
-  EscalonPasos(10000, 100),
-  EscalonPasos(7500, 50),
+/// Tabla oficial, igual para todas las edades. El ajuste por edad vive
+/// en la matriz de intensidad (vía FCM = 219 − edad), no acá.
+///
+/// Los pasos por encima de 15.000 NO dan puntos adicionales.
+const List<EscalonPasos> tablaPasos = [
+  EscalonPasos(15000, 100),
+  EscalonPasos(10000, 50),
+  EscalonPasos(pisoPasos, 25),
 ];
 
-/// Tabla para usuarios de 65 años o más. Umbrales más bajos que la tabla
-/// general porque a esa edad la misma cantidad de pasos representa un
-/// esfuerzo relativo mayor. Mismo tope de 200 pts.
+/// Puntos por los pasos de un día. Por debajo de [pisoPasos]: 0.
 ///
-/// Estos umbrales son un punto de partida basado en literatura de
-/// actividad física en adultos mayores y REQUIEREN validación médica/
-/// actuarial antes de salir a piloto. No son definitivos.
-const List<EscalonPasos> _tablaPasos65Mas = [
-  EscalonPasos(10000, 200),
-  EscalonPasos(7000, 100),
-  EscalonPasos(5000, 50),
-];
-
-/// Devuelve la tabla de puntos por pasos que le corresponde a un usuario
-/// de [edad] años. Centraliza la decisión general/65+ en un solo lugar
-/// en vez de repartir condicionales de edad por varios archivos.
-///
-/// IMPORTANTE — [edad] DEBE venir de los datos de la póliza que provee
-/// la aseguradora, NUNCA autodeclarada por el usuario: autodeclararla es
-/// un vector de fraude obvio (cualquiera se pondría 66 años para tener
-/// umbrales más fáciles).
-List<EscalonPasos> tablaPuntosPorPasos(int edad) {
-  return edad >= 65 ? _tablaPasos65Mas : _tablaPasosGeneral;
-}
-
-/// Puntos por pasos diarios, según la tabla que le corresponde a
-/// [edad] (ver [tablaPuntosPorPasos]). Tope de esta vía: 200 pts para
-/// cualquier edad.
-int puntosPorPasos(int pasos, {required int edad}) {
-  for (final escalon in tablaPuntosPorPasos(edad)) {
+/// Cuentan tanto los pasos del teléfono como los de un reloj vinculado,
+/// pero la deduplicación y la precedencia entre fuentes ocurren ANTES de
+/// llamar a esta función: acá ya llega un total del día resuelto.
+int puntosPorPasos(int pasos) {
+  for (final escalon in tablaPasos) {
     if (pasos >= escalon.pasosMinimos) return escalon.puntos;
   }
   return 0;
 }
 
-/// Puntos por una sesión de ejercicio con ritmo cardíaco, según su
-/// duración y el % promedio de tu RCM (ritmo cardíaco máximo) alcanzado.
-/// Tope de esta vía: 300 pts. Por debajo de 30 minutos o de 60% de RCM
-/// no se gana nada por esta vía.
-int puntosPorRitmoCardiaco({
-  required int minutos,
-  required int porcentajeRcmPromedio,
-}) {
-  if (minutos < 30 || porcentajeRcmPromedio < 60) return 0;
+// ------------------------------------------------------------
+// Niveles anuales y cashback.
+// ------------------------------------------------------------
 
-  final alcanza70 = porcentajeRcmPromedio >= 70;
+/// Un nivel del esquema propio de +Vida.
+///
+/// El contrato v1 prohíbe explícitamente el naming Bronze/Silver/Gold/
+/// Platinum: eso es de Vitality. Los niveles son numéricos (0–4).
+class Nivel {
+  const Nivel(
+    this.numero,
+    this.puntosMinimos,
+    this.puntosMaximos,
+    this.porcentajeCashback,
+  );
 
-  if (minutos >= 90) return 300; // 1h30 o más: tope de la tabla.
-  if (minutos >= 60) return alcanza70 ? 300 : 200; // 1h o más.
-  return alcanza70 ? 200 : 100; // 30 min a 1h.
-}
+  final int numero;
+  final int? puntosMinimos;
+  final int? puntosMaximos;
+  final double? porcentajeCashback;
 
-/// Total de puntos que gana un usuario en un día, sumando pasos + ritmo
-/// cardíaco. REGLA DURA: no se puede ganar más de [puntosMaximosPorDia]
-/// (200 + 300 = 500 pts) en un mismo día, sin importar cuánto sume cada
-/// vía.
-int puntosTotalesDelDia({
-  required int pasos,
-  required int edad,
-  int minutosCardio = 0,
-  int porcentajeRcmPromedio = 0,
-}) {
-  final crudo =
-      puntosPorPasos(pasos, edad: edad) +
-      puntosPorRitmoCardiaco(
-        minutos: minutosCardio,
-        porcentajeRcmPromedio: porcentajeRcmPromedio,
-      );
-  return crudo > puntosMaximosPorDia ? puntosMaximosPorDia : crudo;
-}
+  /// False mientras el rango y el % de este nivel no estén definidos en
+  /// la documentación fuente. La UI debe mostrar un estado explícito de
+  /// "pendiente de definir", nunca un número inventado.
+  ///
+  /// Hoy los cinco niveles están definidos, pero el campo se queda: es la
+  /// red de seguridad si mañana se agrega uno sin datos.
+  bool get definido => porcentajeCashback != null && puntosMinimos != null;
 
-// ============================================================
-// Techos por período: cuántos puntos podría ganar como máximo un
-// usuario que llega al tope diario TODOS los días del período. Se
-// calculan a partir de los días reales del calendario (28/29/30/31
-// según el mes, 365/366 según el año), no de promedios fijos.
-// ============================================================
-
-/// Días reales de [mes] (1 a 12) en el año [anio]. Usa el calendario de
-/// Dart, así que ya contempla los años bisiestos para febrero.
-int diasEnMes(int anio, int mes) => DateTime(anio, mes + 1, 0).day;
-
-/// Días reales del año [anio] (365, o 366 si es bisiesto), sumando los
-/// 12 meses reales uno por uno.
-int diasEnAnio(int anio) {
-  var total = 0;
-  for (var mes = 1; mes <= 12; mes++) {
-    total += diasEnMes(anio, mes);
+  String get rangoTexto {
+    if (!definido) return 'Pendiente de definir';
+    final min = _miles(puntosMinimos!);
+    // El último nivel no tiene techo real: el número que trae es el tope
+    // para dibujar la escalera, no un límite de lo que se acumula.
+    if (puntosMaximos == null || puntosMaximos == puntosMinimos) {
+      return '$min+ pts';
+    }
+    return '$min – ${_miles(puntosMaximos!)} pts';
   }
-  return total;
+
+  static String _miles(int n) => n.toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+$)'),
+    (m) => '${m[1]},',
+  );
 }
 
-/// Techo de puntos de una semana: 500 pts/día × 7 días.
-int techoSemanal() => puntosMaximosPorDia * 7;
+/// Tabla de niveles anuales de cashback. Los cinco niveles y sus rangos
+/// están confirmados: ya no hay huecos pendientes acá.
+///
+/// OJO con el nivel 4: arranca en 15.000, por encima de [techoAnual]
+/// (12.000), así que en el piloto no se alcanza. El cashback máximo real
+/// es el 10% del nivel 3. En el nivel 4, el tercer número es el tope de
+/// la tabla para dibujar la escalera, no un límite de lo acumulable
+/// (piso confirmado por Alvaro el 19 de septiembre de 2026).
+const List<Nivel> niveles = [
+  Nivel(0, 0, 2499, 0),
+  Nivel(1, 2500, 4999, 5),
+  Nivel(2, 5000, 9999, 7.5),
+  Nivel(3, 10000, 14999, 10),
+  Nivel(4, 15000, 15000, 20),
+];
 
-/// Techo de puntos de un mes calendario real (ej. julio = 31 días).
-int techoMensual(int anio, int mes) =>
-    puntosMaximosPorDia * diasEnMes(anio, mes);
+/// Si [nivel] se puede alcanzar con la actividad del año, que topa en
+/// [techoAnual]. El nivel 4 no: es la consecuencia aceptada del piloto.
+bool nivelAlcanzable(Nivel nivel) =>
+    nivel.puntosMinimos != null && nivel.puntosMinimos! <= techoAnual;
 
-/// Techo de puntos de un año calendario real (365 o 366 días).
-int techoAnual(int anio) => puntosMaximosPorDia * diasEnAnio(anio);
+/// El nivel de arriba de [nivelActual], si existe y se puede alcanzar.
+///
+/// Null en el último nivel Y en el último alcanzable: a quien está en el
+/// nivel 3 no se le dice "te faltan 3.760 pts" para un nivel al que
+/// caminando no llega.
+Nivel? siguienteNivelAlcanzable(int nivelActual) {
+  final siguiente = nivelPorNumero(nivelActual + 1);
+  if (siguiente == null || !nivelAlcanzable(siguiente)) return null;
+  return siguiente;
+}
+
+/// Busca un nivel por número. Devuelve `null` si no está en la tabla.
+Nivel? nivelPorNumero(int numero) {
+  for (final n in niveles) {
+    if (n.numero == numero) return n;
+  }
+  return null;
+}

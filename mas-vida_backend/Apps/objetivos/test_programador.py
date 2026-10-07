@@ -1,0 +1,341 @@
+from datetime import date, datetime, timedelta, timezone as utc
+from io import StringIO
+from zoneinfo import ZoneInfo
+
+from django.contrib.auth.models import User
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
+
+from Apps.activities.models import ResumenDiario
+from Apps.liga.models import LigaMensual
+from Apps.objetivos.models import CumplimientoSemanal, MetaPasosPorEdad
+from Apps.poincs.models import Ledger, VersionRegla
+from Apps.policies.models import PolizaVinculada
+from Apps.users.models import Usuario
+from services import monedas, programador
+from services.programador import CIERRE, CORRECCION, LIGA, PAGO_LIGA, correr, ejecutar, proxima_ejecucion
+from services.tiempo import inicio_semana
+
+GT = ZoneInfo("America/Guatemala")
+
+
+def gt(anio, mes, dia, hora=0, minuto=0, segundo=0):
+    return datetime(anio, mes, dia, hora, minuto, segundo, tzinfo=GT)
+
+
+class ProximaEjecucionTests(SimpleTestCase):
+    """2026-10-05 es lunes y 2026-10-06 martes. Todas las horas son de Guatemala.
+    El cierre es el martes 00:00: el lunes entero queda para los datos atrasados
+    del domingo (goals.DIAS_DE_GRACIA, decidido el 3 oct 2026)."""
+
+    def test_el_lunes_por_la_noche_sigue_el_cierre_del_martes(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 23, 59)), (gt(2026, 10, 6, 0, 0), CIERRE))
+
+    def test_el_lunes_00_ya_no_cierra(self):
+        # Antes del 3 oct el cierre era el lunes 00:00. Ahora el lunes es de gracia.
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 4, 23, 59)), (gt(2026, 10, 6, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 5, 0, 0)), (gt(2026, 10, 6, 0, 0), CIERRE))
+
+    def test_justo_en_el_cierre_la_siguiente_es_la_correccion(self):
+        # Estrictamente después: el cierre de las 00:00 no se repite a las 00:00.
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 6, 0, 0)), (gt(2026, 10, 6, 12, 0), CORRECCION))
+
+    def test_el_martes_por_la_manana_sigue_la_correccion(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 6, 11, 59, 59)), (gt(2026, 10, 6, 12, 0), CORRECCION))
+
+    def test_justo_en_la_correccion_la_siguiente_es_el_cierre_de_la_otra_semana(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 6, 12, 0)), (gt(2026, 10, 13, 0, 0), CIERRE))
+
+    def test_a_mitad_de_semana_sigue_el_proximo_martes(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 7, 15, 30)), (gt(2026, 10, 13, 0, 0), CIERRE))
+
+    def test_cruza_el_fin_de_anio(self):
+        # El 2 de enero (sábado) cierra La Liga de diciembre; después, el martes.
+        self.assertEqual(proxima_ejecucion(gt(2026, 12, 29, 13, 0)), (gt(2027, 1, 2, 0, 0), LIGA))
+        self.assertEqual(proxima_ejecucion(gt(2027, 1, 2, 0, 0)), (gt(2027, 1, 5, 0, 0), CIERRE))
+
+    def test_la_liga_cierra_el_dia_2_y_el_dia_1_es_margen_de_gracia(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 31, 23, 0)), (gt(2026, 11, 2, 0, 0), LIGA))
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 1, 12, 0)), (gt(2026, 11, 2, 0, 0), LIGA))
+
+    def test_el_podio_se_paga_el_dia_9(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 2, 0, 0)), (gt(2026, 11, 3, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 8, 12, 0)), (gt(2026, 11, 9, 0, 0), PAGO_LIGA))
+        # Pagado, la siguiente es el cierre semanal del martes.
+        self.assertEqual(proxima_ejecucion(gt(2026, 11, 9, 0, 0)), (gt(2026, 11, 10, 0, 0), CIERRE))
+
+    def test_si_el_dia_9_es_martes_lo_cubre_el_cierre_y_no_se_repite(self):
+        # 9 mar 2027 es martes.
+        self.assertEqual(proxima_ejecucion(gt(2027, 3, 8, 23, 0)), (gt(2027, 3, 9, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2027, 3, 9, 0, 0)), (gt(2027, 3, 9, 12, 0), CORRECCION))
+
+    def test_antes_de_que_arranque_la_liga_no_se_agenda_ni_cierre_ni_pago(self):
+        # Septiembre no tiene La Liga: el 9 de octubre no hay corrida de pago.
+        self.assertEqual(proxima_ejecucion(gt(2026, 10, 7, 12, 0)), (gt(2026, 10, 13, 0, 0), CIERRE))
+
+    def test_el_dia_2_sigue_cerrando_aunque_el_pago_este_cerca(self):
+        self.assertEqual(proxima_ejecucion(gt(2026, 12, 1, 12, 0)), (gt(2026, 12, 2, 0, 0), LIGA))
+
+    def test_si_el_dia_2_es_martes_lo_cubre_el_cierre_y_no_se_repite(self):
+        # 2 feb 2027 es martes: una sola corrida a las 00:00 y después la corrección.
+        self.assertEqual(proxima_ejecucion(gt(2027, 2, 1, 23, 0)), (gt(2027, 2, 2, 0, 0), CIERRE))
+        self.assertEqual(proxima_ejecucion(gt(2027, 2, 2, 0, 0)), (gt(2027, 2, 2, 12, 0), CORRECCION))
+
+    def test_trabaja_en_hora_de_guatemala_aunque_llegue_en_utc(self):
+        # Martes 5:59 UTC = lunes 23:59 en Guatemala: el martes en Guatemala
+        # empieza a las 06:00 UTC.
+        ahora_utc = datetime(2026, 10, 6, 5, 59, tzinfo=utc.utc)
+        momento, tipo = proxima_ejecucion(ahora_utc)
+        self.assertEqual(tipo, CIERRE)
+        self.assertEqual(momento.astimezone(utc.utc), datetime(2026, 10, 6, 6, 0, tzinfo=utc.utc))
+
+    def test_el_martes_a_las_6_utc_ya_es_martes_00_en_guatemala(self):
+        ahora_utc = datetime(2026, 10, 6, 6, 0, tzinfo=utc.utc)
+        momento, tipo = proxima_ejecucion(ahora_utc)
+        self.assertEqual((momento, tipo), (gt(2026, 10, 6, 12, 0), CORRECCION))
+
+
+class RelojFalso:
+    """Un reloj que solo avanza cuando el programador 'duerme'."""
+
+    def __init__(self, inicio):
+        self.t = inicio
+        self.dormidas = []
+
+    def ahora(self):
+        return self.t
+
+    def dormir(self, segundos):
+        self.dormidas.append(segundos)
+        self.t += timedelta(seconds=segundos)
+
+
+class BucleTests(SimpleTestCase):
+    def _correr(self, inicio, corridas, ejecutar_fn=None, reloj=None):
+        reloj = reloj or RelojFalso(inicio)
+        hechas = []
+
+        def registrar(tipo, momento):
+            hechas.append((tipo, momento, reloj.ahora()))
+
+        correr(
+            reloj.ahora, reloj.dormir, ejecutar_fn or registrar,
+            max_corridas=corridas,
+        )
+        return reloj, hechas
+
+    def test_una_semana_completa_dispara_cierre_correccion_y_cierre(self):
+        _, hechas = self._correr(gt(2026, 10, 4, 23, 0), corridas=3)
+        self.assertEqual(
+            [(t, m) for t, m, _ in hechas],
+            [
+                (CIERRE, gt(2026, 10, 6, 0, 0)),
+                (CORRECCION, gt(2026, 10, 6, 12, 0)),
+                (CIERRE, gt(2026, 10, 13, 0, 0)),
+            ],
+        )
+
+    def test_nunca_corre_antes_de_su_hora(self):
+        _, hechas = self._correr(gt(2026, 10, 4, 23, 0), corridas=3)
+        for _, programado, reloj in hechas:
+            self.assertGreaterEqual(reloj, programado)
+
+    def test_despierta_en_pasos_cortos(self):
+        reloj, _ = self._correr(gt(2026, 10, 7, 9, 0), corridas=1)
+        self.assertTrue(reloj.dormidas)
+        self.assertLessEqual(max(reloj.dormidas), programador.PASO_MAXIMO_SEGUNDOS)
+
+    def test_un_error_se_reintenta_y_despues_sigue(self):
+        intentos = []
+
+        def falla_una_vez(tipo, momento):
+            intentos.append(tipo)
+            if len(intentos) == 1:
+                raise RuntimeError("base de datos caída")
+
+        with self.assertLogs("services.programador", level="ERROR"):
+            reloj, _ = self._correr(
+                gt(2026, 10, 4, 23, 59), corridas=1, ejecutar_fn=falla_una_vez
+            )
+        self.assertEqual(intentos, [CIERRE, CIERRE])
+        self.assertIn(programador.REINTENTO_SEGUNDOS, reloj.dormidas)
+
+    def test_si_siempre_falla_se_rinde_pero_el_programador_sigue_vivo(self):
+        intentos = []
+
+        def siempre_falla(tipo, momento):
+            intentos.append((tipo, momento))
+            raise RuntimeError("no hay base de datos")
+
+        # Dos corridas: la primera agota los reintentos y la segunda igual se intenta.
+        with self.assertLogs("services.programador", level="ERROR"):
+            self._correr(gt(2026, 10, 4, 23, 59), corridas=2, ejecutar_fn=siempre_falla)
+        self.assertEqual(len(intentos), 2 * programador.MAX_INTENTOS)
+
+    def test_antes_de_ejecutar_se_llama_en_cada_intento(self):
+        llamadas = []
+        reloj = RelojFalso(gt(2026, 10, 4, 23, 59))
+        correr(
+            reloj.ahora, reloj.dormir, lambda t, m: None,
+            antes_de_ejecutar=lambda: llamadas.append(1), max_corridas=2,
+        )
+        self.assertEqual(len(llamadas), 2)
+
+    def test_si_el_servidor_se_suspende_no_repite_ni_se_salta_corridas(self):
+        reloj = RelojFalso(gt(2026, 10, 4, 23, 0))
+        hechas = []
+
+        def ejecutar_y_saltar(tipo, momento):
+            hechas.append(tipo)
+            if len(hechas) == 1:
+                reloj.t = gt(2026, 10, 13, 8, 0)  # el servidor estuvo apagado una semana
+
+        correr(reloj.ahora, reloj.dormir, ejecutar_y_saltar, max_corridas=3)
+        # Tras la primera, parte de la hora programada (no de "ahora"): la
+        # corrección atrasada y luego el cierre atrasado se disparan, en orden.
+        self.assertEqual(hechas, [CIERRE, CORRECCION, CIERRE])
+
+
+# 5 + 5: una semana completada (ver services/goals.py).
+PAGO_SEMANA_COMPLETA = 10
+
+
+def meta_fija(pasos=30_000):
+    """Una sola meta de pasos para todas las edades: aquí se prueba el programador."""
+    MetaPasosPorEdad.objects.all().delete()
+    MetaPasosPorEdad.objects.create(edad_desde=0, meta_pasos=pasos)
+
+
+def crear_usuario(nombre):
+    user = User.objects.create_user(username=nombre, password="clave-segura-1")
+    return Usuario.objects.create(user=user, usuario_id=f"{nombre}-1", birth_date=date(1990, 1, 1))
+
+
+class EjecutarTests(TestCase):
+    LUNES = date(2026, 9, 28)   # semana a evaluar
+    SIGUIENTE = date(2026, 10, 6)  # el martes en que se cierra
+
+    def setUp(self):
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
+        self.ana = crear_usuario("ana")
+        meta_fija()
+        ResumenDiario.objects.create(
+            usuario=self.ana, fecha=self.LUNES, pasos_totales_dia=31_000,
+            workouts_cantidad=1, puntos_dia=0,
+        )
+
+    def test_el_cierre_paga_a_quien_cumplio(self):
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
+        self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), PAGO_SEMANA_COMPLETA)
+        self.assertTrue(CumplimientoSemanal.objects.get(usuario=self.ana).cumplido)
+
+    def test_el_cierre_pone_al_dia_las_semanas_que_se_quedaron_sin_cerrar(self):
+        ejecutar(CIERRE, gt(2026, 10, 13, 0, 0))  # nadie corrió el 6 de octubre
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 13)), PAGO_SEMANA_COMPLETA)
+
+    def test_un_cierre_que_corre_el_lunes_no_cierra_la_semana_que_termino_ayer(self):
+        # Un servidor que arranca un lunes se pone al día, pero la semana que
+        # terminó el domingo sigue esperando datos hasta el martes.
+        ejecutar(CIERRE, gt(2026, 10, 5, 0, 0))
+        self.assertFalse(CumplimientoSemanal.objects.exists())
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 10, 5)), 0)
+
+    def test_el_cierre_dos_veces_no_paga_dos_veces(self):
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
+        self.assertEqual(monedas.saldo(self.ana, self.SIGUIENTE), PAGO_SEMANA_COMPLETA)
+
+    def test_la_correccion_actualiza_acumulados_sin_pagar_ni_reabrir(self):
+        beto = crear_usuario("beto")
+        ejecutar(CIERRE, gt(2026, 10, 6, 0, 0))
+        ResumenDiario.objects.create(
+            usuario=beto, fecha=date(2026, 9, 30), pasos_totales_dia=40_000,
+            workouts_cantidad=2, puntos_dia=0,
+        )  # llegó tarde, ya cumpliría
+
+        ejecutar(CORRECCION, gt(2026, 10, 6, 12, 0))
+
+        cumplimiento = CumplimientoSemanal.objects.get(usuario=beto)
+        self.assertEqual(cumplimiento.pasos_semanales, 40_000)  # acumulado corregido
+        self.assertFalse(cumplimiento.cumplido)                 # el resultado no se reabre
+        self.assertEqual(monedas.saldo(beto, self.SIGUIENTE), 0)
+
+    def test_la_corrida_de_liga_cierra_el_mes_y_el_cierre_del_lunes_tambien(self):
+        PolizaVinculada.objects.create(
+            usuario=self.ana, policy_number="P-1", insurer="Demo", estado_verificacion="verificada",
+        )
+        Ledger.objects.create(
+            usuario=self.ana, puntos=100, tipo=Ledger.TipoLedger.AJUSTE_MANUAL,
+            fecha=date(2026, 10, 10), version_regla=VersionRegla.objects.get(version=1),
+        )
+        ejecutar(LIGA, gt(2026, 11, 2, 0, 0))
+        self.assertTrue(LigaMensual.objects.get(mes=date(2026, 10, 1)).cerrada_en)
+        # Un martes que cae día 2: el cierre semanal también cierra la liga.
+        resultado = ejecutar(CIERRE, gt(2027, 2, 2, 0, 0))
+        self.assertEqual(
+            [r["mes"] for r in resultado["liga"]], ["2026-11-01", "2026-12-01", "2027-01-01"],
+        )
+
+    def test_la_corrida_de_liga_del_dia_2_no_paga_y_la_del_dia_9_si(self):
+        PolizaVinculada.objects.create(
+            usuario=self.ana, policy_number="P-1", insurer="Demo", estado_verificacion="verificada",
+        )
+        Ledger.objects.create(
+            usuario=self.ana, puntos=100, tipo=Ledger.TipoLedger.AJUSTE_MANUAL,
+            fecha=date(2026, 10, 10), version_regla=VersionRegla.objects.get(version=1),
+        )
+        ejecutar(LIGA, gt(2026, 11, 2, 0, 0))
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 11, 2)), 0)
+        resultado = ejecutar(PAGO_LIGA, gt(2026, 11, 9, 0, 0))
+        self.assertEqual([r["mes"] for r in resultado], ["2026-10-01"])
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 11, 9)), 30)
+        # Correrla otra vez no paga dos veces.
+        ejecutar(PAGO_LIGA, gt(2026, 11, 9, 0, 0))
+        self.assertEqual(monedas.saldo(self.ana, date(2026, 11, 9)), 30)
+
+    def test_el_cierre_semanal_tambien_paga_el_podio_que_ya_toca(self):
+        PolizaVinculada.objects.create(
+            usuario=self.ana, policy_number="P-1", insurer="Demo", estado_verificacion="verificada",
+        )
+        Ledger.objects.create(
+            usuario=self.ana, puntos=100, tipo=Ledger.TipoLedger.AJUSTE_MANUAL,
+            fecha=date(2026, 10, 10), version_regla=VersionRegla.objects.get(version=1),
+        )
+        resultado = ejecutar(CIERRE, gt(2027, 3, 9, 0, 0))               # martes día 9
+        self.assertIn("2026-10-01", [r["mes"] for r in resultado["pagos"]])
+        # Un pago atrasado cuenta en la season del día en que se paga.
+        self.assertEqual(monedas.saldo(self.ana, date(2027, 3, 9)), 30)
+
+    def test_una_corrida_desconocida_falla(self):
+        with self.assertRaises(ValueError):
+            ejecutar("otra", gt(2026, 10, 5))
+
+
+class ComandoProgramadorTests(TestCase):
+    def setUp(self):
+        VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
+        self.ana = crear_usuario("ana")
+        meta_fija()
+
+    def test_una_vez_se_pone_al_dia_y_dice_cuando_es_la_proxima_corrida(self):
+        hoy = timezone.localdate()
+        semana_pasada = inicio_semana(hoy) - timedelta(days=14)
+        ResumenDiario.objects.create(
+            usuario=self.ana, fecha=semana_pasada, pasos_totales_dia=31_000,
+            workouts_cantidad=1, puntos_dia=0,
+        )
+
+        salida = StringIO()
+        call_command("programador", "--una-vez", stdout=salida)
+
+        texto = salida.getvalue()
+        self.assertIn(f"semana {semana_pasada}", texto)
+        self.assertIn("Próxima corrida:", texto)
+        self.assertIn("hora de Guatemala", texto)
+        self.assertEqual(monedas.saldo(self.ana, hoy), PAGO_SEMANA_COMPLETA)
+
+    def test_una_vez_sin_nada_pendiente_lo_dice(self):
+        salida = StringIO()
+        call_command("programador", "--una-vez", stdout=salida)
+        self.assertIn("no hay semanas pendientes", salida.getvalue())
