@@ -919,7 +919,11 @@ Google" e "Iniciar sesión con Apple"** (reunión del 2 de octubre de 2026;
 Apple es obligatorio si se ofrece Google). Ninguno de los dos entrega la fecha
 de nacimiento: la primera vez se pide aparte. El servidor genera el
 `usuario_id`, un nombre público que no identifica a quien manda datos. Vincular
-póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
+póliza es un segundo paso, aparte. **El correo no distingue mayúsculas** y no se
+repite entre cuentas con contraseña, Google y Apple (6 de octubre de 2026). **Baja
+de cuenta** (`POST /api/v1/cuenta/baja`, 6 de octubre de 2026): borra lo personal
+(correo, nombre, póliza, nombres de dispositivo, fecha exacta de nacimiento) y
+conserva lo anónimo (puntos, monedas, resúmenes y muestras). Flutter guarda el token en almacenamiento
 seguro, lo manda en cada request HTTP y se lo entrega a Swift con
 `actualizarSesion`.
 
@@ -933,6 +937,13 @@ totales del día, ritmo cardíaco promedio del día y workouts realizados. Lo
 que **no** se manda es el dato crudo de HealthKit (minuto a minuto, samples
 individuales) — todo va agregado a nivel de día. Esto es lo que define el
 reporte mensual acordado con Diego (18 de septiembre de 2026).
+
+**El consentimiento es obligatorio para usar la app** (decidido el 6 de octubre
+de 2026): quien no lo acepta, o lo revoca, no puede usarla. El servidor guarda
+cuándo se aceptó, qué versión del texto y si se revocó, y solo quien lo tiene
+vigente entra al reporte de la aseguradora (`contrato-tecnico.md`,
+"Consentimiento con la aseguradora"). El bloqueo del sync está apagado hasta
+que Swift y Flutter lo manejen.
 
 [PENDIENTE] El texto de consentimiento actual de la app (D11) promete algo
 más estricto que esto — solo agregados de cohorte, nada a nivel de persona —
