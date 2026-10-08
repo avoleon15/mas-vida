@@ -12,11 +12,13 @@ import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../reglas_puntos.dart';
 import '../theme.dart';
+import '../widgets/acceso_widgets.dart' show BotonPildora;
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/escalera_cashback.dart';
 import '../widgets/numero_animado.dart';
 import '../widgets/refresco_vida.dart';
+import 'registro_screen.dart' show abrirAgregarPoliza;
 
 // ============================================================
 // MI PLAN — UNA TARJETA ARRIBA Y UNA ZONA QUE CAMBIA ABAJO.
@@ -77,6 +79,10 @@ import '../widgets/refresco_vida.dart';
 // prima. La nota regulatoria vive DENTRO del cabezal, al pie y separada
 // por un hairline, porque la regla pertenece a ese número — y como el
 // cabezal es fijo, la nota nunca se va de la pantalla.
+//
+// SIN PÓLIZA, la pantalla es otra (ver [_MiPlanSinPoliza]): la tarjeta
+// del cashback cerrada con un candado y dos botones, "Agregar póliza" y
+// "Buscar plan".
 //
 // POR QUÉ NO HAY SHIMMER DE CARGA. `Datos.i` se hidrata una sola vez
 // antes de que exista cualquier pantalla (ver `main.dart`: hasta que la
@@ -316,9 +322,9 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
     // no solo acá: los datos son uno solo.
     return Scaffold(
       body: SafeArea(
-        child: ValueListenableBuilder<int>(
-          valueListenable: datosRecargados,
-          builder: (context, _, _) => Column(
+        child: ListenableBuilder(
+          listenable: Listenable.merge([datosRecargados, tienePoliza]),
+          builder: (context, _) => Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -326,13 +332,15 @@ class _MiPlanScreenState extends State<MiPlanScreen> {
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: _ZonaQueCambia(
-                  cabezal: cabezal,
-                  elegida: _elegida,
-                  aseguradora: aseguradora,
-                  uso: uso,
-                  alCerrar: _cerrar,
-                ),
+                child: tienePoliza.value
+                    ? _ZonaQueCambia(
+                        cabezal: cabezal,
+                        elegida: _elegida,
+                        aseguradora: aseguradora,
+                        uso: uso,
+                        alCerrar: _cerrar,
+                      )
+                    : const _MiPlanSinPoliza(),
               ),
               const BottomNavBar(currentIndex: 4),
             ],
@@ -2075,3 +2083,358 @@ class _SeparadorFino extends StatelessWidget {
 /// "7,5" y no "7.5000000001"; "10" y no "10.0".
 String _porcentaje(double valor) =>
     valor % 1 == 0 ? valor.toInt().toString() : valor.toString();
+
+// ============================================================
+// SIN PÓLIZA
+// ============================================================
+
+/// Llaves para los tests.
+const Key llaveAgregarPoliza = ValueKey('mi-plan-agregar-poliza');
+const Key llaveBuscarPlan = ValueKey('mi-plan-buscar-plan');
+
+/// Mi Plan para quien todavía no tiene póliza.
+///
+/// LO QUE SE DESBLOQUEA, A LA VISTA (pedido de Daniel, 8 de octubre de
+/// 2026: el estado vacío con un ícono y un párrafo se veía genérico). En
+/// el centro va la MISMA tarjeta azul del cashback que ve quien tiene
+/// póliza —su % en grande y la escalera con su foto en su escalón—, pero
+/// cerrada: sin monto en quetzales (sin póliza no hay prima de dónde
+/// sacarlo) y con un candado. El usuario ve SU nivel, que ya está
+/// corriendo, y lo que le falta para cobrarlo.
+///
+/// Debajo, fijos, los dos botones: "Agregar póliza" y "Buscar plan".
+/// El cashback se dice como algo que se DEVUELVE después de pagar la
+/// prima, nunca como un descuento (CLAUDE.md, regla regulatoria).
+class _MiPlanSinPoliza extends StatelessWidget {
+  const _MiPlanSinPoliza();
+
+  @override
+  Widget build(BuildContext context) {
+    // Los dos botones van FIJOS abajo y lo de arriba scrollea: la tarjeta
+    // con la escalera es alta, y si los botones scrollearan con ella
+    // quedaban fuera de la pantalla, que es justo lo que se viene a tocar.
+    return Column(
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('MI PLAN', style: AppTheme.sectionTitle),
+                    const SizedBox(height: AppSpacing.entre),
+                    const _CashbackCerrado(),
+                  ],
+                ),
+              ),
+              // Lo que scrollea se desvanece al llegar a los botones, en
+              // vez de cortarse en seco contra ellos.
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 28,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x00F5F6FA), AppColors.fondoDePantalla],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+          child: Column(
+            children: [
+              BotonPildora(
+                key: llaveAgregarPoliza,
+                texto: 'Agregar póliza',
+                icono: CupertinoIcons.plus,
+                onPressed: () => _avisarAntesDeAgregar(context),
+              ),
+              const SizedBox(height: 10),
+              const _BotonBuscarPlan(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// La tarjeta del cashback, cerrada.
+///
+/// El mismo azul, la misma luz en la esquina y la misma escalera que
+/// [_HeroCashback]: tiene que reconocerse como LA tarjeta de Mi Plan. Lo
+/// que cambia es el número grande —el % del nivel, porque sin prima no
+/// hay quetzales—, el candado arriba a la derecha y que no lleva pie:
+/// la nota regulatoria va con el monto, y acá todavía no hay monto.
+class _CashbackCerrado extends StatelessWidget {
+  const _CashbackCerrado();
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final pct = nivelPorNumero(nivelActual)?.porcentajeCashback ?? 0;
+    // En el Nivel 0 el % es cero: se muestra el del primer escalón, que
+    // es lo que hay que perseguir.
+    final enCero = pct == 0;
+    final grande = enCero ? (nivelPorNumero(1)?.porcentajeCashback ?? 0) : pct;
+    final apoyo = enCero
+        ? 'de tu prima de vuelta,\nal llegar al Nivel 1'
+        : 'de tu prima de vuelta,\npor ir en Nivel $nivelActual';
+
+    final tarjeta = Container(
+      width: double.infinity,
+      decoration: _tarjetaHero(),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned(
+            top: -70,
+            right: -50,
+            child: Container(
+              width: 190,
+              height: 190,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.16),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 16, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(
+                              AppRadios.pildora,
+                            ),
+                          ),
+                          child: Text(
+                            'TU CASHBACK',
+                            style: tema.labelSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.lock_fill,
+                            size: 15,
+                            color: Colors.white,
+                            semanticLabel: 'Bloqueado',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${_porcentaje(grande)}%',
+                          style: AppTheme.display(
+                            52,
+                          ).copyWith(color: Colors.white, height: 0.95),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Text(
+                              apoyo,
+                              style: tema.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w600,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+                child: EscaleraCashback(
+                  nivelActual: nivelActual,
+                  puntosTotal: puntosAnuales,
+                  techoActividad: Datos.i.resumen.techoAnual,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    // Entra igual que la tarjeta de verdad, una sola vez.
+    if (MediaQuery.disableAnimationsOf(context)) return tarjeta;
+    return tarjeta
+        .animate()
+        .fadeIn(duration: duracionEntradaPanel, curve: Curves.easeOut)
+        .slideY(
+          begin: 0.08,
+          end: 0,
+          duration: duracionEntradaPanel,
+          curve: Curves.easeOutCubic,
+        )
+        .scale(
+          begin: const Offset(0.97, 0.97),
+          end: const Offset(1, 1),
+          duration: duracionEntradaPanel,
+          curve: Curves.easeOutCubic,
+        );
+  }
+}
+
+/// Llave del aviso de antes de agregar la póliza, para los tests.
+const Key llaveAvisoReinicio = ValueKey('mi-plan-aviso-reinicio');
+
+/// El aviso de iOS antes de agregar la póliza: con ella, los puntos y el
+/// nivel arrancan de cero; las monedas se quedan como están (Daniel, 8 de
+/// octubre de 2026).
+///
+/// Una alerta nativa y no una hoja: es UNA decisión con dos salidas, y es
+/// lo que un usuario de iPhone ya sabe leer. "Siguiente" va en negrita
+/// (la acción que se espera) y "Cancelar" a la izquierda, como en iOS.
+Future<void> _avisarAntesDeAgregar(BuildContext context) async {
+  HapticFeedback.selectionClick();
+  final seguir = await showCupertinoDialog<bool>(
+    context: context,
+    builder: (ctx) => CupertinoAlertDialog(
+      key: llaveAvisoReinicio,
+      title: const Text('Empiezas de cero'),
+      content: const Padding(
+        padding: EdgeInsets.only(top: 6),
+        child: Text(
+          'Al agregar tu póliza, tus puntos y tu nivel de cashback vuelven '
+          'a cero. Tus monedas se quedan como están.',
+        ),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        CupertinoDialogAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Siguiente'),
+        ),
+      ],
+    ),
+  );
+  if (seguir == true && context.mounted) await abrirAgregarPoliza(context);
+}
+
+/// "Buscar plan": la puerta del cotizador, que todavía no existe.
+///
+/// Se ve como un botón de verdad, en `azulBruma` —el segundo escalón,
+/// debajo del azul entero de "Agregar póliza"—. Como el cotizador todavía
+/// no existe, tocarlo lo dice en una alerta de iOS.
+class _BotonBuscarPlan extends StatelessWidget {
+  const _BotonBuscarPlan();
+
+  void _avisar(BuildContext context) {
+    HapticFeedback.selectionClick();
+    showCupertinoDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('El cotizador viene pronto'),
+        content: const Text(
+          'Vas a poder comparar planes de gastos médicos y cotizar el tuyo '
+          'acá mismo, en un par de minutos.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return Semantics(
+      button: true,
+      label: 'Buscar plan',
+      excludeSemantics: true,
+      child: CupertinoButton(
+        key: llaveBuscarPlan,
+        padding: EdgeInsets.zero,
+        onPressed: () => _avisar(context),
+        child: Container(
+          width: double.infinity,
+          height: 54,
+          decoration: BoxDecoration(
+            color: AppColors.azulBruma,
+            borderRadius: BorderRadius.circular(AppRadios.pildora),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                CupertinoIcons.search,
+                size: 18,
+                color: AppColors.accent,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Buscar plan',
+                style: tema.titleSmall?.copyWith(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

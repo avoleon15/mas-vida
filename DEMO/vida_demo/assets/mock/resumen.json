@@ -102,8 +102,7 @@
           "acento": "#8C5A3C",
           "cupon": "2x1 en Puyazo 8 oz",
           "fotos": [
-            "assets/img/premios/restaurantes/montanos.webp",
-            "assets/img/premios/restaurantes/montanos.webp",
+            "assets/img/patrocinadores/montanos-2x1.jpg",
             "assets/img/premios/restaurantes/montanos.webp"
           ]
         },
@@ -112,7 +111,7 @@
             "id": "pasos_semana",
             "nombre": "Pasos de la semana",
             "unidad": "pasos",
-            "progreso": 41200,
+            "progreso": 43350,
             "meta": 45000,
             "completo": false,
             "monedas": 5
@@ -227,8 +226,7 @@
           "acento": "#8C5A3C",
           "cupon": "Postre gratis en Montanos",
           "fotos": [
-            "assets/img/premios/restaurantes/montanos.webp",
-            "assets/img/premios/restaurantes/montanos.webp",
+            "assets/img/patrocinadores/montanos-2x1.jpg",
             "assets/img/premios/restaurantes/montanos.webp"
           ]
         },
@@ -481,11 +479,18 @@
     ]
   },
   "monedas": {
-    "saldo": 16,
+    "saldo": 500,
     "ganadas_este_mes": 6,
     "_nota_valor": "TODO: falta cuánto vale una moneda en quetzales. Depende de las alianzas comerciales y no debe mostrarse en ninguna pantalla hasta que exista.",
     "_nota_caducidad": "Las monedas caducan al CERRAR LA SEASON (contrato, \"Monedas y seasons\"): el saldo vuelve a 0. El lunes 28 sep, al empezar la season 4, primero se reinicio el saldo y DESPUES se pago la semana 13 de la season 3 (5 + 5), asi que esas cuentan en esta season. Todo caduca el domingo 3 ene 2027. dias_para_caducar se cuenta contra el viernes 2 oct 2026, el hoy del mock. Sin tope.",
     "lotes": [
+      {
+        "_prueba": "Lote de PRUEBA (3 oct 2026, pedido de Daniel): 484 monedas para poder canjear premios y probar la app. No es una regla de negocio; sacarlo cuando se pruebe con datos reales.",
+        "cantidad": 484,
+        "acunadas": "2026-09-28",
+        "caducan": "2027-01-03",
+        "dias_para_caducar": 93
+      },
       {
         "cantidad": 10,
         "acunadas": "2026-09-28",
@@ -499,7 +504,7 @@
         "dias_para_caducar": 93
       }
     ],
-    "_nota_saldo": "El saldo es la suma de los lotes: 10 de la semana 13 de la season 3 (pagada el lunes 28 sep, despues del reinicio) y 6 de La Liga de septiembre (2.o lugar; cerro el miercoles 30 y se acuno el jueves 1 oct).",
+    "_nota_saldo": "El saldo es la suma de los lotes: 484 de prueba, 10 de la semana 13 de la season 3 (pagada el lunes 28 sep, despues del reinicio) y 6 de La Liga de septiembre (2.o lugar; cerro el miercoles 30 y se acuno el jueves 1 oct).",
     "_todo_techo": "PENDIENTE: techo_mensual estaba en 8, y eso no alcanzaba ni para lo que pagan cuatro semanas del programa. Se saca hasta que se defina uno coherente; no se inventa un numero aca."
   }
 }

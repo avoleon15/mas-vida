@@ -5,6 +5,7 @@ import '../datos/fuente_datos.dart';
 import '../theme.dart';
 import '../widgets/app_header.dart';
 import '../widgets/avatar_usuario.dart';
+import '../navegacion.dart' show irAMiPlan;
 
 // ============================================================
 // PERFIL Y CONFIGURACIÓN.
@@ -39,9 +40,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
   bool _compartirConAseguradora = true;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([datosRecargados, tienePoliza]),
+    builder: (context, _) => _pantalla(context),
+  );
+
+  Widget _pantalla(BuildContext context) {
     final perfil = Datos.i.perfil;
     final poliza = perfil.poliza;
+    final conPoliza = tienePoliza.value;
 
     // Mismo encabezado que el resto de la app en vez de un SliverAppBar.
     //
@@ -71,63 +78,77 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                     const SizedBox(height: AppSpacing.seccion),
 
-                    const _Etiqueta('TU PÓLIZA'),
-                    const SizedBox(height: AppSpacing.dentro),
-                    _Tarjeta(
-                      children: [
-                        _Fila(titulo: 'Número', valor: poliza.numero),
-                        const _Separador(),
-                        _Fila(titulo: 'Plan', valor: poliza.tipoPlan),
-                        const _Separador(),
-                        // La prima destacada: es de donde sale el cashback,
-                        // así que es el dato que el usuario viene a buscar.
-                        _Fila(
-                          titulo: 'Prima anual',
-                          valor: poliza.primaAnual,
-                          destacado: true,
-                        ),
-                        const _Separador(),
-                        _Fila(titulo: 'Forma de pago', valor: poliza.formaPago),
-                        const _Separador(),
-                        _Fila(titulo: 'Año de póliza', valor: poliza.vigencia),
-                        const _Separador(),
-                        _Fila(
-                          titulo: 'Renovación',
-                          valor: poliza.fechaRenovacion,
-                        ),
-                        const _Separador(),
-                        _Fila(titulo: 'Estado', valor: poliza.estado),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.dentro),
-                    _NotaSoloLectura(
-                      onPedirCorreccion: () => _pedirCorreccion(context),
-                    ),
-                    const SizedBox(height: AppSpacing.seccion),
+                    // Sin póliza no hay datos que mostrar: en su lugar,
+                    // el camino para agregarla.
+                    if (!conPoliza) ...[
+                      const _Etiqueta('TU PÓLIZA'),
+                      const SizedBox(height: AppSpacing.dentro),
+                      const _AgregarPoliza(),
+                      const SizedBox(height: AppSpacing.seccion),
+                    ] else ...[
+                      const _Etiqueta('TU PÓLIZA'),
+                      const SizedBox(height: AppSpacing.dentro),
+                      _Tarjeta(
+                        children: [
+                          _Fila(titulo: 'Número', valor: poliza.numero),
+                          const _Separador(),
+                          _Fila(titulo: 'Plan', valor: poliza.tipoPlan),
+                          const _Separador(),
+                          // La prima destacada: es de donde sale el cashback,
+                          // así que es el dato que el usuario viene a buscar.
+                          _Fila(
+                            titulo: 'Prima anual',
+                            valor: poliza.primaAnual,
+                            destacado: true,
+                          ),
+                          const _Separador(),
+                          _Fila(
+                            titulo: 'Forma de pago',
+                            valor: poliza.formaPago,
+                          ),
+                          const _Separador(),
+                          _Fila(
+                            titulo: 'Año de póliza',
+                            valor: poliza.vigencia,
+                          ),
+                          const _Separador(),
+                          _Fila(
+                            titulo: 'Renovación',
+                            valor: poliza.fechaRenovacion,
+                          ),
+                          const _Separador(),
+                          _Fila(titulo: 'Estado', valor: poliza.estado),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.dentro),
+                      _NotaSoloLectura(
+                        onPedirCorreccion: () => _pedirCorreccion(context),
+                      ),
+                      const SizedBox(height: AppSpacing.seccion),
 
-                    const _Etiqueta('COBERTURA'),
-                    const SizedBox(height: AppSpacing.dentro),
-                    _Tarjeta(
-                      children: [
-                        _Fila(
-                          titulo: 'Suma asegurada',
-                          valor: poliza.sumaAsegurada,
-                        ),
-                        const _Separador(),
-                        _Fila(titulo: 'Deducible', valor: poliza.deducible),
-                        const _Separador(),
-                        _Fila(titulo: 'Coaseguro', valor: poliza.coaseguro),
-                        const _Separador(),
-                        _Fila(titulo: 'Red', valor: poliza.redCobertura),
-                        const _Separador(),
-                        _Fila(
-                          titulo: 'Titular y dependientes',
-                          valor: poliza.titularYDependientes,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.seccion),
-
+                      const _Etiqueta('COBERTURA'),
+                      const SizedBox(height: AppSpacing.dentro),
+                      _Tarjeta(
+                        children: [
+                          _Fila(
+                            titulo: 'Suma asegurada',
+                            valor: poliza.sumaAsegurada,
+                          ),
+                          const _Separador(),
+                          _Fila(titulo: 'Deducible', valor: poliza.deducible),
+                          const _Separador(),
+                          _Fila(titulo: 'Coaseguro', valor: poliza.coaseguro),
+                          const _Separador(),
+                          _Fila(titulo: 'Red', valor: poliza.redCobertura),
+                          const _Separador(),
+                          _Fila(
+                            titulo: 'Titular y dependientes',
+                            valor: poliza.titularYDependientes,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.seccion),
+                    ],
                     const _Etiqueta('TUS DATOS DE SALUD'),
                     const SizedBox(height: AppSpacing.dentro),
                     _Tarjeta(
@@ -137,8 +158,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                           valor: '${perfil.edad} años',
                           // Viene de la póliza. Se dice para que no parezca
                           // un campo que el usuario olvidó llenar.
-                          nota:
-                              'La toma de tu póliza, no la puedes cambiar acá',
+                          nota: conPoliza
+                              ? 'La toma de tu póliza, no la puedes cambiar acá'
+                              : 'Sale de la fecha que pusiste al crear tu cuenta',
                         ),
                         const _Separador(),
                         // Se toca: abre la pantalla de permisos, que le
@@ -529,6 +551,70 @@ class _ConsentimientoAseguradora extends StatelessWidget {
 // ============================================================
 // Piezas compartidas
 // ============================================================
+
+/// "Agregar póliza", para quien todavía no tiene: una fila que lleva a Mi
+/// Plan, donde se elige entre agregarla o buscar un plan.
+class _AgregarPoliza extends StatelessWidget {
+  const _AgregarPoliza();
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return _Tarjeta(
+      children: [
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: () => irAMiPlan(context),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: AppColors.azulBruma,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  CupertinoIcons.plus,
+                  size: 18,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Agregar póliza',
+                      style: tema.titleSmall?.copyWith(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Para tu cashback, canjear premios y entrar a La Liga',
+                      style: tema.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                CupertinoIcons.chevron_right,
+                size: 16,
+                color: AppColors.azulMedio,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _Etiqueta extends StatelessWidget {
   const _Etiqueta(this.texto);

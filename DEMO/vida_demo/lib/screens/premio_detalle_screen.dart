@@ -1,11 +1,16 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
 import '../theme.dart';
+import '../widgets/globo_sin_poliza.dart';
 import '../widgets/placeholder_imagen.dart';
 import '../widgets/moneda_animada.dart';
 import 'premios_screen.dart' show monedasUsuario;
+
+/// Llave del botón de canjear, para los tests.
+const Key llaveBotonCanjear = ValueKey('premio-canjear');
 
 /// Detalle de un premio: recibe los datos del premio seleccionado como
 /// argumento de la ruta '/premio-detalle' (un Map, igual al que arma la
@@ -97,58 +102,77 @@ class PremioDetalleScreen extends StatelessWidget {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: alcanza
-                          ? () {
-                              // Golpe MEDIO y no liviano: acá se gastan
-                              // monedas y no hay vuelta atrás. El liviano
-                              // es para navegar; lo que compromete algo
-                              // se siente distinto, igual que al crear un
-                              // grupo.
-                              HapticFeedback.mediumImpact();
-                              // El cupón queda guardado ANTES de mostrar
-                              // el éxito: si el usuario cierra la pantalla
-                              // de canje, lo encuentra en Mis cupones.
-                              final cupon = registrarCanje(premio);
-                              Navigator.of(context).pushNamed(
-                                '/canje-exitoso',
-                                arguments: {
-                                  'premio': premio,
-                                  'cupon': cupon,
-                                  'monedasRestantes': saldoRestante,
-                                },
-                              );
-                            }
-                          : null,
-                      // El color y la forma los pone el tema
-                      // (elevatedButtonTheme). Antes acá había un
-                      // foregroundColor negro sobre el azul de marca y
-                      // el botón no se leía.
-                      child: Text(
-                        alcanza
-                            ? 'CANJEAR POR $costo MONEDAS'
-                            : 'TE FALTAN ${costo - monedasUsuario} MONEDAS',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Se descuentan al confirmar. No hay devoluciones.',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+              // Sin póliza el catálogo se ve entero, pero el botón sale
+              // con candado: las monedas se juntan igual y se canjean el
+              // día que la agregue (CLAUDE.md, "Las 2 monedas").
+              child: ValueListenableBuilder<bool>(
+                valueListenable: tienePoliza,
+                builder: (context, conPoliza, _) => conPoliza
+                    ? _botonCanjear(context, premio, alcanza, saldoRestante)
+                    : const _CanjeConCandado(),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _botonCanjear(
+    BuildContext context,
+    Premio premio,
+    bool alcanza,
+    int saldoRestante,
+  ) {
+    final costo = premio.costoMonedas;
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            key: llaveBotonCanjear,
+            onPressed: alcanza
+                ? () {
+                    // Golpe MEDIO y no liviano: acá se gastan
+                    // monedas y no hay vuelta atrás. El liviano
+                    // es para navegar; lo que compromete algo
+                    // se siente distinto, igual que al crear un
+                    // grupo.
+                    HapticFeedback.mediumImpact();
+                    // El cupón queda guardado ANTES de mostrar
+                    // el éxito: si el usuario cierra la pantalla
+                    // de canje, lo encuentra en Mis cupones.
+                    final cupon = registrarCanje(premio);
+                    Navigator.of(context).pushNamed(
+                      '/canje-exitoso',
+                      arguments: {
+                        'premio': premio,
+                        'cupon': cupon,
+                        'monedasRestantes': saldoRestante,
+                      },
+                    );
+                  }
+                : null,
+            // El color y la forma los pone el tema
+            // (elevatedButtonTheme). Antes acá había un
+            // foregroundColor negro sobre el azul de marca y
+            // el botón no se leía.
+            child: Text(
+              alcanza
+                  ? 'CANJEAR POR $costo MONEDAS'
+                  : 'TE FALTAN ${costo - monedasUsuario} MONEDAS',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Se descuentan al confirmar. No hay devoluciones.',
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+        ),
+      ],
     );
   }
 
@@ -267,6 +291,56 @@ class PremioDetalleScreen extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// El botón de canjear con candado, para quien todavía no tiene póliza.
+///
+/// Gris y quieto —un botón que no se puede tocar no tiene por qué tener
+/// volumen—, con el candado adelante. Del candado sale el globito azul
+/// que dice por qué: al entrar, por unos segundos, y de nuevo con el
+/// mouse encima o al tocarlo. La póliza se agrega desde Mi Plan.
+class _CanjeConCandado extends StatelessWidget {
+  const _CanjeConCandado();
+
+  @override
+  Widget build(BuildContext context) {
+    return ZonaSinPoliza(
+      child: Semantics(
+        label: 'Canjear premio, bloqueado. $mensajeSinPoliza',
+        excludeSemantics: true,
+        child: Container(
+          key: llaveBotonCanjear,
+          width: double.infinity,
+          height: 52,
+          decoration: BoxDecoration(
+            color: AppColors.cardBorder,
+            borderRadius: BorderRadius.circular(AppRadios.pildora),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const GloboSinPoliza(
+                child: Icon(
+                  CupertinoIcons.lock_fill,
+                  size: 16,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'CANJEAR PREMIO',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

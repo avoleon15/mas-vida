@@ -145,9 +145,21 @@ void main() {
       tester,
     ) async {
       Sesion? entro;
+      // Sin backend, solo se entra con una cuenta creada en el teléfono.
+      final servicio = _servicio();
+      await tester.runAsync(
+        () => servicio.registrar(
+          DatosRegistro(
+            nombre: 'Ana',
+            correo: 'ana@gmail.com',
+            contrasena: 'caminar1',
+            fechaNacimiento: DateTime(1990, 5, 1),
+          ),
+        ),
+      );
       await montarPantalla(
         tester,
-        AccesoScreen(servicio: _servicio(), alEntrar: (s) => entro = s),
+        AccesoScreen(servicio: servicio, alEntrar: (s) => entro = s),
       );
 
       await tester.tap(find.byKey(llaveEntrar));
@@ -190,6 +202,78 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(entro?.correo, 'ana@gmail.com');
+      // Con SU nombre, no uno sacado del correo.
+      expect(entro?.nombre, 'Ana');
+    });
+  });
+
+  group('Cuentas del teléfono (sin backend)', () {
+    final datos = DatosRegistro(
+      nombre: 'Daniel',
+      correo: 'Daniel@Gmail.com',
+      contrasena: 'caminar1',
+      fechaNacimiento: DateTime(2003, 4, 10),
+    );
+
+    test(
+      'al volver a entrar trae el nombre y el estado de la póliza',
+      () async {
+        final servicio = _servicio();
+        await servicio.registrar(datos);
+        await servicio.cerrarSesion();
+
+        final sesion = await servicio.iniciarSesion(
+          'daniel@gmail.com',
+          'caminar1',
+        );
+        expect(sesion.nombre, 'Daniel');
+        expect(sesion.fechaNacimiento, DateTime(2003, 4, 10));
+        expect(sesion.sinPoliza, isTrue);
+        expect(sesion.polizaVerificada, isFalse);
+      },
+    );
+
+    test('la póliza agregada después se recuerda', () async {
+      final servicio = _servicio();
+      final sesion = await servicio.registrar(datos);
+      await servicio.vincularPoliza(
+        sesion,
+        PolizaRegistro(
+          aseguradora: 'Seguros Ejemplo',
+          numero: 'AB-777',
+          inicioVigencia: DateTime(2026, 3, 15),
+        ),
+      );
+      await servicio.cerrarSesion();
+
+      final otraVez = await servicio.iniciarSesion(
+        'daniel@gmail.com',
+        'caminar1',
+      );
+      expect(otraVez.polizaVerificada, isTrue);
+      expect(otraVez.poliza?.numero, 'AB-777');
+    });
+
+    test('un correo sin cuenta no entra', () async {
+      expect(
+        () => _servicio().iniciarSesion('nadie@gmail.com', 'caminar1'),
+        throwsA(isA<ErrorSesion>()),
+      );
+    });
+
+    test('una contraseña equivocada no entra', () async {
+      final servicio = _servicio();
+      await servicio.registrar(datos);
+      expect(
+        () => servicio.iniciarSesion('daniel@gmail.com', 'otra1234'),
+        throwsA(isA<ErrorSesion>()),
+      );
+    });
+
+    test('no se crean dos cuentas con el mismo correo', () async {
+      final servicio = _servicio();
+      await servicio.registrar(datos);
+      expect(() => servicio.registrar(datos), throwsA(isA<ErrorSesion>()));
     });
   });
 
@@ -270,6 +354,7 @@ void main() {
 
       // 3. Tu póliza: se puede saltar.
       expect(find.text('Vincula tu póliza'), findsOneWidget);
+      expect(find.text('Aún no tengo póliza'), findsOneWidget);
       await tester.tap(find.byKey(llaveSaltarPoliza));
       await tester.pumpAndSettle();
 
@@ -293,6 +378,8 @@ void main() {
       expect(creada!.nombre, 'Ana');
       expect(creada!.fechaNacimiento, isNotNull);
       expect(creada!.polizaPendiente, isFalse);
+      expect(creada!.sinPoliza, isTrue);
+      expect(creada!.polizaVerificada, isFalse);
       expect(creada!.compartirConAseguradora, isFalse);
       expect(creada!.terminosAceptados, versionTerminos);
     });

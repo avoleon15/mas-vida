@@ -10,6 +10,7 @@ import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/chip_monedas.dart' show BotonInfo;
 import '../widgets/flujos_social.dart';
+import '../widgets/globo_sin_poliza.dart';
 import '../widgets/hoja_invitar_grupo.dart';
 import '../widgets/moneda_animada.dart';
 import '../widgets/ranking_widgets.dart';
@@ -29,6 +30,11 @@ import 'ranking_grupo_screen.dart'
 //   2. MIS COMPETENCIAS, debajo y plana: las que armaste con tu gente.
 //      Se crean o se entra con un CÓDIGO que se comparte por WhatsApp o
 //      cualquier app. No hay solicitudes ni amigos.
+//
+// SIN PÓLIZA, La Liga sale con candado y un globito azul que dice por
+// qué: es
+// solo de asegurados con póliza verificada. Mis competencias sigue igual,
+// que no pide póliza.
 //
 // Antes eran dos pestañas —"Mis competencias" y "Liga local"— que nunca
 // se veían juntas, y la que da premio quedaba en la segunda.
@@ -92,9 +98,9 @@ class _SocialScreenState extends State<SocialScreen> {
               child: AppHeader(),
             ),
             Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: datosRecargados,
-                builder: (context, _, _) {
+              child: ListenableBuilder(
+                listenable: Listenable.merge([datosRecargados, tienePoliza]),
+                builder: (context, _) {
                   final liga = Datos.i.social.ligaLocal;
                   return CustomScrollView(
                     physics: fisicaConRefresco,
@@ -108,7 +114,9 @@ class _SocialScreenState extends State<SocialScreen> {
                             children: desplegar([
                               Text('SOCIAL', style: AppTheme.sectionTitle),
                               const SizedBox(height: 20),
-                              if (liga == null)
+                              if (!tienePoliza.value)
+                                _LigaConCandado(liga: liga)
+                              else if (liga == null)
                                 const _SinLiga()
                               else
                                 TarjetaLiga(
@@ -482,6 +490,103 @@ class _SinLiga extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Llave de La Liga con candado, para los tests.
+const Key llaveLigaConCandado = ValueKey('liga-con-candado');
+
+/// La Liga para quien todavía no tiene póliza: se ve qué es y qué paga,
+/// con un candado. Del candado sale el globito azul que dice por qué: al
+/// entrar, por unos segundos, y de nuevo con el mouse encima de la
+/// tarjeta o al tocarla. Flota sobre el texto y no empuja nada.
+///
+/// Plana, en `azulNiebla` y sin sombra: no es algo que se pueda abrir, así
+/// que no se levanta. Lo que paga el podio se deja a la vista —es la
+/// razón para agregar la póliza—, pero apagado. La póliza se agrega desde
+/// Mi Plan.
+class _LigaConCandado extends StatelessWidget {
+  const _LigaConCandado({required this.liga});
+
+  /// La de este mes, para mostrar lo que paga. Null si todavía no hay.
+  final GrupoRanking? liga;
+
+  /// El disco del candado.
+  static const double _candado = 32;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final premios = liga?.premiosMonedas ?? const <int>[];
+
+    return ZonaSinPoliza(
+      child: Container(
+        key: llaveLigaConCandado,
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        decoration: BoxDecoration(
+          color: AppColors.azulNiebla,
+          borderRadius: BorderRadius.circular(AppRadios.tarjeta),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('LA LIGA', style: AppTheme.subsectionTitle),
+                ),
+                GloboSinPoliza(
+                  lado: LadoGlobo.abajoDerecha,
+                  anchoCandado: _candado,
+                  child: Container(
+                    width: _candado,
+                    height: _candado,
+                    decoration: const BoxDecoration(
+                      color: AppColors.azulBruma,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.lock_fill,
+                      size: 15,
+                      color: AppColors.accent,
+                      semanticLabel: 'Bloqueada',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Es de todos los asegurados con su póliza: compiten por los '
+              'puntos del mes y el podio gana monedas.',
+              style: tema.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            if (premios.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Opacity(
+                opacity: 0.55,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < premios.length; i++) ...[
+                        _Premio(puesto: i + 1, monedas: premios[i]),
+                        const SizedBox(width: 12),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ============================================================

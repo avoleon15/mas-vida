@@ -27,27 +27,31 @@ final int techoAros = cortesAros.last;
 
 /// Qué tan lleno va el aro [indice] con [pasos] pasos, de 0 a 1.
 ///
-/// LAS TRES REGLAS:
+/// CADA ARO SE LLENA DENTRO DE SU TRAMO (decisión de Daniel, 8 de octubre
+/// de 2026): el de plata va de 7.000 a 10.000, así que con 7.150 pasos
+/// apenas asoma —un 5%— encima del bronce completo, y a los 10.000 cierra
+/// la vuelta. Así el aro responde a cada escalón de pasos: lo que se ve
+/// lleno es lo que falta para el siguiente nivel de puntos.
 ///
 ///   · Un tramo YA TERMINADO queda en 1: no desaparece cuando arranca el
 ///     siguiente, se queda como aro completo debajo.
 ///   · Un tramo que NI ARRANCÓ queda en 0.
-///   · El tramo EN CURSO se mide contra SU TECHO Y DESDE CERO, no desde
-///     su propio piso.
+///   · El tramo EN CURSO vale `(pasos - piso) / (techo - piso)`.
 ///
-/// Esa última es la que arregla el bug que encontró Daniel el 21 de
-/// septiembre de 2026. La fórmula era `(pasos - piso) / (techo - piso)`,
-/// así que con 8.000 pasos el aro de plata —que va de 7.000 a 10.000— se
-/// pintaba un tercio, debajo de un texto que decía "8.000 de 10.000".
-/// Dos escalas para el mismo dato, y la que el usuario lee en letras es
-/// la de cero a 10.000.
-double fraccionDelAro(int pasos, int indice) {
+/// Esto reemplaza a la regla del 21 de septiembre, que medía el tramo en
+/// curso desde cero (`pasos / techo`): con 7.150 pasos el aro de plata
+/// salía casi lleno sin que el usuario hubiera caminado nada en ese
+/// tramo. Es el mismo dibujo con o sin póliza.
+///
+/// Acepta pasos con decimales porque la animación de llenado los pasa
+/// así: el aro avanza continuo y no a saltos de un paso.
+double fraccionDelAro(num pasos, int indice) {
   final desde = cortesAros[indice];
   final hasta = cortesAros[indice + 1];
 
   if (pasos >= hasta) return 1;
   if (pasos <= desde) return 0;
-  return pasos / hasta;
+  return (pasos - desde) / (hasta - desde);
 }
 
 /// Color de cada aro, en el mismo orden que los tramos de [cortesAros].
@@ -72,11 +76,8 @@ const List<List<Color>> _brilloAros = [
 /// Cambia solo al cambiar de aro, no con cada paso, y arriba del techo se
 /// queda clavado en el último corte. No es la meta del día.
 ///
-/// ES LA MISMA ESCALA QUE EL DIBUJO. El aro en curso se llena contra
-/// este número y desde cero, así que "8.000 de 10.000" y cuatro quintos
-/// de aro pintado dicen lo mismo. Antes no: el aro se medía desde el
-/// piso del tramo y con 8.000 pasos se veía un tercio lleno debajo de un
-/// texto que decía 8.000 de 10.000.
+/// Es la meta del aro en curso: el aro se llena desde el piso de su tramo
+/// hasta este número (ver `fraccionDelAro`).
 int techoDelAroActual(int pasos) {
   for (final corte in cortesAros.skip(1)) {
     if (pasos < corte) return corte;
@@ -249,7 +250,7 @@ class _ProgressRingState extends State<ProgressRing>
                 return CustomPaint(
                   size: lienzo,
                   painter: _AnilloPasosPainter(
-                    pasos: (widget.pasos * avance).round(),
+                    pasos: widget.pasos * avance,
                     strokeWidth: widget.strokeWidth,
                     sigmaHalo: widget.sigmaHalo,
                     opacidadHalo: widget.opacidadHalo,
@@ -370,7 +371,9 @@ class _AnilloPasosPainter extends CustomPainter {
     required this.opacidadHalo,
   });
 
-  final int pasos;
+  /// Los pasos recorridos en este cuadro del llenado. Es un double para
+  /// que el aro avance continuo y no a saltos de un paso.
+  final double pasos;
   final double strokeWidth;
   final double sigmaHalo;
   final double opacidadHalo;
@@ -393,21 +396,10 @@ class _AnilloPasosPainter extends CustomPainter {
 
     // 2. Los tres tramos, cada uno encima del anterior.
     //
-    // EL TRAMO EN CURSO SE MIDE DESDE CERO, NO DESDE SU PISO (bug que
-    // encontró Daniel el 21 de septiembre de 2026).
-    //
-    // Antes la fracción era `(pasos - desde) / (hasta - desde)`: el aro
-    // de plata iba de 7.000 a 10.000, así que con 8.000 pasos se pintaba
-    // un tercio. Pero el texto del centro dice "8.000 de 10.000", que
-    // cualquiera lee como cuatro quintos. Dos escalas distintas para el
-    // mismo dato, y la que el usuario tiene delante en letras es la de
-    // cero a 10.000.
-    //
-    // Ahora el tramo en curso se llena contra SU TECHO —`pasos / hasta`—
-    // y el aro coincide con lo que dice el número. El de abajo queda
-    // completo igual, así que el salto de un metal al otro se sigue
-    // viendo. Esto reemplaza a la nota vieja de `techoDelAroActual`, que
-    // decía que el desfase era una decisión de producto.
+    // CADA TRAMO SE LLENA DENTRO DE SU PROPIO RANGO (ver
+    // `fraccionDelAro`): con 7.150 pasos el bronce está completo y la
+    // plata apenas arranca. Como la animación sube los pasos de cero, la
+    // plata también se llena suave desde cero al cruzar los 7.000.
     for (var i = 0; i < _coloresAros.length; i++) {
       final fraccion = fraccionDelAro(pasos, i);
       // Si este tramo ni arrancó, los de más arriba tampoco: cortamos.

@@ -51,10 +51,9 @@ void main() {
     await montar(t);
     await t.tap(find.text('Mis cupones'));
     await t.pumpAndSettle();
-    // Los usados y vencidos viven en un desplegable cerrado (reunión del
-    // 2 de octubre de 2026): se abre para verlos todos.
-    await t.ensureVisible(find.byKey(llaveDesplegableHistorial));
-    await t.tap(find.byKey(llaveDesplegableHistorial));
+    // De los usados y vencidos se ven dos; "Ver más" trae el resto.
+    await t.ensureVisible(find.byKey(llaveVerMasHistorial));
+    await t.tap(find.byKey(llaveVerMasHistorial));
     await t.pumpAndSettle();
 
     for (final c in _cupones) {
@@ -74,13 +73,26 @@ void main() {
     }
   });
 
-  testWidgets('los usados y vencidos arrancan guardados', (t) async {
+  testWidgets('de los usados y vencidos se ven los dos más recientes', (
+    t,
+  ) async {
     await montar(t, vista: VistaPremios.cupones);
     expect(find.text('USADOS Y VENCIDOS'), findsOneWidget);
-    for (final c in _cupones.where((c) => !c.activo)) {
-      expect(find.byKey(llaveCupon(c.id)), findsNothing, reason: c.id);
+    final historial = _cupones.where((c) => !c.activo).toList()
+      ..sort((a, b) => b.canjeado.compareTo(a.canjeado));
+    for (var i = 0; i < historial.length; i++) {
+      expect(
+        find.byKey(llaveCupon(historial[i].id)),
+        i < cuponesHistorialVisibles ? findsOneWidget : findsNothing,
+        reason: historial[i].id,
+      );
     }
-    // El renglón dice cuántos hay sin abrirlo.
+    // El botón dice cuántos faltan.
+    expect(
+      find.text('Ver más (${historial.length - cuponesHistorialVisibles})'),
+      findsOneWidget,
+    );
+    // El título dice cuántos hay en total.
     expect(
       find.bySemanticsLabel(
         'Usados y vencidos, ${_cupones.where((c) => !c.activo).length}',
@@ -91,8 +103,8 @@ void main() {
 
   testWidgets('los usados y vencidos van abajo, aparte', (t) async {
     await montar(t, vista: VistaPremios.cupones);
-    await t.ensureVisible(find.byKey(llaveDesplegableHistorial));
-    await t.tap(find.byKey(llaveDesplegableHistorial));
+    await t.ensureVisible(find.byKey(llaveVerMasHistorial));
+    await t.tap(find.byKey(llaveVerMasHistorial));
     await t.pumpAndSettle();
     expect(find.text('USADOS Y VENCIDOS'), findsOneWidget);
     final titulo = t.getTopLeft(find.text('USADOS Y VENCIDOS')).dy;

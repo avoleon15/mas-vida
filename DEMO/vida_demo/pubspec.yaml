@@ -108,8 +108,12 @@ flutter:
     # Animaciones Lottie. La moneda se usa en toda la app vía
     # lib/widgets/moneda_animada.dart.
     - assets/lottie/
-    # El logo de la marca, que va en el header de todas las pantallas.
-    - assets/img/
+    # El logo de la marca (va en el header de todas las pantallas) y el
+    # ícono de Hoy.
+    - assets/img/iconos/
+    # Las fotos de los premios de las semanas patrocinadas, las que rota
+    # el carrusel de la card de la semana.
+    - assets/img/patrocinadores/
     # Fotos de los comercios aliados, una carpeta por filtro de Premios.
     # Flutter NO recorre subcarpetas solo: cada una va listada aparte, y
     # si mañana se agrega un filtro nuevo hay que agregar su línea acá.

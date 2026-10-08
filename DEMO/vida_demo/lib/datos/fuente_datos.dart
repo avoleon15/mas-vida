@@ -77,9 +77,9 @@ class Datos {
     }
 
     i = Datos(
-      perfil: resultados[0] as Perfil,
+      perfil: _conLaSesion(resultados[0] as Perfil),
       historial: resultados[1] as Historial,
-      resumen: resultados[2] as ResumenAnual,
+      resumen: _resumenConLaSesion(resultados[2] as ResumenAnual),
       catalogo: resultados[3] as Catalogo,
       social: social,
     );
@@ -100,6 +100,136 @@ class Datos {
     // recarga automática con los datos todavía tibios.
     _ultimaRecarga = DateTime.now();
   }
+}
+
+// ============================================================
+// LA SESIÓN, ENCIMA DE LOS DATOS.
+//
+// Mientras no haya backend, el perfil sale del mock. Lo que el usuario
+// escribió al entrar —su nombre y su póliza— va ENCIMA, para que Mi Plan
+// y Perfil muestren lo suyo y no los datos de prueba. Con la API esto
+// sobra: el servidor ya devuelve el perfil de quien entró.
+// ============================================================
+
+/// Quién entró. Null antes del ingreso.
+Sesion? _sesionActiva;
+
+/// Avisa quién entró: ajusta [tienePoliza] y pone su nombre y su póliza
+/// sobre el perfil. Lo llaman el arranque y la pantalla de agregar
+/// póliza.
+void usarSesion(Sesion sesion) {
+  _sesionActiva = sesion;
+  tienePoliza.value = sesion.polizaVerificada;
+  final d = Datos.i;
+  Datos.i = Datos(
+    perfil: _conLaSesion(d.perfil),
+    historial: d.historial,
+    resumen: _resumenConLaSesion(d.resumen),
+    catalogo: d.catalogo,
+    social: d.social,
+  );
+  datosRecargados.value++;
+}
+
+const List<String> _mesesCortos = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
+/// "1 ene 2026", igual que las fechas del mock.
+String _fechaCorta(DateTime d) =>
+    '${d.day} ${_mesesCortos[d.month - 1]} ${d.year}';
+
+/// [perfil] con el nombre y la póliza de la sesión activa encima.
+///
+/// La póliza es anual: el año de póliza va del inicio de vigencia al día
+/// antes de la renovación, y la renovación cae un año después.
+Perfil _conLaSesion(Perfil perfil) {
+  final sesion = _sesionActiva;
+  if (sesion == null || sesion.esPrueba) return perfil;
+  final nombre = sesion.nombre.isEmpty ? perfil.nombre : sesion.nombre;
+  final escrita = sesion.poliza;
+  final p = perfil.poliza;
+  final a = perfil.aseguradora;
+
+  Poliza poliza = p;
+  Aseguradora aseguradora = a;
+  if (escrita != null) {
+    final inicio = escrita.inicioVigencia;
+    final renueva = DateTime(inicio.year + 1, inicio.month, inicio.day);
+    final cierra = renueva.subtract(const Duration(days: 1));
+    poliza = Poliza(
+      numero: escrita.numero,
+      titularYDependientes: '$nombre (titular)',
+      tipoPlan: p.tipoPlan,
+      sumaAsegurada: p.sumaAsegurada,
+      deducible: p.deducible,
+      coaseguro: p.coaseguro,
+      vigencia: '${_fechaCorta(inicio)} – ${_fechaCorta(cierra)}',
+      fechaRenovacion: _fechaCorta(renueva),
+      primaAnual: p.primaAnual,
+      formaPago: p.formaPago,
+      redCobertura: p.redCobertura,
+      estado: p.estado,
+      fechaNacimiento: sesion.fechaNacimiento == null
+          ? p.fechaNacimiento
+          : _fechaCorta(sesion.fechaNacimiento!),
+    );
+    aseguradora = Aseguradora(
+      nombre: escrita.aseguradora,
+      telefonoEmergencias: a.telefonoEmergencias,
+      telefonoServicio: a.telefonoServicio,
+      correo: a.correo,
+      horario: a.horario,
+      verificado: a.verificado,
+    );
+  }
+
+  return Perfil(
+    usuarioId: perfil.usuarioId,
+    nombre: nombre,
+    edad: perfil.edad,
+    zonaHoraria: perfil.zonaHoraria,
+    permisoHealthkit: perfil.permisoHealthkit,
+    poliza: poliza,
+    aseguradora: aseguradora,
+    usoDelSeguro: perfil.usoDelSeguro,
+  );
+}
+
+/// [resumen] con el año de póliza en cero si la sesión agregó la póliza
+/// después de jugar sin ella: 0 puntos, Nivel 0 y nada de cashback
+/// (Daniel, 8 de octubre de 2026). Lo de la semana y el mes sigue igual:
+/// es actividad, no el acumulado de la póliza.
+ResumenAnual _resumenConLaSesion(ResumenAnual r) {
+  if (_sesionActiva?.empiezaDeCero != true) return r;
+  return ResumenAnual(
+    anio: r.anio,
+    puntosAno: 0,
+    techoAnual: r.techoAnual,
+    nivel: 0,
+    cashback: const Cashback(porcentaje: 0, proyectadoQ: 0),
+    puntosSemana: r.puntosSemana,
+    puntosSemanaAnterior: r.puntosSemanaAnterior,
+    puntosMes: r.puntosMes,
+    rachaSemanas: r.rachaSemanas,
+    rachaHistorial: r.rachaHistorial,
+    monedas: r.monedas,
+    objetivosSemana: r.objetivosSemana,
+    actividadPorMes: r.actividadPorMes,
+    mesActualIndice: r.mesActualIndice,
+    monedasGanadasAnio: r.monedasGanadasAnio,
+  );
 }
 
 // ============================================================

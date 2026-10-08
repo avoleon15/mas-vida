@@ -237,13 +237,9 @@ class _SemanasTemporadaScreenState extends State<SemanasTemporadaScreen> {
                         child: TickerMode(
                           enabled: i == _vista,
                           child: RepaintBoundary(
-                            // Arriba de su página, con su alto natural.
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: _CardSemana(
-                                semana: _semanas[i],
-                                total: total,
-                              ),
+                            child: _PaginaSemana(
+                              semana: _semanas[i],
+                              total: total,
                             ),
                           ),
                         ),
@@ -508,12 +504,47 @@ class _DatoTemporada extends StatelessWidget {
   }
 }
 
-/// Una semana en su card: la cabecera azul y, en blanco, los objetivos.
-class _CardSemana extends StatelessWidget {
-  const _CardSemana({required this.semana, required this.total});
+/// Una página del carrusel: la card de la semana.
+///
+/// TODAS LAS CARDS MIDEN LO MISMO (pedido de Daniel, 3 de octubre de
+/// 2026): el alto lo pone la página, no el contenido, y lo que cambia de
+/// una semana a otra lo absorbe el pie (la foto del premio o lo que
+/// paga), que se estira o se achica. Así ninguna card es más alta que su
+/// vecina y el texto del premio nunca queda cortado.
+class _PaginaSemana extends StatelessWidget {
+  const _PaginaSemana({required this.semana, required this.total});
 
   final SemanaObjetivos semana;
   final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, espacio) => Align(
+        alignment: Alignment.topCenter,
+        child: _CardSemana(
+          semana: semana,
+          total: total,
+          alto: espacio.maxHeight,
+        ),
+      ),
+    );
+  }
+}
+
+/// Una semana en su card: la cabecera azul y, en blanco, los objetivos.
+class _CardSemana extends StatelessWidget {
+  const _CardSemana({
+    required this.semana,
+    required this.total,
+    required this.alto,
+  });
+
+  final SemanaObjetivos semana;
+  final int total;
+
+  /// El alto de la card, el mismo para todas las semanas.
+  final double alto;
 
   String get _estado => switch (semana.estado) {
     EstadoSemana.enCurso => 'ESTA SEMANA',
@@ -530,6 +561,7 @@ class _CardSemana extends StatelessWidget {
 
     return Container(
       key: llaveCardSemana(semana.numero),
+      height: alto,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppRadios.tarjeta),
@@ -545,7 +577,6 @@ class _CardSemana extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ---- LA CABECERA, EN EL AZUL DE MARCA ----
@@ -645,41 +676,31 @@ class _CardSemana extends StatelessWidget {
             ),
           ),
           // ---- LOS OBJETIVOS Y, AL PIE, EL PREMIO O LO QUE PAGA ----
-          // El pie es una franja BAJA (pedido de Daniel, 2 de octubre de
-          // 2026: estirado hasta abajo, el carrusel pesaba más que la
-          // semana). La card mide lo que tiene adentro; en un teléfono
-          // chico lo que no entra se recorta abajo, nunca se scrollea.
-          Flexible(
-            child: CustomScrollView(
-              shrinkWrap: true,
-              // Nunca el scroll "primario": ese lo comparte el carrusel
-              // de las semanas, y engancharse a él lo rompe.
-              primary: false,
-              // SIN SCROLL VERTICAL (pedido de Daniel, 2 de octubre de
-              // 2026): la pantalla solo se mueve de lado. Lo que no
-              // entra es el pie, y ese se esconde solo.
-              physics: const NeverScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-                  sliver: SliverToBoxAdapter(
-                    child: TarjetaSemana(semana: semana, conTitulo: false),
+          // Los objetivos con su alto natural y el pie llenando lo que
+          // queda: es el pie el que se estira o se achica para que todas
+          // las cards midan lo mismo. Sin scroll vertical (pedido de
+          // Daniel, 2 de octubre de 2026).
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TarjetaSemana(semana: semana, conTitulo: false),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: LayoutBuilder(
+                      // En un teléfono muy chico, si no entra entero, el
+                      // pie no se dibuja: mejor nada que medio cartel.
+                      builder: (context, pie) => pie.maxHeight < altoMinimoPie
+                          ? const SizedBox.shrink()
+                          : patrocinio != null
+                          ? PremioSemana(semana: semana)
+                          : _LoQuePaga(semana: semana),
+                    ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                  sliver: SliverToBoxAdapter(
-                    // El premio trae su propio alto: la foto y, debajo,
-                    // lo que se gana.
-                    child: patrocinio != null
-                        ? PremioSemana(semana: semana)
-                        : SizedBox(
-                            height: altoPieDeSemana,
-                            child: _LoQuePaga(semana: semana),
-                          ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -688,9 +709,13 @@ class _CardSemana extends StatelessWidget {
   }
 }
 
-/// Alto del pie de cada card —el carrusel del premio o lo que paga—.
-/// Bajo a propósito: acompaña a la semana, no compite con ella.
+/// Lo que mide el pie de cada card —el carrusel del premio o lo que
+/// paga— cuando hay lugar de sobra.
 const double altoPieDeSemana = 118;
+
+/// Por debajo de esto el pie no se dibuja: no entra ni el renglón de lo
+/// que se gana. Pasa solo en teléfonos chicos.
+const double altoMinimoPie = 72;
 
 /// El pie de una semana SIN marca: las monedas que paga, en grande,
 /// con tres monedas apiladas al costado. Mide lo mismo que el carrusel

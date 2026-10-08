@@ -255,12 +255,15 @@ class _ArranqueState extends State<_Arranque> {
     if (sesion == null) {
       setState(() => _etapa = _Etapa.acceso);
     } else {
-      await _despuesDeEntrar();
+      await _despuesDeEntrar(sesion);
     }
   }
 
   /// Ya hay sesión: el permiso de Salud si nunca se pidió, y si no, Hoy.
-  Future<void> _despuesDeEntrar() async {
+  Future<void> _despuesDeEntrar(Sesion sesion) async {
+    // Con o sin póliza, y con SU nombre y SU póliza encima del mock: lo
+    // leen Premios, Social, Mi Plan y Perfil.
+    usarSesion(sesion);
     final yaSePidieron = await AlmacenPermisos.yaSePidieron();
     if (!mounted) return;
     setState(() => _etapa = yaSePidieron ? _Etapa.lista : _Etapa.permisos);
@@ -280,7 +283,7 @@ class _ArranqueState extends State<_Arranque> {
     final Widget pantalla = switch (_etapa) {
       _Etapa.acceso => AccesoScreen(
         key: const ValueKey('acceso'),
-        alEntrar: (_) => _despuesDeEntrar(),
+        alEntrar: _despuesDeEntrar,
       ),
       _Etapa.permisos => PermisosSaludScreen(
         key: const ValueKey('permisos'),

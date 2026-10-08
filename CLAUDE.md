@@ -13,7 +13,8 @@ con Apple y Google, Hoy sin racha ni cajas de etapas, objetivos que pagan
 por separado, pantalla de las 13 semanas, temporadas de 13 semanas,
 monedas que vencen por temporada y sin tope, Mi Plan con la escalera
 adentro de la tarjeta del cashback, La Liga
-por puntos con desempate por pasos, usados y vencidos en un desplegable)
+por puntos con desempate por pasos, usados y vencidos aparte —hoy dos a
+la vista y "Ver más"—)
 están aplicadas abajo y mandan sobre lo que digan los documentos vivos
 hasta que se actualicen.
 
@@ -204,10 +205,19 @@ saldo nunca queda negativo tras una reversión.
 Notas sobre la edad:
 - La fecha de nacimiento se pide **en el registro** (autoreportada) y se usa
   de inmediato para la FCmáx, aunque todavía no haya póliza. Cuando el usuario
-  vincula su póliza, la aseguradora la confirma. Si **coincide**, todo lo
-  ganado en la cuenta base (puntos y monedas) se acredita. Si **no
-  coincide**, no hay retroactividad: arranca en cero desde la verificación
-  (que ocurre al vincular la póliza).
+  vincula su póliza, la aseguradora la confirma. Si **no coincide**, la app
+  no lo deja seguir: le dice que sus dos fechas de nacimiento no coinciden
+  (Daniel, 8 de octubre de 2026; la pantalla todavía no existe).
+- **Quien juega sin póliza y después la agrega EMPIEZA DE CERO** (Daniel, 8
+  de octubre de 2026): sus puntos del año de póliza vuelven a 0 y su nivel
+  de cashback al Nivel 0: no tendría sentido cobrar cashback de un nivel
+  hecho antes de pagar la póliza. **Las monedas NO se reinician**: se
+  quedan como están. Antes de abrir el formulario, Mi Plan lo avisa en una
+  alerta de iOS ("Empiezas de cero", con "Cancelar" y "Siguiente"). En el
+  código, `Sesion.empiezaDeCero`. Esto reemplaza a la regla anterior de
+  este documento, que acreditaba todo lo ganado si la fecha coincidía.
+  [PENDIENTE: avisar a Alvaro y Luis, porque contradice
+  `arquitectura-cuentas-vivo.md`.]
 - El bonus 60+ y la FCmáx REQUIEREN validación médica/actuarial antes de salir
   a piloto. No son definitivos.
 - En la UI, cualquier mención al ajuste por edad debe tener tono cálido, nunca
@@ -451,15 +461,19 @@ Reglas visuales:
   la LUMINOSIDAD, no el matiz: se leen como escalones aunque no se
   distingan bien los colores
 - **Barras de progreso:** fondo vacío en `#E3E6F0`, relleno en azul
-- **El anillo de pasos de Home se mide desde CERO, no desde el piso de su
-  tramo** (bug que encontró Daniel el 21 de septiembre de 2026). El texto
-  del centro dice "8.000 de 10.000" y el aro tiene que verse a cuatro
-  quintos. Antes el aro de plata se llenaba de 7.000 a 10.000, así que
-  con 8.000 pasos se pintaba un tercio debajo de un texto que decía otra
-  cosa: dos escalas para el mismo dato. La fórmula vive en
-  `fraccionDelAro()` de `progress_ring.dart` y tiene tres reglas — un
-  tramo terminado queda completo debajo del siguiente, uno que no arrancó
-  queda en cero, y el que está EN CURSO vale `pasos / su techo`
+- **REGLA DURA — el anillo de pasos de Hoy se llena DENTRO DE SU TRAMO,
+  siempre, con o sin póliza** (Daniel, 8 de octubre de 2026: "no se te
+  puede olvidar porque entonces no hace sentido la app"). El bronce va de
+  0 a 7.000, la plata de 7.000 a 10.000 y el oro de 10.000 a 15.000. Con
+  7.150 pasos el bronce está completo y la plata apenas asoma (5%); a los
+  10.000 la plata cierra la vuelta. La fórmula vive en `fraccionDelAro()`
+  de `progress_ring.dart` y tiene tres reglas — un tramo terminado queda
+  completo debajo del siguiente, uno que no arrancó queda en cero, y el
+  que está EN CURSO vale `(pasos − piso) / (techo − piso)`. Al llenarse
+  con la animación, la plata arranca en cero al cruzar los 7.000, nunca
+  aparece de golpe. Esto reemplaza a la regla del 21 de septiembre, que
+  medía el tramo en curso desde cero (`pasos / techo`) y con 7.150 pasos
+  dejaba la plata casi llena: **no volver a ella**
 - **Header** (`lib/widgets/app_header.dart`, reutilizado en TODAS las
   pantallas): "+VIDA" pegado a la esquina superior IZQUIERDA, foto de
   perfil pegada a la DERECHA
@@ -613,8 +627,11 @@ resuelven, no por cómo se ven de fábrica.
   "Temporada 3" en grande y el **chip del saldo** a la derecha; tocarlo
   abre la temporada en tres datos (monedas ganadas en ella, semanas
   completas con los dos objetivos y cuándo vencen). **Ya no hay "Tu
-  temporada" debajo.** Una card por semana que **mide lo que tiene
-  adentro**, **sin scroll vertical**: la pantalla solo se mueve de lado.
+  temporada" debajo.** Una card por semana, **todas del MISMO alto**
+  (pedido de Daniel, 3 de octubre de 2026): el alto lo pone la página y
+  la diferencia entre semanas la absorbe el pie (la foto del premio o lo
+  que paga), que se estira o se achica; el texto del premio nunca se
+  corta. **Sin scroll vertical**: la pantalla solo se mueve de lado.
   Solo la card que se mira se anima (las monedas son Lottie: con todas
   girando la pantalla se trababa). Se abre con `rutaPesada`
   (`navegacion.dart`): al volver, la pantalla se desliza como una imagen
@@ -841,8 +858,10 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
     levantado de la vista. A 7 días de vencer, el "Vence en…" pasa a
     naranja (alerta real). Los que se ganaron llevan un regalo y
     "Semana 1"
-  - los **usados y vencidos** abajo, en una **lista desplegable** (reunión
-    del 2 de octubre de 2026), plana y apagada
+  - los **usados y vencidos** abajo, plana y apagada: **los dos más
+    recientes a la vista y un "Ver más"** con el resto (pedido de Daniel,
+    3 de octubre de 2026; reemplaza al desplegable cerrado de la reunión
+    del 2 de octubre, que dejaba la pantalla vacía)
   - tocar un boleto abre el **código en grande** en una hoja: el QR con
     las esquinas del visor en azul, el código escrito por si la caja no
     escanea, y cuándo vence
@@ -876,10 +895,40 @@ sale del mock y la marca de ejemplo (Ookii) es un placeholder de Diego.]
   fecha que manda la aseguradora es la de su **renovación** anual; una
   póliza médica no vence, solo deja de valer si la cancelan o la suspenden
   (2 de octubre de 2026)
-- **Sin póliza (cuenta base):** estado vacío con CTA "Ingresa tu póliza para
-  acceso completo" + **cotizador express**. "Póliza pendiente de verificación"
+- **Sin póliza (cuenta base):** la tarjeta azul del cashback **cerrada**
+  —el % de su nivel en grande, la escalera con su foto y un candado; sin
+  monto en quetzales, que sin prima no existe— y, fijos abajo, dos
+  botones: **"Agregar póliza"** (avisa que se empieza de cero y abre
+  `AgregarPolizaScreen`) y **"Buscar plan"**, sin etiqueta: el cotizador
+  todavía no se construye y tocarlo lo avisa (pedido de
+  Daniel, 8 de octubre de 2026). "Póliza pendiente de verificación"
   se trata exactamente igual que "sin póliza" — no hay un tercer estado
   visual
+
+**Sin póliza en toda la app** (pedido de Daniel, 8 de octubre de 2026). En
+el registro, el paso de la póliza ofrece **"Aún no tengo póliza"**. Esa
+cuenta ve la app completa —puntos, nivel, monedas, objetivos, Tus Ligas—
+pero el botón de canjear sale gris con candado, La Liga sale con candado
+y Mi Plan queda en los dos botones de arriba; Perfil cambia los datos de
+la póliza por "Agregar póliza", y Mis cupones dice que sin póliza no hay
+cupones, con un botón "Ir a Mi Plan".
+- **Del candado sale un globito AZUL**: "No tienes acceso a esta opción
+  porque no tienes póliza." (`globo_sin_poliza.dart`). No está puesto
+  desde antes: sale **animado** (crece desde el candado con un rebote
+  chico) un momento después de entrar, se queda **3 segundos** y se va; vuelve con el mouse encima de
+  la tarjeta o del botón (`ZonaSinPoliza`) y al tocarlos, que es el
+  "hover" de un iPhone. Flota con un `ShadPopover` —arriba del candado en
+  el canje, abajo en La Liga— y no empuja nada, así al irse no deja
+  hueco. Debajo del candado no va ningún otro texto ni enlace.
+- **Mi Plan es la única puerta a la póliza:** todo lo que ofrece agregarla
+  (Perfil, Mis cupones) lleva a Mi Plan (`irAMiPlan` en
+  `navegacion.dart`), y solo el "Agregar póliza" de Mi Plan abre el
+  formulario.
+
+Lo decide `tienePoliza` (`sesion.dart`),
+que el arranque ajusta con `usarSesion`. Mientras no haya backend, el
+servicio local da por verificada la póliza que se escribe, y su número,
+aseguradora y vigencia van encima del mock en Mi Plan y Perfil.
 
 **Perfil y Configuración + Consentimiento aseguradora** — diseñadas en
 Stitch, pendiente pasar a Flutter
@@ -909,6 +958,16 @@ de nacimiento: la primera vez se pide aparte. El servidor genera el
 póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
 seguro, lo manda en cada request HTTP y se lo entrega a Swift con
 `actualizarSesion`.
+
+**Mientras no haya backend, el ingreso se comporta como si lo hubiera**
+(pedido de Daniel, 8 de octubre de 2026: "lo más real que se pueda").
+`ServicioSesionLocal` guarda cada cuenta creada en el llavero del teléfono
+(`AlmacenCuentasLocales`, en `sesion.dart`): nombre, fecha de nacimiento,
+contraseña y póliza. Entrar pide un correo con cuenta y su contraseña;
+devuelve la sesión con SU nombre —Hoy saluda "Buenos días, Daniel"— y su
+estado de póliza. Un correo sin cuenta, una contraseña equivocada o un
+correo repetido al registrarse dan el mismo error que daría el servidor.
+Se borra el día que el ingreso hable con la API.
 
 ## Datos que se comparten con la aseguradora
 
@@ -972,6 +1031,11 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
 - El endpoint de patrocinios (qué semana y qué ciclo de liga están
   vendidos, con qué marca y qué cupón) — lo debe Luis. Hasta entonces sale
   del mock; la marca de ejemplo (Ookii) es un placeholder de Diego
+- **Mascota nueva** — la tortuga se descartó el 8 de octubre de 2026 y se
+  borró de la app (widgets, prototipo e imágenes). [PENDIENTE: elegir la
+  mascota que la reemplaza. Lo que se aprendió con la tortuga: que no se
+  parezca a un personaje conocido (la tortuga recordaba a Wartortle de
+  Pokémon) y que el tono sea amable, para todas las edades.]
 - Si el cupón de una semana patrocinada se SUMA al premio del catálogo o
   lo reemplaza. Hoy se construyó como premio adicional (las monedas del
   objetivo semanal se pagan igual), que es lo único que no contradice la
@@ -992,6 +1056,8 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   monedas (por semana o acumuladas). Hoy caducan al cerrar la season y no
   tienen tope.
 - Racha con fueguito en Hoy.
+- Anillo de pasos que mide el tramo en curso desde cero (`pasos / techo`):
+  hoy cada aro se llena dentro de su tramo.
 - Seasons cortadas el 1 de enero, abril, julio y octubre (hoy: 13 semanas ISO).
 - Lista blanca de fuentes; "gana la fuente con más pasos **del día**" entre
   todas. (No confundir con la regla vigente: los pasos se deciden **por hora**

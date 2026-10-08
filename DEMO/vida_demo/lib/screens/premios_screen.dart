@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../datos/fuente_datos.dart';
 import '../datos/modelos.dart';
+import '../navegacion.dart' show irAMiPlan;
 import '../theme.dart';
+import '../widgets/acceso_widgets.dart' show BotonPildora;
 import '../widgets/despliegue.dart';
 import '../widgets/app_header.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -150,9 +152,10 @@ class _PremiosScreenState extends State<PremiosScreen> {
             Expanded(
               // Se vuelve a dibujar cuando alguien refresca en CUALQUIER
               // pantalla, no solo acá: los datos son uno solo.
-              child: ValueListenableBuilder<int>(
-                valueListenable: datosRecargados,
-                builder: (context, _, _) {
+              child: ListenableBuilder(
+                listenable: Listenable.merge([datosRecargados, tienePoliza]),
+                builder: (context, _) {
+                  final conPoliza = tienePoliza.value;
                   final premiosFiltrados = _premiosFiltrados;
                   final vista = _vistaActual(context);
                   return CustomScrollView(
@@ -169,9 +172,12 @@ class _PremiosScreenState extends State<PremiosScreen> {
                               const SizedBox(height: 18),
                               _SelectorVista(
                                 vista: vista,
-                                cuponesActivos: cuponesActivos(
-                                  Datos.i.catalogo.cupones,
-                                ).length,
+                                // Sin póliza no hay cupones que contar.
+                                cuponesActivos: conPoliza
+                                    ? cuponesActivos(
+                                        Datos.i.catalogo.cupones,
+                                      ).length
+                                    : 0,
                                 onChanged: (v) => setState(() => _vista = v),
                               ),
                               if (vista == VistaPremios.tienda) ...[
@@ -188,7 +194,9 @@ class _PremiosScreenState extends State<PremiosScreen> {
                           ),
                         ),
                       ),
-                      if (vista == VistaPremios.cupones)
+                      if (vista == VistaPremios.cupones && !conPoliza)
+                        const SliverToBoxAdapter(child: _CuponesSinPoliza())
+                      else if (vista == VistaPremios.cupones)
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                           sliver: SliverToBoxAdapter(
@@ -929,6 +937,99 @@ class _SelectorVista extends StatelessWidget {
             ),
           ),
         },
+      ),
+    );
+  }
+}
+
+/// Llave del botón que lleva a Mi Plan desde Mis cupones, para los tests.
+const Key llaveCuponesIrAMiPlan = ValueKey('cupones-ir-a-mi-plan');
+
+/// Mis cupones para quien todavía no tiene póliza.
+///
+/// Sin tarjeta: un boleto con candado, una frase que dice por qué no hay
+/// cupones y el botón a Mi Plan, que es donde se agrega la póliza (pedido
+/// de Daniel, 8 de octubre de 2026). Sin póliza las monedas se juntan
+/// igual; lo que no se puede es canjearlas.
+class _CuponesSinPoliza extends StatelessWidget {
+  const _CuponesSinPoliza();
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 40, 28, 24),
+      child: Column(
+        children: [
+          // El boleto, con el candado colgado de la esquina.
+          SizedBox(
+            width: 84,
+            height: 76,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: const BoxDecoration(
+                    color: AppColors.azulBruma,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.tickets,
+                    size: 34,
+                    color: AppColors.accent,
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      shape: BoxShape.circle,
+                      boxShadow: AppSombras.tarjeta,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.lock_fill,
+                      size: 14,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          Semantics(
+            header: true,
+            child: Text(
+              'Sin póliza, sin cupones',
+              textAlign: TextAlign.center,
+              style: AppTheme.display(22),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Como todavía no tienes póliza, no tienes acceso a cupones. '
+            'Tus monedas se siguen juntando: agrega tu póliza desde Mi Plan '
+            'y las canjeas.',
+            textAlign: TextAlign.center,
+            style: tema.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 28),
+          BotonPildora(
+            key: llaveCuponesIrAMiPlan,
+            texto: 'Ir a Mi Plan',
+            icono: CupertinoIcons.arrow_right,
+            onPressed: () => irAMiPlan(context),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'healthkit_bridge.dart';
@@ -28,6 +29,18 @@ import 'cliente_api.dart';
 /// día que cambie, hay que volver a pedirlo.
 const String versionTerminos = '2026-09-30';
 
+/// Si quien usa la app tiene su póliza verificada.
+///
+/// Sin ella la app se ve COMPLETA —puntos, nivel, monedas, objetivos y
+/// sus competencias— pero no puede canjear premios ni entrar a La Liga,
+/// y Mi Plan solo ofrece agregar la póliza o buscar un plan ("gratis para
+/// jugar, pago para los beneficios", CLAUDE.md). Póliza pendiente de
+/// verificación cuenta como sin póliza: no hay un tercer estado.
+///
+/// Arranca en true para que los tests y las pantallas sueltas se vean
+/// como siempre; el arranque lo ajusta a la sesión que entró.
+final ValueNotifier<bool> tienePoliza = ValueNotifier<bool>(true);
+
 /// El usuario que entró.
 class Sesion {
   const Sesion({
@@ -36,6 +49,9 @@ class Sesion {
     required this.nombre,
     this.fechaNacimiento,
     this.polizaPendiente = false,
+    this.sinPoliza = false,
+    this.poliza,
+    this.empiezaDeCero = false,
     this.compartirConAseguradora = false,
     this.terminosAceptados,
     this.esPrueba = false,
@@ -57,6 +73,24 @@ class Sesion {
   /// tercer estado visual.
   final bool polizaPendiente;
 
+  /// Eligió "Aún no tengo póliza" al crear la cuenta y todavía no agregó
+  /// ninguna.
+  final bool sinPoliza;
+
+  /// Tiene la póliza vinculada y verificada: puede canjear y entra a La
+  /// Liga.
+  bool get polizaVerificada => !sinPoliza && !polizaPendiente;
+
+  /// La póliza que escribió al crear la cuenta o al agregarla después.
+  /// Mientras no haya backend, es lo que llena Mi Plan y Perfil encima de
+  /// los datos de prueba (ver `usarSesion` en `fuente_datos.dart`).
+  final PolizaRegistro? poliza;
+
+  /// Agregó la póliza DESPUÉS de jugar sin ella: sus puntos del año y su
+  /// nivel de cashback arrancan en cero con la póliza (Daniel, 8 de
+  /// octubre de 2026). Lo de la cuenta base no cuenta para la póliza.
+  final bool empiezaDeCero;
+
   /// Dio el consentimiento aparte para compartir el resumen diario con
   /// la aseguradora. Revocable.
   final bool compartirConAseguradora;
@@ -74,6 +108,9 @@ class Sesion {
     if (fechaNacimiento != null)
       'fecha_nacimiento': fechaNacimiento!.toIso8601String(),
     'poliza_pendiente': polizaPendiente,
+    'sin_poliza': sinPoliza,
+    if (poliza != null) 'poliza': poliza!.toJson(),
+    'empieza_de_cero': empiezaDeCero,
     'compartir_con_aseguradora': compartirConAseguradora,
     if (terminosAceptados != null) 'terminos_aceptados': terminosAceptados,
     'es_prueba': esPrueba,
@@ -87,9 +124,33 @@ class Sesion {
         ? null
         : DateTime.parse(j['fecha_nacimiento'] as String),
     polizaPendiente: j['poliza_pendiente'] as bool? ?? false,
+    sinPoliza: j['sin_poliza'] as bool? ?? false,
+    poliza: j['poliza'] == null
+        ? null
+        : PolizaRegistro.desdeJson(j['poliza'] as Map<String, dynamic>),
+    empiezaDeCero: j['empieza_de_cero'] as bool? ?? false,
     compartirConAseguradora: j['compartir_con_aseguradora'] as bool? ?? false,
     terminosAceptados: j['terminos_aceptados'] as String?,
     esPrueba: j['es_prueba'] as bool? ?? false,
+  );
+
+  /// La misma sesión con la póliza recién agregada. Quien la agrega
+  /// después de jugar sin ella empieza de cero.
+  Sesion conPoliza(
+    PolizaRegistro poliza, {
+    required bool pendiente,
+    required bool compartirConAseguradora,
+  }) => Sesion(
+    token: token,
+    correo: correo,
+    nombre: nombre,
+    fechaNacimiento: fechaNacimiento,
+    polizaPendiente: pendiente,
+    poliza: poliza,
+    empiezaDeCero: sinPoliza || empiezaDeCero,
+    compartirConAseguradora: compartirConAseguradora,
+    terminosAceptados: terminosAceptados,
+    esPrueba: esPrueba,
   );
 }
 
@@ -105,6 +166,18 @@ class PolizaRegistro {
   final String aseguradora;
   final String numero;
   final DateTime inicioVigencia;
+
+  Map<String, dynamic> toJson() => {
+    'aseguradora': aseguradora,
+    'numero': numero,
+    'inicio_vigencia': inicioVigencia.toIso8601String(),
+  };
+
+  factory PolizaRegistro.desdeJson(Map<String, dynamic> j) => PolizaRegistro(
+    aseguradora: j['aseguradora'] as String,
+    numero: j['numero'] as String,
+    inicioVigencia: DateTime.parse(j['inicio_vigencia'] as String),
+  );
 }
 
 /// Todo lo que junta el registro antes de crear la cuenta.
@@ -123,7 +196,8 @@ class DatosRegistro {
   final String contrasena;
   final DateTime fechaNacimiento;
 
-  /// Null si eligió "Lo hago después": la cuenta base funciona sin póliza.
+  /// Null si eligió "Aún no tengo póliza": la cuenta base funciona sin
+  /// ella.
   final PolizaRegistro? poliza;
 
   final bool compartirConAseguradora;
@@ -213,6 +287,14 @@ abstract class ServicioSesion {
 
   Future<Sesion> registrar(DatosRegistro datos);
 
+  /// Agrega la póliza a una cuenta que entró sin ella (desde Mi Plan,
+  /// Premios o Social).
+  Future<Sesion> vincularPoliza(
+    Sesion sesion,
+    PolizaRegistro poliza, {
+    bool compartirConAseguradora = false,
+  });
+
   /// Manda el enlace para crear una contraseña nueva. No dice si el
   /// correo tiene cuenta o no: eso le serviría a alguien para averiguar
   /// quién usa la app.
@@ -234,30 +316,95 @@ abstract class ServicioSesion {
   Future<void> cerrarSesion() => almacen.borrar();
 }
 
-/// Sesión sin backend: acepta cualquier correo y contraseña bien
-/// formados y guarda la sesión en el teléfono.
+/// Las cuentas creadas en ESTE teléfono, mientras no haya backend.
 ///
-/// Existe para que el flujo completo se pueda recorrer hoy, mientras el
-/// login de la app no habla con el servidor. No valida contra nada: NO
-/// es una cuenta de verdad.
+/// Es lo que hace que el ingreso se sienta real: quien creó su cuenta y
+/// después cerró sesión vuelve a entrar con su correo y su contraseña, y
+/// la app lo saluda con SU nombre y recuerda si tiene póliza, en vez de
+/// inventar un nombre a partir del correo.
+///
+/// Vive en el llavero de iOS, igual que la sesión. OJO: guarda la
+/// contraseña tal cual, porque no hay servidor que la verifique. Es un
+/// reemplazo de prueba y se borra el día que el ingreso hable con la API.
+class AlmacenCuentasLocales {
+  AlmacenCuentasLocales({FlutterSecureStorage? llavero})
+    : _llavero = llavero ?? const FlutterSecureStorage();
+
+  static const _clave = 'cuentas_locales';
+
+  final FlutterSecureStorage _llavero;
+
+  /// Las cuentas por correo, en minúsculas.
+  Future<Map<String, Map<String, dynamic>>> leer() async {
+    try {
+      final texto = await _llavero.read(key: _clave);
+      if (texto == null) return {};
+      final datos = jsonDecode(texto) as Map<String, dynamic>;
+      return datos.map((k, v) => MapEntry(k, v as Map<String, dynamic>));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>?> buscar(String correo) async =>
+      (await leer())[_llave(correo)];
+
+  Future<void> guardar(String correo, Map<String, dynamic> cuenta) async {
+    final cuentas = await leer();
+    cuentas[_llave(correo)] = cuenta;
+    try {
+      await _llavero.write(key: _clave, value: jsonEncode(cuentas));
+    } catch (_) {
+      // Sin llavero, la cuenta dura lo que dure la app abierta.
+    }
+  }
+
+  static String _llave(String correo) => correo.trim().toLowerCase();
+}
+
+/// Sesión sin backend: las cuentas viven en el teléfono
+/// ([AlmacenCuentasLocales]).
+///
+/// Crear una cuenta la guarda; entrar pide un correo que ya tenga cuenta
+/// y su contraseña, y devuelve la sesión con el nombre, la fecha de
+/// nacimiento y la póliza de esa cuenta. NO es una cuenta de verdad: no
+/// sale del teléfono.
 class ServicioSesionLocal extends ServicioSesion {
   ServicioSesionLocal({
     super.almacen,
+    AlmacenCuentasLocales? cuentas,
     this.demora = const Duration(milliseconds: 700),
-  });
+  }) : cuentas = cuentas ?? AlmacenCuentasLocales();
+
+  final AlmacenCuentasLocales cuentas;
 
   /// Lo que tarda cada operación. Sin ella el botón pasaría de "Entrar" a
   /// la pantalla siguiente sin que se alcance a ver que algo pasó.
   final Duration demora;
 
+  String _token() => 'local-${DateTime.now().millisecondsSinceEpoch}';
+
   @override
   Future<Sesion> iniciarSesion(String correo, String contrasena) async {
     await Future<void>.delayed(demora);
-    final sesion = Sesion(
-      token: 'local-${DateTime.now().millisecondsSinceEpoch}',
-      correo: correo,
-      nombre: nombreDesdeCorreo(correo),
-    );
+    final cuenta = await cuentas.buscar(correo);
+    if (cuenta == null) {
+      throw const ErrorSesion(
+        'No encontramos una cuenta con ese correo. Revisa cómo lo '
+        'escribiste o crea tu cuenta.',
+      );
+    }
+    if (cuenta['contrasena'] != contrasena) {
+      throw const ErrorSesion(
+        'El correo o la contraseña no coinciden. Revísalos e intenta de '
+        'nuevo.',
+      );
+    }
+    final sesion = Sesion.desdeJson({
+      ...cuenta,
+      'token': _token(),
+      'correo': correo.trim(),
+    });
     await almacen.guardar(sesion);
     return sesion;
   }
@@ -265,18 +412,58 @@ class ServicioSesionLocal extends ServicioSesion {
   @override
   Future<Sesion> registrar(DatosRegistro datos) async {
     await Future<void>.delayed(demora);
+    if (await cuentas.buscar(datos.correo) != null) {
+      throw const ErrorSesion(
+        'Ya hay una cuenta con ese correo. Entra con tu contraseña.',
+      );
+    }
     final sesion = Sesion(
-      token: 'local-${DateTime.now().millisecondsSinceEpoch}',
+      token: _token(),
       correo: datos.correo,
       nombre: datos.nombre,
       fechaNacimiento: datos.fechaNacimiento,
-      polizaPendiente: datos.poliza != null,
+      // Sin backend no hay aseguradora que la revise: la póliza que se
+      // carga queda verificada de una, para que el flujo se pueda
+      // recorrer entero. El servicio de la API sí la deja pendiente.
+      sinPoliza: datos.poliza == null,
+      poliza: datos.poliza,
       compartirConAseguradora: datos.compartirConAseguradora,
       terminosAceptados: versionTerminos,
     );
+    await cuentas.guardar(datos.correo, _cuenta(sesion, datos.contrasena));
     await almacen.guardar(sesion);
     return sesion;
   }
+
+  @override
+  Future<Sesion> vincularPoliza(
+    Sesion sesion,
+    PolizaRegistro poliza, {
+    bool compartirConAseguradora = false,
+  }) async {
+    await Future<void>.delayed(demora);
+    // Verificada de una, igual que en el registro (ver arriba).
+    final nueva = sesion.conPoliza(
+      poliza,
+      pendiente: false,
+      compartirConAseguradora: compartirConAseguradora,
+    );
+    // La cuenta también la recuerda: al volver a entrar ya tiene póliza.
+    final cuenta = await cuentas.buscar(sesion.correo);
+    if (cuenta != null) {
+      await cuentas.guardar(
+        sesion.correo,
+        _cuenta(nueva, cuenta['contrasena'] as String),
+      );
+    }
+    await almacen.guardar(nueva);
+    return nueva;
+  }
+
+  /// Lo que se guarda de una cuenta: todo lo de la sesión menos el token,
+  /// más la contraseña.
+  Map<String, dynamic> _cuenta(Sesion sesion, String contrasena) =>
+      {...sesion.toJson(), 'contrasena': contrasena}..remove('token');
 
   @override
   Future<void> recuperarContrasena(String correo) =>
@@ -293,6 +480,8 @@ class ServicioSesionLocal extends ServicioSesion {
 ///   · Pide también `usuario_id`. Lo debería generar el servidor; hasta
 ///     entonces se manda uno armado acá.
 ///   · No existe el endpoint para recuperar la contraseña.
+///   · No existe el endpoint para vincular la póliza a una cuenta que ya
+///     existe.
 ///   · No hay dónde guardar los consentimientos (términos y aseguradora).
 class ServicioSesionApi extends ServicioSesion {
   ServicioSesionApi({required this.cliente, super.almacen});
@@ -347,6 +536,8 @@ class ServicioSesionApi extends ServicioSesion {
         nombre: datos.nombre,
         fechaNacimiento: datos.fechaNacimiento,
         polizaPendiente: datos.poliza != null,
+        sinPoliza: datos.poliza == null,
+        poliza: datos.poliza,
         compartirConAseguradora: datos.compartirConAseguradora,
         terminosAceptados: versionTerminos,
       );
@@ -365,6 +556,20 @@ class ServicioSesionApi extends ServicioSesion {
   Future<void> recuperarContrasena(String correo) async {
     throw const ErrorSesion(
       'Todavía no podemos mandarte el enlace desde la app. Intenta más '
+      'tarde.',
+    );
+  }
+
+  /// OJO: el servidor todavía no tiene el endpoint para vincular la
+  /// póliza a una cuenta que ya existe (ver la nota de la clase).
+  @override
+  Future<Sesion> vincularPoliza(
+    Sesion sesion,
+    PolizaRegistro poliza, {
+    bool compartirConAseguradora = false,
+  }) async {
+    throw const ErrorSesion(
+      'Todavía no podemos agregar tu póliza desde la app. Intenta más '
       'tarde.',
     );
   }
