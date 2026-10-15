@@ -5,7 +5,7 @@ from io import StringIO
 from django.contrib.admin.sites import site
 from django.contrib.auth.models import User
 from django.core.management import call_command
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 
 from Apps.coins.models import MonedaLedger
 from Apps.core.models import FilaInmutable
@@ -118,6 +118,7 @@ class LedgerInmutableTests(TestCase):
 
     # --- sembrar_prueba no edita -----------------------------------------------
 
+    @override_settings(DEBUG=True)      # sembrar_prueba solo corre en tu computadora
     def test_sembrar_prueba_se_puede_correr_dos_veces(self):
         call_command("sembrar_prueba", stdout=StringIO())
         filas = Ledger.objects.count()

@@ -103,7 +103,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "Apps.coins",
     "Apps.policies",
-    "Apps.rewards",
     "Apps.activities",
     "Apps.poincs",
     'Apps.users.apps.UsersConfig',

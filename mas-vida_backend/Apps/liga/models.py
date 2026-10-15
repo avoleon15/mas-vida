@@ -40,33 +40,6 @@ class PremioPodioLiga(ModeloBase):
         return f"Puesto {self.puesto}: {self.monedas} monedas"
 
 
-# Del modelo viejo (premios por percentil, reemplazados el 3 oct 2026 por el
-# podio de PremioPodioLiga). Queda sin uso hasta decidir si se borra.
-class TramoPremio(ModeloBase):
-    orden = models.PositiveIntegerField(unique=True)
-    percentil_hasta = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        validators = (MinValueValidator(1), MaxValueValidator(100)),
-    )
-    premio_descripcion = models.CharField(max_length=255)
-    monedas = models.PositiveIntegerField(
-        null=True,
-        blank=True
-
-    )
-
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(
-                    percentil_hasta__gte=0,
-                    percentil_hasta__lte=100,
-                ),
-                name="ck_tramo_percentil_hasta_0_100",
-            ),
-        ]
-    
 class DesgloseLigaMensual(UserIdBase):
     liga_mensual = models.ForeignKey(
         LigaMensual,
@@ -81,18 +54,6 @@ class DesgloseLigaMensual(UserIdBase):
     # Monedas que le tocan por el podio (0 fuera del podio). Se fijan al cerrar el mes y se
     # pagan el día 9, aunque los montos se editen en el admin entre una fecha y otra.
     monedas = models.PositiveIntegerField(default=0)
-    percentil = models.DecimalField(
-        null=True, 
-        blank=True,
-        max_digits=5,
-        decimal_places=2,
-        validators=(MinValueValidator(1), MaxValueValidator(100)),
-        )
-    tramo_premio = models.ForeignKey(
-        TramoPremio,
-        null=True, blank=True,
-        on_delete=models.PROTECT
-    )
 
     class Meta:
         constraints = [
@@ -100,14 +61,7 @@ class DesgloseLigaMensual(UserIdBase):
                 fields=["usuario", "liga_mensual"],
                 name='uq_usuario_liga_mensual'
             ),
-        models.CheckConstraint(
-            condition=(
-                models.Q(percentil__isnull=True)
-                | models.Q(percentil__gte=0, percentil__lte=100)
-            ),
-            name="ck_desglose_percentil_0_100",
-        ),
-    ]
+        ]
         
 
 class LigaAmigos(ModeloBase):
@@ -117,7 +71,9 @@ class LigaAmigos(ModeloBase):
     )
     nombre = models.CharField(max_length=255)
     mes = models.DateField()
-    codigo_invitacion = models.CharField(max_length=255)
+    # Único en la base (etapa 7): el código se genera al azar y se revisa que no exista,
+    # pero dos grupos creados a la vez podrían sacar el mismo. Ver services/ligas.py.
+    codigo_invitacion = models.CharField(max_length=255, unique=True)
 
 class MiembroLigaAmigos(UserIdBase):
     liga_amigos = models.ForeignKey(
