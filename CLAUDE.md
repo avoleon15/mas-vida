@@ -1037,6 +1037,12 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   tope de 90; `logout` cierra un teléfono y `logout/todos` todos. La identidad sale
   del token, nunca del body. Swift decide "cambió la cuenta" por el `usuario_id`,
   no por el token (ver `contrato-tecnico.md`, "Autenticación (token)").
+- **Servidor del piloto (14 oct 2026):** EC2 en AWS con la base en RDS, con
+  `compose.prod.yaml` (gunicorn detrás de Caddy, que pone el HTTPS). Toda la
+  configuración sale de variables de entorno (`.env.example`); con `DEBUG` apagado el
+  backend no arranca sin `SECRET_KEY` ni `ALLOWED_HOSTS`. Tu computadora sigue con
+  `compose.yaml` y `DEBUG=true` en el `.env`. Detalle en el contrato, "Despliegue en el
+  servidor".
 - **Lo que no puede salir al piloto, apagado por defecto (6 oct 2026):** el botón
   "Acceder por prueba" (`--dart-define=ACCESO_DE_PRUEBA=true` lo prende) y los botones
   "Continuar con Apple/Google" mientras no existan sus endpoints
