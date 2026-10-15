@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 BACKEND = Path(__file__).resolve().parents[2]
 VARIABLES = (
@@ -122,3 +122,16 @@ class SinSecretosEnElCodigoTests(SimpleTestCase):
         texto = (BACKEND / "config" / "settings.py").read_text(encoding="utf-8")
         self.assertNotIn("django-insecure-", texto)
         self.assertNotIn("172.20.10.3", texto)
+
+
+@override_settings(WHITENOISE_USE_FINDERS=True, WHITENOISE_AUTOREFRESH=True)
+class EstilosDelAdminTests(SimpleTestCase):
+    """Con DEBUG apagado (como en el servidor) whitenoise sirve los estilos del admin."""
+
+    def test_el_css_del_admin_se_sirve(self):
+        r = self.client.get("/static/admin/css/base.css")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/css", r["Content-Type"])
+
+    def test_un_archivo_que_no_existe_da_404(self):
+        self.assertEqual(self.client.get("/static/admin/css/no-existe.css").status_code, 404)
