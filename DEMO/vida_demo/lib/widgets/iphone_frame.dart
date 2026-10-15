@@ -80,9 +80,7 @@ class IPhoneFrame extends StatelessWidget {
             top: _bezelWidth + 11,
             left: 0,
             right: 0,
-            child: Center(
-              child: _DynamicIsland(),
-            ),
+            child: Center(child: _DynamicIsland()),
           ),
 
           // Botones laterales (decorativos).

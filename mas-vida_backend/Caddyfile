@@ -1,0 +1,8 @@
+# Caddy recibe las conexiones en el puerto 443 (HTTPS) y 80 (las manda a HTTPS), saca y
+# renueva solo el certificado del dominio, y le pasa cada petición al backend. Avisa con
+# X-Forwarded-Proto y X-Forwarded-For que llegó cifrada y desde qué IP: por eso en el
+# .env va NUM_PROXIES_CONFIABLES=1.
+{$DOMINIO} {
+	encode gzip
+	reverse_proxy web:8000
+}
