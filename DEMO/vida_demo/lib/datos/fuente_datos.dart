@@ -222,8 +222,6 @@ ResumenAnual _resumenConLaSesion(ResumenAnual r) {
     puntosSemana: r.puntosSemana,
     puntosSemanaAnterior: r.puntosSemanaAnterior,
     puntosMes: r.puntosMes,
-    rachaSemanas: r.rachaSemanas,
-    rachaHistorial: r.rachaHistorial,
     monedas: r.monedas,
     objetivosSemana: r.objetivosSemana,
     actividadPorMes: r.actividadPorMes,
