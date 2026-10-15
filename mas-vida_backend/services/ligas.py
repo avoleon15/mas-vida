@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Sum
 
 from Apps.activities.models import ResumenDiario
@@ -367,17 +367,25 @@ def crear_liga(usuario, nombre: str, hoy: date) -> LigaAmigos:
     nombre = nombre.strip() if isinstance(nombre, str) else ""
     if not nombre or len(nombre) > LARGO_NOMBRE_LIGA:
         raise NombreInvalido(f"El nombre tiene que tener de 1 a {LARGO_NOMBRE_LIGA} caracteres")
-    codigo = _codigo()
-    while LigaAmigos.objects.filter(codigo_invitacion=codigo).exists():
+    # El código es único en la base: si dos grupos se crean a la vez con el mismo, la base
+    # rechaza el segundo y se prueba con otro.
+    for _ in range(5):
         codigo = _codigo()
-    with transaction.atomic():
-        liga = LigaAmigos.objects.create(
-            creador_usuario=usuario, nombre=nombre, mes=rango_mes(hoy)[0], codigo_invitacion=codigo,
-        )
-        MiembroLigaAmigos.objects.create(
-            usuario=usuario, liga_amigos=liga, pasos_acumulados_mes=0, fecha_union=hoy,
-        )
-    return liga
+        if LigaAmigos.objects.filter(codigo_invitacion=codigo).exists():
+            continue
+        try:
+            with transaction.atomic():
+                liga = LigaAmigos.objects.create(
+                    creador_usuario=usuario, nombre=nombre, mes=rango_mes(hoy)[0], codigo_invitacion=codigo,
+                )
+                MiembroLigaAmigos.objects.create(
+                    usuario=usuario, liga_amigos=liga, pasos_acumulados_mes=0, fecha_union=hoy,
+                )
+            return liga
+        except IntegrityError:
+            if not LigaAmigos.objects.filter(codigo_invitacion=codigo).exists():
+                raise           # chocó otra cosa, no el código
+    raise RuntimeError("No se pudo generar un código de invitación único")
 
 
 def unirse(usuario, codigo: str, hoy: date) -> LigaAmigos:

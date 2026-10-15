@@ -2,14 +2,16 @@
 
 Uso:  python manage.py sembrar_prueba
 
-Solo para desarrollo local. Se puede correr las veces que haga falta: si
+Solo para desarrollo local: con DEBUG apagado (el servidor) se niega a correr, porque
+crea una cuenta con una contraseña que está escrita aquí. Se puede correr las veces que haga falta: si
 el usuario o los puntos ya existen, no los duplica. Los puntos de un día ya
 sembrado se dejan como están (el ledger es append-only).
 """
 from datetime import date, timedelta
 
 from django.contrib.auth.models import User
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from Apps.policies.models import PolizaVinculada
@@ -43,6 +45,11 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError(
+                "sembrar_prueba es solo para tu computadora (DEBUG=true): crea la cuenta "
+                f"'{USERNAME}' con una contraseña que está en el código. No se corre en el servidor."
+            )
         version, _ = VersionRegla.objects.get_or_create(
             version=1,
             defaults={"vigente_desde": date(2026, 1, 1)},

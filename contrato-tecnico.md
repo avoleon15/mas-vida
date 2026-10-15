@@ -4,6 +4,11 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 14 oct 2026** (servidor, etapa 7): el backend queda listo para correr
+en un servidor (EC2 en AWS, con la base en RDS) para el test con 100 personas: la
+configuración sale de variables de entorno, corre con gunicorn detrás de Caddy (HTTPS)
+y no arranca mal configurado. No cambia ningún endpoint. Ver "Despliegue en el servidor".
+
 **Actualizado el 6 oct 2026** (cuenta y privacidad, etapa 14): el correo **no distingue
 mayúsculas** y no se repite entre cuentas; hay **consentimiento** para compartir los
 datos con la aseguradora (`/api/v1/consentimiento`, obligatorio para usar la app; el
@@ -2604,6 +2609,47 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 
 ---
 
+## Despliegue en el servidor (etapa 7, 14 oct 2026)
+
+Para el test con 100 personas el backend corre en **EC2 (AWS)** con
+`compose.prod.yaml`, y la base en **RDS**. Tu computadora sigue con `compose.yaml`.
+
+| Pieza | Qué hace |
+|---|---|
+| `web` | El backend con **gunicorn** (no `runserver`). El código va dentro de la imagen. Al arrancar corre las migraciones. Su puerto no se abre afuera |
+| `programador` | Los cierres del martes y de La Liga (días 2 y 9), igual que en local |
+| `caddy` | Recibe las conexiones (80 y 443), pone el **HTTPS** y renueva el certificado solo, y le pasa todo a `web` |
+| Base | **RDS** (no va en el compose). Respaldos los hace RDS |
+
+**Variables del `.env` del servidor** (ver `mas-vida_backend/.env.example`):
+
+| Variable | Valor en el servidor | Si falta |
+|---|---|---|
+| `SECRET_KEY` | Una nueva, solo para ese servidor (el comando para generarla está en `.env.example`). La que estaba en `settings.py` quedó en el historial de git y no se usa | No arranca |
+| `DEBUG` | No se pone (o `false`) | Queda apagado |
+| `ALLOWED_HOSTS` | El dominio, por ejemplo `api.masvida.com` | No arranca |
+| `CSRF_TRUSTED_ORIGINS` | `https://` + el dominio (para entrar al admin) | El admin no deja iniciar sesión |
+| `DOMINIO` | El dominio, para Caddy | `compose.prod.yaml` no arranca |
+| `NUM_PROXIES_CONFIABLES` | `1` (Caddy) | Todos comparten los límites por IP |
+| `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Los de RDS | No conecta |
+| `DB_SSLMODE` | `require` (conexión cifrada a RDS) | Sin cifrar |
+| `DB_CONN_MAX_AGE` | `60` | Una conexión nueva por petición |
+
+- **Con `DEBUG` apagado** el backend redirige a HTTPS, las cookies del admin viajan solo
+  cifradas, el navegador recuerda el dominio como seguro (HSTS de 30 días; subdominios y
+  *preload* apagados a propósito) y confía en el aviso de Caddy (`X-Forwarded-Proto`) de
+  que la conexión llegó cifrada. Los errores no muestran detalles.
+- **Comprobar antes de abrir:** `python manage.py check --deploy` dentro del contenedor
+  tiene que salir sin errores (quedan los avisos W005 y W021, de los subdominios del HSTS,
+  a propósito). El correo de desarrollo (`mail.E001`) está silenciado porque todavía no se
+  manda ningún correo.
+- **En tu computadora** el `.env` lleva `DEBUG=true`; sin `SECRET_KEY` ni `ALLOWED_HOSTS`
+  arranca igual y acepta cualquier IP (el teléfono entra por la del día).
+- **`sembrar_prueba`** se niega a correr con `DEBUG` apagado: crea una cuenta con una
+  contraseña escrita en el código.
+- **La URL de la app:** cuando exista el dominio, Swift cambia `http://192.168.1.21:8000`
+  por `https://<dominio>` (es de Alvaro/Swift, no del backend).
+
 ## Puntos abiertos
 
 *De la revisión completa (6 oct 2026):*
@@ -2620,9 +2666,8 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
   `sembrar_prueba`, que crea una cuenta con contraseña fija) y el estado "sin póliza"
   en la app (Premios con candado y Mi Plan con "Ingresa tu póliza").
 - **Login con correo o con usuario — [PENDIENTE]:** hoy la app manda el correo como
-  `username`. Aceptar las dos formas exige guardar el correo aparte, único y sin
-  distinguir mayúsculas ("Ana@" y "ana@" hoy son cuentas distintas). Para el piloto lo
-  más simple es solo correo.
+  `username`. Para el piloto lo más simple es solo correo. "Ana@" y "ana@" ya son la misma
+  cuenta (etapa 14, 6 oct).
 - **Límite de 2,5 MB del sync — [PENDIENTE]:** un día de más de ~8.000 muestras
   responde 400 en HTML y Swift lo toma como permanente (pierde ese día y frena los
   siguientes). Opciones: subir el límite a 10 MB con un tope de muestras y un 413 claro
@@ -2630,9 +2675,10 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 - **Plausibilidad anti-fraude — [PENDIENTE]:** una lectura de ritmo cardíaco de 95
   minutos o una sesión que no cuadra con su duración dan 150 puntos de intensidad. El
   techo de 200 puntos al día limita el daño; volver a verlo antes de usuarios reales.
-- **Servidor del piloto — [PENDIENTE]:** dónde vive el backend, su dominio y HTTPS; con
-  eso la URL deja de estar fija en `http://192.168.1.21:8000` (Swift). Va junto con el
-  bundle ID de más abajo.
+- **Servidor del piloto — en curso (14 oct):** EC2 en AWS con la base en RDS; el backend ya
+  está listo (ver "Despliegue en el servidor"). **[PENDIENTE]:** crear la máquina y la base
+  en AWS, y el **dominio**; con él, la URL de Swift deja de estar fija en
+  `http://192.168.1.21:8000`. Va junto con el bundle ID de más abajo.
 
 *Del 3 oct (sincronización):*
 
@@ -2692,9 +2738,8 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
 - ~~Días anulados y objetivo semanal~~ — **resuelto** (5 oct): no cuentan para la meta
   semanal ni para el desempate de las ligas (ver "Retroactividad").
 - **Programar `cerrar_semana` — resuelto en el repo (1 oct):** lo corre el
-  servicio `programador` de Compose (ver "Cierre semanal programado"). Falta
-  confirmar con quien despliegue que producción usa Compose; si no, hay que
-  programar las dos tareas de la tabla de esa sección.
+  servicio `programador` de Compose (ver "Cierre semanal programado"). En el servidor
+  también corre con Compose (`compose.prod.yaml`, 14 oct).
 - **`zona_horaria` y `app_version`:** el servidor los exige pero no los usa.
   Decidir si se usan (días en la zona del usuario, rechazar versiones viejas)
   o se dejan solo como dato.
@@ -2746,9 +2791,9 @@ ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
   en A35, 4 oct):** se vacían solo si entra **otra persona** (otro `usuario_id`);
   cerrar sesión solo borra el token. La cuenta que entra nueva recibe sus 7 días.
 - ~~Caducidad del token~~ — **hecha** (4 oct; A35 la pasó a Knox): vence a los 30 días
-  sin uso, cada uso la renueva, tope de 90 días y guardado como hash. Queda abierto
-  exigir HTTPS fuera de pruebas locales (paquete 7) y, más adelante, tokens de vida
-  corta con uno de renovación como las plataformas grandes.
+  sin uso, cada uso la renueva, tope de 90 días y guardado como hash. El servidor ya exige
+  HTTPS (etapa 7, 14 oct). Queda abierto, más adelante, tokens de vida corta con uno de
+  renovación como las plataformas grandes.
 - **`Token` o `Bearer` en el encabezado:** se dejó `Token` porque es lo que espera
   django-rest-knox (y antes Django REST Framework); `Bearer` es el estándar de OAuth 2.0 y se puede configurar
   más adelante.

@@ -6,7 +6,6 @@ from .models import (
     LigaMensual,
     MiembroLigaAmigos,
     PremioPodioLiga,
-    TramoPremio,
 )
 
 
@@ -39,5 +38,3 @@ class MiembroLigaAmigosAdmin(admin.ModelAdmin):
     list_display = ("liga_amigos", "usuario", "fecha_union")
 
 
-# Del modelo viejo (premios por percentil): sin uso desde el 3 oct 2026.
-admin.site.register(TramoPremio)

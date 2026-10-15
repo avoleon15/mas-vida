@@ -1,0 +1,60 @@
+# El backend en el servidor (EC2), para el piloto. Tu computadora sigue usando compose.yaml.
+#
+#   docker compose -f compose.prod.yaml up -d --build
+#
+# Lo que cambia frente a compose.yaml:
+# - gunicorn en vez de runserver, y el código va DENTRO de la imagen (no se monta tu carpeta).
+# - Caddy delante: pone el HTTPS (saca y renueva el certificado solo) y le pasa todo al backend.
+# - Sin base de datos: va en RDS. Su dirección y contraseña salen del .env del servidor.
+# - Todo se reinicia solo si se cae o si el servidor se reinicia.
+#
+# El .env del servidor necesita, además de la base: SECRET_KEY, ALLOWED_HOSTS,
+# CSRF_TRUSTED_ORIGINS, NUM_PROXIES_CONFIABLES=1, DB_SSLMODE=require y DOMINIO (el dominio
+# que apunta a este servidor). Ver .env.example.
+
+services:
+  web:
+    build: .
+    # Las migraciones corren una vez al arrancar; después, gunicorn.
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             exec gunicorn config.wsgi:application --bind 0.0.0.0:8000
+             --workers $${WEB_CONCURRENCY:-3} --timeout 60 --access-logfile -"
+    env_file:
+      - .env
+    # Solo se puede llegar a él a través de Caddy: el puerto 8000 no se abre afuera.
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  # Cierre semanal (martes) y de La Liga (días 2 y 9). Igual que en compose.yaml.
+  programador:
+    build: .
+    command: >
+      sh -c "until python manage.py migrate --check > /dev/null 2>&1;
+             do echo 'Esperando las migraciones...'; sleep 3; done &&
+             exec python manage.py programador"
+    env_file:
+      - .env
+    init: true
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Los certificados se guardan aquí: así no se piden de nuevo en cada reinicio.
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en el .env (el dominio que apunta a este servidor)}
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
