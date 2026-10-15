@@ -46,6 +46,10 @@ class HealthKitBridge {
   /// Le entrega a Swift el token de la sesión, o `null` cuando se cierra.
   /// Swift lo guarda en su propio Keychain y lo usa para firmar el `sync`.
   ///
+  /// [usuarioId] es el que devolvió el login o el registro. Con él Swift
+  /// sabe si entró otra persona (y entonces vacía la cola de días) o la
+  /// misma con un token nuevo (y la conserva). Sin él compara el token.
+  ///
   /// Se llama al entrar o registrarse (con el token), al cerrar sesión
   /// (con null) y cada vez que abre la app (con lo que haya): así la copia
   /// de Swift no se desincroniza ni después de reinstalar. Es idempotente.
@@ -53,11 +57,14 @@ class HealthKitBridge {
   /// Nunca falla hacia afuera: donde no hay lado nativo (Web, los tests)
   /// el canal no existe y se devuelve [EstadoSesionNativa.noDisponible].
   /// El token nunca se escribe en un log ni en un error.
-  Future<EstadoSesionNativa> actualizarSesion(String? token) async {
+  Future<EstadoSesionNativa> actualizarSesion(
+    String? token, {
+    String? usuarioId,
+  }) async {
     try {
       final respuesta = await _canal.invokeMapMethod<String, dynamic>(
         'actualizarSesion',
-        {'token': token},
+        {'token': token, 'usuario_id': usuarioId},
       );
       return switch (respuesta?['estado']) {
         'ok' => EstadoSesionNativa.ok,
@@ -67,7 +74,11 @@ class HealthKitBridge {
     } on MissingPluginException {
       return EstadoSesionNativa.noDisponible;
     } on PlatformException {
-      return EstadoSesionNativa.errorAlmacenamiento;
+      // Swift solo responde con error si los argumentos llegan mal
+      // (`ARGUMENTOS_INVALIDOS`): es un error de programación, no del
+      // Keychain. Las fallas del Keychain llegan como respuesta normal,
+      // con `estado: error_almacenamiento`.
+      return EstadoSesionNativa.desconocido;
     }
   }
 }
@@ -77,8 +88,16 @@ enum EstadoSesionNativa {
   /// Guardado, o borrado si vino null.
   ok,
 
-  /// Swift no pudo escribir en el Keychain: el `sync` no va a poder
-  /// firmar hasta el próximo intento (el próximo arranque lo reintenta).
+  /// Swift no pudo escribir o borrar en el Keychain, y **se queda con el
+  /// token que tenía antes**. Eso no siempre es inofensivo:
+  /// - primer ingreso (no había token): el `sync` no firma; los días
+  ///   quedan pendientes y no se pierde nada.
+  /// - cambio de cuenta: el `sync` sigue firmando con la cuenta ANTERIOR.
+  /// - cierre de sesión: el `sync` sigue mandando datos a la cuenta que
+  ///   se cerró.
+  ///
+  /// El próximo arranque lo vuelve a mandar y lo corrige; si importa
+  /// cerrar esa ventana, reintentar en el momento.
   errorAlmacenamiento,
 
   /// No hay lado nativo: Web o un test.

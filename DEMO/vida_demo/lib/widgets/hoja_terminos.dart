@@ -75,8 +75,9 @@ const List<SeccionTerminos> seccionesTerminos = [
         'y tus entrenamientos reconocemos cuándo entrenaste con intensidad, '
         'que también da puntos, y contamos los minutos de tus objetivos de '
         'la semana.',
-    'Si usas un reloj, sus datos tienen prioridad sobre los del teléfono '
-        'ese día. Nunca sumamos los dos: así un mismo paso no cuenta doble.',
+    'Si usas un reloj además del teléfono, en cada hora cuenta el '
+        'dispositivo que registró más pasos, y después se suman las horas. '
+        'Nunca sumamos los dos a la vez: así un mismo paso no cuenta doble.',
     'No usamos herramientas de publicidad ni de análisis de terceros sobre '
         'tus datos de Salud, y no los usamos para nada distinto de lo que '
         'dice acá.',
@@ -84,8 +85,8 @@ const List<SeccionTerminos> seccionesTerminos = [
   SeccionTerminos('Tu edad', [
     'Tu fecha de nacimiento ajusta cómo medimos la intensidad de tu '
         'ejercicio, para que un entrenamiento cuente según lo que es '
-        'intenso para alguien de tu edad. También define con quién compites '
-        'en La Liga, que se arma por grupos de edad.',
+        'intenso para alguien de tu edad, y define tu meta semanal de '
+        'pasos. La app es solo para mayores de 18 años.',
     'Cuando vinculas tu póliza, tu aseguradora confirma tu fecha de '
         'nacimiento. Si coincide, conservas todos los puntos y monedas que '
         'hayas ganado. Si no coincide, empiezas de cero desde el día en que '
@@ -100,8 +101,11 @@ const List<SeccionTerminos> seccionesTerminos = [
     'Puedes quitar esa autorización cuando quieras desde Perfil.',
   ]),
   SeccionTerminos('Lo que ven otros usuarios', [
-    'En La Liga y en Tus Ligas los demás participantes ven tu nombre y tu '
-        'posición en la tabla. Nunca ven tus datos de Salud.',
+    'En La Liga y en Tus Ligas los demás participantes ven tu nombre '
+        'público, tu posición en la tabla y tus puntos. Tu nombre público es '
+        'tu nombre y la inicial de tu apellido si tienes una póliza '
+        'verificada; si no, un código como "Usuario 4F2A". Nunca ven tus '
+        'pasos, tus entrenamientos ni ningún otro dato de Salud.',
   ]),
   SeccionTerminos('Puntos y niveles', [
     'Tus puntos nunca se gastan: definen tu nivel del año de póliza, del 0 al 4, y '
@@ -120,10 +124,11 @@ const List<SeccionTerminos> seccionesTerminos = [
     'Ganas monedas con cada objetivo de la semana que cumples y cuando '
         'quedas entre los 3 primeros de La Liga. Se canjean por premios en '
         'la tienda.',
-    'El año se divide en 4 temporadas de 13 semanas. Las monedas que '
-        'ganas en una temporada vencen cuando esa temporada cierra. No hay '
-        'límite para juntarlas.',
-    'Un cupón canjeado dura 60 días desde que lo canjeas.',
+    'El año se divide en 4 temporadas de 13 semanas; en los años con 53 '
+        'semanas, la última tiene 14. Las monedas que ganas en una '
+        'temporada vencen cuando esa temporada cierra. No hay límite para '
+        'juntarlas.',
+    'Un cupón dura 3 semanas (21 días) desde que lo canjeas o lo ganas.',
     'Sin póliza verificada ganas monedas igual, pero no las puedes canjear.',
   ]),
   SeccionTerminos('Uso justo', [
@@ -169,7 +174,7 @@ class HojaTerminos extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     'Incluye el aviso de privacidad y el permiso de Salud · '
-                    'Versión del 30 de septiembre de 2026',
+                    'Versión del 6 de octubre de 2026',
                     style: tema.bodySmall?.copyWith(
                       color: AppColors.textSecondary,
                     ),

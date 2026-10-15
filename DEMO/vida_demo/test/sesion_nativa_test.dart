@@ -12,16 +12,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const canal = MethodChannel('com.assures.masvida/healthkit');
 
-  /// Lo que Swift recibió, en orden.
+  /// Lo que Swift recibió, en orden (solo el token).
   late List<Object?> recibidos;
+
+  /// Lo mismo, con el `usuario_id`.
+  late List<Map<Object?, Object?>> argumentos;
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
     recibidos = [];
+    argumentos = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(canal, (llamada) async {
           if (llamada.method != 'actualizarSesion') return null;
           recibidos.add((llamada.arguments as Map)['token']);
+          argumentos.add(llamada.arguments as Map);
           return {'estado': 'ok'};
         });
   });
@@ -57,6 +62,41 @@ void main() {
     await pumpEventQueue();
     expect(recibidos, ['abc']);
   });
+
+  test(
+    'Swift recibe también el usuario_id, al entrar y al abrir la app',
+    () async {
+      final almacen = AlmacenSesion();
+      await almacen.guardar(
+        const Sesion(
+          token: 'abc',
+          usuarioId: 'u-ana',
+          correo: 'ana@correo.gt',
+          nombre: 'Ana',
+        ),
+      );
+      await almacen.leer();
+      await pumpEventQueue();
+      expect(argumentos, [
+        {'token': 'abc', 'usuario_id': 'u-ana'},
+        {'token': 'abc', 'usuario_id': 'u-ana'},
+      ]);
+    },
+  );
+
+  test(
+    'una sesión guardada antes de A35 (sin usuario_id) se sigue leyendo',
+    () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'sesion': '{"token":"abc","correo":"ana@correo.gt","nombre":"Ana"}',
+      });
+      final sesion = await AlmacenSesion().leer();
+      await pumpEventQueue();
+      expect(sesion?.token, 'abc');
+      expect(sesion?.usuarioId, isNull);
+      expect(argumentos.single, {'token': 'abc', 'usuario_id': null});
+    },
+  );
 
   test('sin lado nativo (Web, tests) no falla', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

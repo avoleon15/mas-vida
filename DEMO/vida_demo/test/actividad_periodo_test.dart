@@ -21,7 +21,7 @@ import 'ayudas.dart';
 //   · Que el tramo cambie con el filtro. Es la razón del rediseño.
 //   · Que cada entrenamiento diga los puntos que pagó, y que el que no
 //     pagó diga por qué en vez de mostrar un "+0".
-//   · Que la racha no vuelva: vive en Hoy y en Social.
+//   · Que la racha no vuelva: ya no existe en ninguna pantalla.
 // ============================================================
 
 Historial get historial => Datos.i.historial;
@@ -346,8 +346,8 @@ void main() {
   testWidgets('la racha ya no vive en Progreso', (t) async {
     await montar(t);
 
-    // Se ve en Hoy —en el saludo— y en Social. Entera y con su historial
-    // de ocho semanas era la tarjeta más alta de la pantalla.
+    // Ya no existe en ninguna pantalla. Entera y con su historial de ocho
+    // semanas era la tarjeta más alta de esta.
     expect(find.text('Tu racha'), findsNothing);
     expect(find.textContaining('ÚLTIMAS 8 SEMANAS'), findsNothing);
   });

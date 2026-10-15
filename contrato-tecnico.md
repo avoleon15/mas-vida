@@ -4,11 +4,60 @@ title: Contrato técnico — estado actual (iOS ↔ Backend ↔ Flutter)
 
 # Contrato técnico — +Vida
 
+**Actualizado el 6 oct 2026** (cuenta y privacidad, etapa 14): el correo **no distingue
+mayúsculas** y no se repite entre cuentas; hay **consentimiento** para compartir los
+datos con la aseguradora (`/api/v1/consentimiento`, obligatorio para usar la app; el
+bloqueo del sync está apagado hasta que Swift lo maneje); y **baja de cuenta**
+(`POST /api/v1/cuenta/baja`), que borra lo personal y conserva lo anónimo. Ver "Registro
+y login", "Consentimiento con la aseguradora" y "Baja de cuenta".
+
+**Actualizado el 6 oct 2026** (ciclos, monedas y cupones): el podio de La Liga se
+**paga el día 9** (el mes se sigue cerrando el día 2) para que las monedas y el cupón
+caigan en la season siguiente, y los **cupones duran 3 semanas (21 días)**, los
+canjeados y los ganados. La app dice "tus monedas llegan el día 9". Ver "Cierre de La
+Liga", "Monedas y seasons" y "Patrocinios".
+
+**Actualizado el 3 oct 2026** (cierre semanal): la semana se cierra el **martes
+00:00**, no el lunes: los datos atrasados del domingo tienen **todo el lunes**
+para llegar (como StepBet, 24 h). Ya está en el código (A34). El objetivo de la
+semana nueva se sigue fijando el lunes 00:00. Ver "Ciclos y cortes" y "Cierre
+semanal programado".
+
+**Actualizado el 3 oct 2026** (La Liga): las monedas de La Liga van a **los 3
+primeros** del mes, no por percentil. Ver "La Liga y Tus Ligas".
+
+**Actualizado el 3 oct 2026** (La Liga y Tus Ligas, backend): endpoints del
+ranking (`GET`/`POST /api/v1/ligas`, `POST /api/v1/ligas/unirse`) y cierre
+mensual de La Liga el día 2 a las 00:00 (el día 1 es margen de gracia), que
+paga el podio. Montos del podio y
+empate total con valores **provisionales**. Ver "Endpoints de La Liga y Tus
+Ligas".
+
+**Actualizado el 3 oct 2026** (premios y canje, backend): endpoints de saldo de
+monedas, catálogo, canje y cupones. Canjear exige póliza verificada y descuenta
+las monedas y crea el cupón en una sola transacción. Ver "Premios, canje y
+cupones".
+
+**Actualizado el 3 oct 2026** (sincronización): Swift ya no hace un backfill de
+una sola vez: **cada vez que la app se abre** (y al iniciar sesión y al dar el
+permiso de Salud) manda **desde el último día enviado hasta hoy**; la primera vez,
+los últimos 7 días, con puntos. El envío en **segundo plano** y las
+**notificaciones push** quedan decididos pero sin construir. La cola caduca a los
+14 días, el `422` de la ventana descarta solo ese día, y una respuesta ilegible
+del servidor cuenta como enviada. El wrapper de Dart ya tiene `actualizarSesion`.
+Ver "Cuándo se manda cada día" y "Puntos abiertos".
+
+**Actualizado el 3 oct 2026** (objetivo semanal por componente, backend): cada
+componente paga sus monedas por separado y la meta de pasos sale de la tabla por
+edad. `GET /api/v1/retos/estado` **se renombra** a `GET /api/v1/objetivos/estado`,
+con respuesta nueva, y se agrega `GET /api/v1/objetivos/semanas` para la vista
+tipo "battle pass". Ver "Respuesta de `GET /api/v1/objetivos/estado`".
+
 **Actualizado el 2 oct 2026** (reunión del equipo): inicio de sesión con Google y
 Apple; el objetivo semanal paga monedas **por componente** y su meta de pasos
 depende de la **edad**; vista de semanas tipo "battle pass"; **seasons de 13
 semanas** que siguen las semanas ISO; **monedas sin tope** que se reinician al
-cerrar cada season; **La Liga compite por puntos**, con desempate por pasos;
+cerrar cada season; **La Liga compite por puntos**, con desempate por pasos y luego workouts;
 datos que entrega la aseguradora, póliza y **prima anuales**; puntos anuales,
 nivel y cashback **por año de póliza** (no por año calendario); cashback en
 quetzales. Lo que cambia en el código quedó marcado **[PENDIENTE]**. Ver
@@ -31,7 +80,8 @@ Decidido en esta revisión: **cualquier workout de cualquier duración cuenta**
 hace el servidor con datos mal formados o imposibles en `sync`.
 
 **Actualizado el 1 oct 2026** (fuentes, workouts y póliza): la elección de
-fuente pasa de "gana el reloj" a **una decisión por hora** para los pasos; un
+fuente pasa de "gana el reloj" a **una decisión por bloque** (una hora, o varias si una
+muestra larga las cubre; ver "Pasos por bloques") para los pasos; un
 workout **necesita ritmo cardíaco** (sin reloj no hay workout, y los workouts
 ingresados a mano no cuentan); y se documentan los endpoints de póliza y la
 regla de retroactividad. Ver "Elección de fuente", "Qué cuenta como workout" y
@@ -44,7 +94,8 @@ pasa de 2 a 3 métodos (`actualizarSesion`); y Swift conserva los días
 pendientes cuando no hay sesión.
 
 **Actualizado el 23 sep 2026** (demo 1): objetivo semanal fijo e igual para
-todos, La Liga con un solo grupo y premios por percentil, Tus Ligas sin
+todos, La Liga con un solo grupo y premios por percentil (reemplazados el 3 oct
+por monedas al top 3), Tus Ligas sin
 póliza y sin premios, duelos 1 contra 1 eliminados. Todo "reto semanal" pasa a
 llamarse **objetivo semanal**.
 
@@ -98,7 +149,8 @@ campo dentro del JSON.
    Authorization: Token <clave>
    ```
 
-   La palabra es `Token` (así la espera Django REST Framework), no `Bearer`.
+   La palabra es `Token` (así la espera django-rest-knox, igual que antes Django REST
+   Framework), no `Bearer`.
 3. El servidor busca a quién pertenece ese token y trabaja con ese usuario.
    Nunca toma la identidad del cuerpo de la petición.
 
@@ -109,12 +161,65 @@ campo dentro del JSON.
 
 | Petición | Cuerpo | Respuesta |
 |---|---|---|
-| `POST /api/v1/registro` | `{ "username": string, "password": string, "birth_date": "YYYY-MM-DD" }` | `201` `{ "token": string, "username": string, "usuario_id": string }` |
-| `POST /api/v1/login` | `{ "username": string, "password": string }` | `200` `{ "token": string }` |
+| `POST /api/v1/registro` | `{ "username": string, "password": string, "birth_date": "YYYY-MM-DD" }` | `201` `{ "token": string, "expiry": string, "usuario_id": string, "username": string }` |
+| `POST /api/v1/login` | `{ "username": string, "password": string }` | `200` `{ "token": string, "expiry": string, "usuario_id": string? }` |
+
+- **Cada login o registro abre una sesión nueva con su propio token** (desde el 4 oct,
+  A35): dos teléfonos de la misma persona tienen tokens distintos.
+- `expiry` es cuándo vence hoy, en ISO 8601 con zona (`2026-11-04T10:15:00.123456-06:00`).
+  Es informativo: cada uso lo corre (ver "Reglas del token"), así que la app no lo
+  usa para decidir nada; decide por el `401`.
+- `usuario_id` es el mismo del registro. Flutter se lo pasa a Swift en
+  `actualizarSesion` para que sepa si cambió la persona. Es `null` solo en una cuenta
+  sin perfil (las que crea el admin), que no usa la app.
+
+**Solo mayores de 18 años** (decidido el 6 oct 2026, hecho en A37): el registro acepta
+fechas de nacimiento de **18 a 120 años**, contados con el día de Guatemala. Quien
+cumple 18 hoy puede registrarse; quien los cumple mañana, no. La regla vive en
+`services/edad.py` y la app ya la aplicaba en el selector de fecha
+(`edadMinima = 18`); ahora el servidor también la exige, para que no se salte
+llamando a la API directo. **[PENDIENTE]** que legal y la aseguradora confirmen los
+18 (no cambia el código).
+
+**El correo no distingue mayúsculas** (6 oct 2026). En las cuentas con contraseña el
+correo va en `username`. `Ana@Correo.com` y `ana@correo.com` son la misma cuenta:
+- El registro rechaza un correo que ya usa otra cuenta, sin importar las mayúsculas, y
+  también si lo tiene una cuenta de Google o Apple (en su `email`). Mismo `400` de
+  usuario repetido.
+- El login entra escribiéndolo con cualquier mayúscula (y sin espacios sobrantes). La
+  contraseña sí distingue mayúsculas.
+- Se guarda como lo escribió la persona; solo cambia cómo se compara. Dos índices
+  únicos en la base (`LOWER(username)` y `LOWER(email)` cuando no está vacío) lo
+  garantizan aunque dos registros lleguen a la vez (el segundo recibe el `400`, no un
+  `500`). Si la base ya tenía cuentas repetidas, la migración `users/0007` se detiene
+  y las lista para resolverlas a mano.
 
 Errores: `400` con un objeto `{ "<campo>": [mensajes] }` (usuario repetido,
-contraseña débil, fecha de nacimiento futura) o `{ "non_field_errors": [...] }`
-(credenciales incorrectas en el login).
+contraseña débil, fecha de nacimiento futura, menor de 18 o mayor de 120 años) o
+`{ "non_field_errors": [...] }`
+(credenciales incorrectas en el login). `429` si se pasó el límite de intentos
+(ver "Límite de intentos" abajo). El login y el registro no leen el encabezado
+`Authorization`: un token viejo o inválido no impide iniciar sesión ni crear la
+cuenta.
+
+### Cerrar sesión: `POST /api/v1/logout` y `POST /api/v1/logout/todos` (A35, 4 oct 2026)
+
+Con token, sin cuerpo. Los dos responden `204`; con un token inválido o vencido,
+`401`, como el resto.
+
+| Endpoint | Qué cierra |
+|---|---|
+| `POST /api/v1/logout` | **Solo esta sesión** (este teléfono): borra el token con el que se llamó. Los otros teléfonos de la cuenta siguen adentro |
+| `POST /api/v1/logout/todos` | **Todas las sesiones** de la cuenta, en todos sus teléfonos |
+
+La app, al cerrar sesión, manda `logout` **sin esperar la respuesta** y en el momento
+borra su copia y le entrega `null` a Swift con `actualizarSesion(null)`: con la red
+mala, esperar dejaba la pantalla quieta hasta 5 s. La petición sale con el token
+aunque la copia ya se haya borrado. Si no llega (sin red, el token ya había vencido,
+o la app se cerró en ese instante), el token queda en el servidor hasta que venza.
+`logout/todos` es para "Cerrar sesión en todos los dispositivos" y, más
+adelante, para cambiar la contraseña. Borrar la cuenta ya cierra todas las sesiones
+(ver "Baja de cuenta").
 
 ### Inicio de sesión con Google y Apple (decidido 2 oct 2026)
 
@@ -128,18 +233,52 @@ ofrecerlo si se ofrece Google (guía 4.8).
   mismo `sync`.
 - Ni Google ni Apple entregan la fecha de nacimiento. La primera vez se pide en
   un paso aparte y **sin ella no se crea la cuenta**: la edad decide la FCmáx,
-  el bono 60+ y la meta semanal de pasos.
+  el bono 60+ y la meta semanal de pasos. **Esa fecha pasa por la misma regla de
+  18 a 120 años** (`services/edad.py`, `problema_con_la_fecha_de_nacimiento`).
 - Apple puede ocultar el correo real (entrega uno de reenvío).
 - **[PENDIENTE] (Luis y Daniel):** la forma de los endpoints (propuesta:
   `POST /api/v1/login/google` y `POST /api/v1/login/apple` con la credencial
   del proveedor, respuesta `{ "token", "nuevo" }`), qué pasa si ya existe una
-  cuenta con ese correo, y normalizar el correo (hoy `Ana` y `ana` son dos
-  cuentas distintas).
+  cuenta con ese correo. El correo ya no distingue mayúsculas (6 oct): el login con
+  Google o Apple tiene que revisar `cuentas.correo_en_uso()` antes de crear la cuenta
+  (el índice único lo impide igual, pero con un error feo).
+- **Mientras no existan los endpoints, la app no muestra los botones** "Continuar con
+  Apple" y "Continuar con Google" (A37, 6 oct 2026; antes se veían y avisaban "Muy
+  pronto"): un botón de Apple que no entra es motivo de rechazo en la App Store, y
+  van los dos o ninguno (guía 4.8). Se prenden con
+  `--dart-define=ENTRAR_CON_PROVEEDORES=true`; el día que Luis los entregue se
+  cambia el valor por defecto en `acceso_screen.dart`.
+- **Desde A35:** el login con Google o Apple abre la sesión con
+  `sesiones.iniciar_sesion` (no con el `Token` de DRF) y responde también `expiry` y
+  `usuario_id`, como el login con contraseña.
 
 ### Reglas del token
 
-- Hay **un token por cuenta** y **no caduca** por ahora (ver "Puntos
-  abiertos").
+Desde A35 (4 oct 2026) los tokens son de **django-rest-knox** (antes, el de Django
+REST Framework: uno por cuenta, en texto plano y sin tope). Ver
+`services/sesiones.py`.
+
+- **Un token por sesión:** cada login o registro crea uno nuevo. Una cuenta tiene
+  **como mucho 10 sesiones**; al entrar la undécima se cierra **la que lleva más tiempo
+  sin usarse** (nunca la que se acaba de abrir). Como Knox no guarda el último uso, se
+  mide por el vencimiento, que cada uso corre; una sesión que ya llegó al tope de 90
+  días (se usó después del día 60) cuenta como usada hace poco.
+- **Vence a los 30 días SIN uso y cada uso lo renueva:** quien abre la app seguido no
+  se topa con el vencimiento. El vencimiento se escribe a lo más **una vez por hora**
+  (decidido el 5 oct 2026, como lo tenía Luis antes de A35): sobre 30 días no se nota
+  y la base se escribe mucho menos. Se cambia en `REST_KNOX["MIN_REFRESH_INTERVAL"]`.
+- **Tope de 90 días:** aunque se use a diario, a los 90 días de iniciar sesión hay que
+  volver a entrar. Así un token robado no sirve para siempre.
+- Un token vencido responde `401` en **todos** los endpoints (también `sync`) y la
+  app vuelve a la pantalla de inicio de sesión. Knox lo borra en ese momento.
+- **En la base de datos solo queda un hash** (SHA-512) del token, como con las
+  contraseñas: quien vea la base no puede usar los tokens. La clave completa se
+  entrega una sola vez, al entrar; no se puede volver a consultar.
+- Los días se cambian con `DIAS_DE_VIDA_DEL_TOKEN` (30) y `DIAS_MAXIMOS_DE_SESION` (90,
+  en `settings.py`).
+- **Al desplegar A35 nadie tiene que volver a entrar:** la migración `users/0006`
+  copia a Knox cada token vigente con la misma clave y el mismo vencimiento, y
+  borra los de texto plano. El tope de 90 días cuenta desde ese momento.
 - Se trata como una contraseña: nunca se escribe en logs ni en mensajes de
   error, y nunca viaja dentro del cuerpo de una petición.
 - Flutter guarda su propia copia para sus llamadas HTTP. A Swift se la entrega
@@ -149,9 +288,15 @@ ofrecerlo si se ofrece Google (guía 4.8).
 ### `usuario_id`
 
 Identificador **público** de la persona: un UUID que genera el servidor al
-registrarse y que devuelve en la respuesta del registro. Sirve para mostrar y
-compartir (hoy la app lo muestra en Perfil y lo usa como código para agregar
-amigos). **No identifica a quien manda datos y no viaja en ninguna petición.**
+registrarse y que devuelve en la respuesta del registro y, desde A35, también en
+la del login. Sirve para mostrar y compartir (hoy la app lo muestra en Perfil y
+lo usa como código para agregar amigos). **No identifica a quien manda datos y no
+viaja en ninguna petición al servidor.**
+
+En el teléfono, Swift lo usa para saber si entró otra persona: Flutter se lo pasa
+en `actualizarSesion` y Swift lo guarda en `UserDefaults` (clave
+`vida.cuentaDeLosEnvios`; no es secreto). Si llega uno distinto, vacía la cola y
+la marca de envíos (ver `actualizarSesion`).
 
 No confundir con la columna interna `usuario_id` de las tablas del servidor
 (`(usuario_id, external_id)`, `(usuario_id, fecha)`), que es la referencia a la
@@ -162,13 +307,67 @@ fila del usuario y no tiene relación con este campo.
 | Situación | Código | Cuerpo |
 |---|---|---|
 | Falta el encabezado | `401` | `{ "detail": "..." }` y el encabezado `WWW-Authenticate: Token` |
-| Token inválido | `401` | `{ "detail": "..." }` |
+| Token inválido (también un encabezado con caracteres que no son UTF-8, o un token que se cerró mientras se usaba) | `401` | `{ "detail": "..." }` |
+| Token **vencido** (30 días sin uso, o 90 desde que se entró) | `401` | `{ "detail": "..." }` y `WWW-Authenticate: Token`. El mismo texto que un token inválido: la app decide por el código |
 | Token válido pero la cuenta no tiene perfil de usuario | `403` | `{ "mensaje": "..." }` |
+| Demasiados intentos (registro, login o vincular póliza) | `429` | `{ "error": "demasiados_intentos", "mensaje": "...", "reintentar_en": 42 }` y `Retry-After: 42` |
 
 Los textos pueden salir en inglés (los mensajes estándar de Django REST
 Framework, como los de `401` o "This field is required.") o en español (los
 propios del proyecto, como el de `403`), y pueden cambiar: los clientes deciden
 **siempre por el código de estado**, nunca por el texto.
+
+### Límite de intentos (hecho 4 oct 2026)
+
+Sin límite, quien tiene un número de póliza (son correlativos) puede adivinar la
+fecha de nacimiento del titular probando días, y al acertar ve su nombre, plan y
+prima. Los intentos fallidos se guardan en la base de datos (no en memoria: valen
+igual con varios procesos del servidor y sobreviven a un reinicio). Al pasarse
+responde `429` con `reintentar_en` (segundos) y el encabezado `Retry-After`;
+mientras esté bloqueado, ni lo correcto pasa.
+
+| Dónde | Qué se cuenta | Límite |
+|---|---|---|
+| `polizas/vincular` | vinculaciones **rechazadas** de ese número de póliza, sumando todas las cuentas | 5 al día |
+| `polizas/vincular` | vinculaciones rechazadas de esa cuenta | 5 por hora |
+| `login` | contraseñas malas para ese usuario (existente o no) | 5 por minuto |
+| `login` | contraseñas malas desde esa IP | 30 por minuto |
+| `registro` | intentos desde esa IP, salgan bien o mal | 30 por hora |
+
+- Solo cuentan los **rechazos** (el registro cuenta todos): quien acierta a la
+  primera nunca se topa con el límite. Los datos mal formados (`400`) no cuentan.
+- Un usuario que no existe cuenta igual y responde lo mismo, así el límite no sirve
+  para saber qué usuarios existen. El usuario y el número de póliza se guardan como
+  un hash, nunca en claro.
+- **Por qué el login se limita sobre todo por cuenta:** muchas personas pueden llegar
+  con la misma IP (redes de celular, o Docker, donde todas las peticiones llegan
+  con la misma). Una cuenta bloqueada no deja afuera a las demás.
+- Se pueden cambiar sin tocar código con la variable de entorno
+  `LIMITES_DE_INTENTOS=login_ip=300/60,registro_ip=300/3600` (máximo/segundos; tipos:
+  `vincular_poliza`, `vincular_cuenta`, `login_cuenta`, `login_ip`, `registro_ip`),
+  por ejemplo para probar en local. Un formato roto detiene el arranque.
+- Detrás de un servidor web, la IP real viene en `X-Forwarded-For`: solo se lee con
+  `NUM_PROXIES_CONFIABLES` configurado (cuántos proxies propios hay delante), porque
+  cualquiera puede falsear ese encabezado. **Mientras no esté configurado, todas las
+  peticiones parecen venir de la IP del proxy** (paquete 7).
+- **Costo conocido:** quien conozca un número de póliza puede bloquear a su titular
+  durante un día con 5 intentos malos, y quien conozca un usuario, bloquear su login
+  por un minuto. Por eso el panel de administración tendrá que poder desbloquear
+  (ver `panel-admin.md`).
+
+### Qué hacen las apps (etapa 10)
+
+- **Flutter:** trata **cualquier `401`** como "volver a iniciar sesión" (token
+  vencido o inválido), con un `429` muestra el `mensaje` del servidor ("Demasiados
+  intentos...", nunca "la contraseña no coincide") y no reintenta antes de
+  `reintentar_en`; un `500` en el login o el registro es "algo salió mal", no un
+  problema de lo que se escribió. Al cerrar sesión llama a
+  `POST /api/v1/logout`. Guarda el `usuario_id` del login o el registro y se lo
+  pasa a Swift en `actualizarSesion`.
+- **Swift:** el `401` del `sync` ya es "token rechazado" (falla general: se corta la
+  vuelta y no se pierde nada). Como cada login trae un token nuevo, Swift ya no
+  decide "cambió la cuenta" por el token sino por el `usuario_id` (ver
+  `actualizarSesion`).
 
 ---
 
@@ -248,7 +447,7 @@ seguro reenviar todo — nunca hay que calcular un delta del lado del teléfono.
 
 | Campo | Tipo | Obligatorio | Notas |
 |---|---|---|---|
-| `fecha` | string (YYYY-MM-DD) | sí | día calendario que se está sincronizando. El servidor guarda todas las muestras que llegan y **recalcula ese día** con todas las guardadas que **empiezan** dentro de él, en hora de Guatemala |
+| `fecha` | string (YYYY-MM-DD) | sí | día calendario que se está sincronizando. El servidor guarda todas las muestras que llegan y **recalcula ese día** con todo lo guardado, en hora de Guatemala. **Desde el 5 oct 2026 también recalcula los demás días a los que pertenecen las muestras del paquete** (ver "Qué días recalcula un sync") |
 | `zona_horaria` | string (IANA) | sí | ej. `America/Guatemala`. El servidor valida que sea una zona IANA real, pero **hoy no la usa**: el día y la semana se cortan siempre en hora de Guatemala (`TIME_ZONE` del servidor). Para el piloto, todo en Guatemala, es lo mismo |
 | `pasos[]` | array | sí (puede ir vacío) | una entrada por muestra de `HKQuantitySample` de tipo `.stepCount` **medida por un sensor**: las escritas a mano en Salud no se mandan (ver "Lo escrito a mano no cuenta") |
 | `pasos[].external_id` | string (UUID) | sí | el `sample.uuid` de HealthKit — clave de idempotencia |
@@ -285,8 +484,8 @@ app que todavía lo mande no se rechaza: el servidor lo ignora.
 por `external_id` hace seguro reenviar todo. **Fuera de alcance:** sueño.
 
 **Cuándo NO se manda un día:** el sync manual de "hoy" manda el día aunque esté
-completamente vacío. La cola de reintentos (A8) y el backfill de 7 días (A9)
-**saltan** los días vacíos — un payload vacío es indistinguible entre "sin
+completamente vacío. La cola de reintentos y ponerse al día ("Cuándo se manda
+cada día") **saltan** los días vacíos — un payload vacío es indistinguible entre "sin
 actividad" y "permiso negado", y mandarlo haría que Luis lo diera por
 entregado para siempre. Ver "Días sin actividad" más abajo.
 
@@ -340,7 +539,7 @@ sin importar si son reloj, anillo o teléfono. La derivación de arriba se
 conserva para reportes y para saber qué dispositivo es cada uno, pero
 "`desconocido` se trata como `telefono`" ya no cambia ningún puntaje.
 
-### Elección de fuente — por hora (decidido 1 oct 2026)
+### Elección de fuente — por bloques (decidido 1 oct 2026; bloques desde el 5 oct 2026)
 
 Reemplaza la regla anterior "si hay reloj ese día, el reloj gana", que dejaba en
 cero a quien usa el reloj solo para dormir o solo para entrenar. **Nunca se
@@ -348,7 +547,7 @@ suma la misma actividad dos veces, y nunca se descarta actividad real.**
 
 | Métrica | Regla |
 |---|---|
-| **Pasos** | En **cada hora** (hora de Guatemala) gana el dispositivo con más pasos en esa hora; después se suman las horas. Una muestra cuenta en la hora en que **empieza**. |
+| **Pasos** | En cada **bloque** gana el dispositivo con más pasos; después se suman los bloques. Un bloque es **una hora** (hora de Guatemala) o, si una muestra de **más de una hora** las cubre, esas horas juntas (ver "Pasos por bloques"). Una muestra corta cuenta en la hora en que **empieza**. |
 | **Workouts** | Si dos dispositivos registran el mismo entrenamiento (se cruzan en el tiempo) cuenta **uno**, el más largo. Los que no se cruzan cuentan todos, aunque vengan de dispositivos distintos. |
 | **Intensidad** | Cada dispositivo calcula la suya con sus propias sesiones y su propio ritmo cardíaco; gana el de más puntos. No se suman. |
 
@@ -360,6 +559,43 @@ El día se **recalcula completo en cada sync** de esa fecha, a partir de lo
 guardado y no del último payload: un reloj de terceros que escribe a Apple
 Salud con horas de retraso corrige el resultado solo (con una fila de ajuste en
 el ledger, nunca editando una existente).
+
+### Pasos por bloques (hecho 5 oct 2026)
+
+Una app que escribe un total de varias horas de golpe (una pulsera con "11.000
+pasos de 8:00 a 18:00") antes caía entera en la hora en que empieza, y el iPhone
+ganaba las otras nueve: 12.000 pasos reales se contaban como 21.800.
+
+- Una muestra de **más de una hora** es larga: las horas que cubre se **funden en
+  un solo bloque** (y dos muestras largas que se cruzan, en uno). En cada bloque
+  gana el dispositivo con más pasos; no se suman. Una muestra de justo una hora o
+  menos es corta.
+- Las muestras **cortas** siguen contando en la hora en que empiezan, **aunque
+  crucen el cambio de hora** (8:51 a 9:09 cuenta en la hora 8). Si no, las lecturas
+  normales del iPhone encadenarían todo el día en un bloque y un reloj usado solo
+  en el gimnasio perdería su hora.
+- Una muestra que **cruza la medianoche** se reparte entre los dos días en
+  proporción al tiempo que pasa en cada uno; lo repartido suma siempre la cantidad
+  original (se calcula con el acumulado de cada borde, sin perder un paso por
+  redondeo). Una lectura sin duración cuenta entera en el día en que ocurre.
+- Una muestra de todo el día (0:00 a 24:00) compara el día entero: gana el
+  dispositivo con más pasos en total.
+
+### Qué días recalcula un sync (hecho 5 oct 2026)
+
+El sync nombra un día, pero cada muestra pertenece a un día: una que cruza la
+medianoche, un teléfono en otra zona horaria o un dato que el reloj sube tarde
+pueden viajar en el paquete de otro día. Antes se guardaban sin recalcular su
+día, que se quedaba con los puntos viejos hasta que alguien lo volviera a mandar.
+
+- El servidor recalcula **el día del sync y todos los días a los que pertenecen
+  las muestras del paquete**, del más viejo al más nuevo y en la misma
+  transacción. Los pasos pertenecen a todos los días que cubren; los workouts y el
+  ritmo cardíaco, al día en que empiezan.
+- Solo dentro de la **ventana de 14 días** y hasta hoy. Lo más viejo o futuro se
+  guarda pero no se recalcula (y no responde error). Un ciclo ya cerrado (semana,
+  liga) no se reabre: se corrigen los puntos y el historial, no el cierre.
+- La respuesta del sync sigue siendo la del día que nombra `fecha`.
 
 ### Qué cuenta como workout (decidido 1 oct 2026)
 
@@ -378,6 +614,13 @@ solo el teléfono no se registran workouts.
   simple de esas lecturas).
 - Un workout que cuenta suma a `workouts_dia` (dashboard) y al objetivo
   semanal, además de a los puntos de intensidad.
+- **Duración coherente (5 oct 2026):** la `duracion_min` no puede ser **mayor** que el
+  tiempo entre `inicio` y `fin` (puede ser menor: las pausas no cuentan). Se tolera el
+  minuto del redondeo (34 min 40 s se manda como 35). Una sesión que no cumple se
+  descarta como cualquier muestra imposible: se cuenta en `descartadas`, el resto del
+  paquete se acepta y la respuesta es `200`. Es porque los puntos de intensidad salen
+  de `duracion_min` (30, 60 o 90): un error o una falsificación podía dar 150 puntos
+  por "95 minutos" en un entrenamiento de 10:00 a 10:10.
 - **Duración (decidido 1 oct 2026):** cualquier workout, de cualquier duración,
   cuenta para `workouts_dia` y para el objetivo semanal. Los 30 minutos mínimos
   son solo para ganar **puntos de intensidad** (un workout de 10 min cuenta
@@ -432,12 +675,12 @@ HTTP directo contra la API de Luis — no viaja por acá.
 | `fecha` | string (YYYY-MM-DD) | eco del día sincronizado |
 | `puntos_pasos` | int | tabla de pasos: 7.000–9.999 = 25, 10.000–14.999 = 50, 15.000+ = 100. Debajo de 7.000: 0. **+25** si la persona tiene 60 años o más y ganó algo por pasos |
 | `puntos_intensidad` | int | FCM = 219 − edad. Escalón de **la mejor sesión del día** (no se suman): 30 min al 60% = 50, 30 min al 70% = 100, 60 min al 60% = 100, 90 min al 60% = 150. Cuentan los workouts y las sesiones que el servidor infiere del ritmo cardíaco. **+25** con 60 años o más si ganó algo por intensidad |
-| `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` |
+| `puntos_dia` | int | suma de los dos anteriores, con el techo diario de 200 pts ya aplicado. **Es lo que calculó el día, no necesariamente lo acreditado:** no refleja el techo anual ni un día anulado por retroactivo. Lo acreditado está en `GET /api/v1/historial` y, desde el 5 oct 2026, también en `dashboard/resumen` |
 | `tope_diario_aplicado` | bool | true si los puntos brutos pasaron de 200 (llegar a 200 justos no es recorte) |
-| `puntos_ano` | int | lo acreditado en el **año de póliza** en curso (desde la fecha de inicio o la última renovación de la póliza; suma del ledger), con el techo de 12.000 ya aplicado. **[PENDIENTE] (código):** hoy se cuenta del 1 de enero al 31 de diciembre |
+| `puntos_ano` | int | lo acreditado en el **año de póliza** en curso (desde la fecha de inicio o la última renovación de la póliza; suma del ledger), con el techo de 12.000 ya aplicado (hecho el 4 oct; ver "Cashback en quetzales"). Es el año **en curso**, aunque el día sincronizado sea de uno anterior. Sin póliza verificada es el año calendario, solo de referencia |
 | `tope_anual_aplicado` | bool | true si el techo del año de póliza **recortó lo de este día** |
 | `nivel` | int (0–4) | nivel de cashback del **año de póliza**, según `puntos_ano`: 0 bajo 2.500, 1 desde 2.500 (5%), 2 desde 5.000 (7,5%), 3 desde 10.000 (10%), 4 desde 15.000 (20%) — no confundir con el **objetivo semanal** (ver abajo) |
-| `pasos_totales_dia` | int | total de pasos del día con la regla por hora (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
+| `pasos_totales_dia` | int | total de pasos del día con la regla por bloques (ver "Elección de fuente"). Nunca es una suma cruda de `pasos[].cantidad` de dispositivos distintos |
 
 No incluye ningún campo que explique *por qué* se descartó una muestra, se
 detectó una sesión intensa, o se aplicó un techo — esa lógica es del backend.
@@ -459,12 +702,49 @@ Swift decide **por el código de estado**, nunca por el texto:
 |---|---|---|
 | `200` | Guardado | Confirma el día |
 | `400` | Payload inválido | Error permanente: no se reintenta |
-| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar) y el día queda pendiente; **no corta los demás días** ni saca el día de la cola |
-| `403` | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
+| `401` | Falta el token o es inválido | **No es permanente.** No envía (o deja de enviar), **corta la vuelta** (lo que quedaba fallaría igual) y el día queda pendiente: en la cola, o detrás de la marca de "último día enviado". No se pierde nada |
+| `403` con `{"error": "consentimiento_requerido", "version": "1"}` | La persona no tiene el consentimiento vigente (solo con el bloqueo encendido) | **Igual que el `401`: no es permanente.** El día queda pendiente y sale solo cuando acepte (ver "Consentimiento pendiente") |
+| `403` (cualquier otro) | La cuenta no tiene perfil de usuario | Error permanente: no se reintenta |
 | `408`, `429`, `5xx` | Tiempo agotado, demasiadas peticiones o caída del servidor | Se reintenta (el día va a la cola) |
 | `422` | `fuera_de_ventana` | Ver "Ventana de aceptación de datos rezagados" |
 
-Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep).
+Todas las filas describen lo que Swift hace hoy (la de `401` desde el 30 sep; la del
+`403` de consentimiento desde A38, 6 oct 2026). La fila de `401` decía que "no corta
+los demás días", y contradecía al código y a "Notas para Alvaro" y "Ventana de
+aceptación de datos rezagados": con un `401` la vuelta se corta (los días que no se
+intentaron siguen detrás de la marca, no se pierden).
+
+#### Consentimiento pendiente (`403 consentimiento_requerido`)
+
+**El servidor ya lo tiene** (PR #51, 6 oct) y viene **apagado**:
+`CONSENTIMIENTO_OBLIGATORIO=true` lo enciende (ver "Consentimiento"). Con A38 Swift lo
+trata como pendiente, así que se puede encender sin perder nada **en cuanto esta
+versión de Swift esté instalada y Flutter tenga la pantalla de consentimiento** (los dos
+requisitos de esa sección).
+
+- Swift lo reconoce por el código `403` **y** el motivo `consentimiento_requerido`, tal
+  como lo manda el servidor (`{"error": "consentimiento_requerido", "version": "1"}`;
+  la `version` se ignora). Si la forma cambiara pero el texto trajera el motivo,
+  también se reconoce. Cualquier otro `403` sigue siendo permanente.
+- Mientras el consentimiento esté pendiente la **marca de último día enviado no se
+  mueve**, y cada vez que la app abre Swift vuelve a calcular los mismos días desde la
+  marca (la primera vez, los últimos 7) y a leerlos de HealthKit. Por eso, **cuando la
+  persona acepta, se mandan solos** los días de la espera que sigan dentro de la
+  ventana: ningún día se borra por haber recibido este `403`.
+- Los días que estaban en la **cola de reintentos** (porque fallaron antes por red) y
+  son anteriores a la marca solo viven ahí: tratar el `403` como permanente los sacaba
+  de la cola y no volvían. Este es el caso que el cambio protege.
+- **Cuántos días llegan si la persona acepta tarde** (medido contra el servidor real
+  con el bloqueo encendido y una apertura de la app por día): la primera apertura deja en
+  la cola el día más viejo de la ventana, y ese día "ancla" lo que se manda al aceptar.
+  Quien acepta hasta **8 días** después de instalar recibe **todo lo que el servidor aún
+  acepta** (de 7 a 15 días, según cuánto tardó). Si tarda 9 o más, el ancla caduca (la
+  cola olvida lo de más de 14 días) y se mandan entre 7 y 11 días, según cuándo se volvió
+  a dejar en la cola. **Antes de A38 eran siempre 7.** Esto lo fija la prueba
+  `ConsentimientoRecorridoCompletoTests`. **[PENDIENTE]** (Alvaro) si la primera vez pasa
+  a 14 días, para que no dependa de este ancla.
+- Para Flutter, el envío manual de "hoy" con el consentimiento pendiente responde
+  `encolado` (como con el `401`), no `error_permanente`.
 
 #### Qué hace el servidor con datos raros
 
@@ -491,7 +771,8 @@ por eso se aplican antes: el resultado no depende del motor.
 
 Si el servidor no tiene ninguna versión de reglas vigente responde `500`, y
 Swift reintenta los `5xx`. **Una base migrada ya la trae:** la migración
-`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026), así que un
+`poincs/0007` carga la versión 1 (vigente desde el 1 ene 2026) y la `0008` la
+versión 2 (desde el 2 oct 2026), así que un
 despliegue limpio con `migrate` no tiene este problema. Solo ocurriría si
 alguien borra la versión. Cada fila del ledger queda sellada con la versión
 vigente en la fecha del día que puntúa.
@@ -531,6 +812,14 @@ cumpla cada uno.
 - Los valores (metas y monedas) viven en una tabla del backend, editable a
   mano — sin cálculo.
 
+**Hecho en el código (3 oct):** `services/goals.py`. La meta de pasos sale de la
+tabla `MetaPasosPorEdad` (editable en el admin) con la edad del usuario **el
+lunes de esa semana**: quien cumple años a media semana conserva la meta de su
+rango anterior hasta la semana siguiente. La meta de workouts y las monedas de
+cada componente viven en `ObjetivoSemanal`, también editables, y cada semana
+nueva copia las de la anterior. Un componente con 0 monedas no escribe nada en
+el ledger.
+
 ### Meta de pasos por edad — tabla provisional (2 oct 2026)
 
 | Edad | Pasos al día | Meta semanal de pasos |
@@ -561,8 +850,9 @@ lo que recomienda la evidencia de salud:
 **Es provisional:** después de 2 a 4 semanas de piloto se ajusta con los pasos
 reales de los usuarios de cada rango, que miden exactamente como mide la app.
 La edad sale de la fecha confirmada por la aseguradora si hay póliza
-verificada; si no, de la del registro. **[PENDIENTE] (Luis):** el código usa hoy
-una sola meta de 30.000 para todos.
+verificada; si no, de la del registro. **Hecho en el código (3 oct):** la tabla
+se carga con la migración `objetivos/0002`. Un menor de 18 usa, mientras no se
+decida otra cosa, la fila de 18 a 29 (ver "Puntos abiertos").
 
 ### Vista de semanas tipo "battle pass" (decidido 2 oct 2026)
 
@@ -573,9 +863,9 @@ monedas de cada componente, estado (completada, un componente cumplido, en
 curso o futura) y el **logo del patrocinador** si esa semana está vendida. Lo
 pidió la reunión para mostrar mejor la marca.
 
-**[PENDIENTE] (Luis):** hoy `GET /api/v1/retos/estado` devuelve solo la semana en
-curso. Falta un endpoint (o ampliar este) que devuelva la lista de semanas de
-la season, y el endpoint de patrocinios, que sigue pendiente desde septiembre.
+**Hecho en el código (3 oct):** `GET /api/v1/objetivos/semanas` (ver abajo).
+**Hecho en el código (4 oct):** `patrocinador` trae la marca de cada semana
+vendida (ver "Patrocinios"); en las demás viene en `null`.
 
 ### Diseño completo — cómo se mueve el objetivo semanal (se mantiene; vuelve después del demo)
 
@@ -615,26 +905,50 @@ lunes 4 ene 2027.
   reemplaza la regla anterior (corte el 1 de enero, abril, julio y octubre,
   aunque cayera a media semana).
 
-**[PENDIENTE] (Luis):** el código (`services/tiempo.py`) todavía calcula las
-seasons por trimestre de calendario: para el código la season 4 de 2026 empezó
-el jueves 1 oct, y según esta regla empezó el lunes 28 sep.
+**Hecho en el código (2 oct):** `services/tiempo.py` calcula las seasons por
+semanas ISO (`numero_season`, `anio_season` y `rango_season`). El año de la
+season es el **año ISO**: el 3 ene 2027 todavía es de la season 4 de 2026, y el
+29 dic 2025 ya es de la season 1 de 2026. `GET /api/v1/objetivos/estado` devuelve
+esa season, su `fecha_cierre` (domingo de cierre) y cuántas semanas tiene. La tabla `Season` se llena
+sola al pedir la season, y corrige las filas que se hayan guardado con la regla
+vieja de trimestres.
 
 ### Monedas y seasons (decidido 2 oct 2026)
 
 - **Sin tope de acumulación.** Reemplaza el tope de 100.
 - **Todas las monedas caducan al cerrar la season:** el saldo vuelve a 0.
   Reemplaza la caducidad de 90 días por cada ganancia.
-- **Orden al cambiar de season:** el lunes 00:00 en que empieza una season,
-  primero se reinicia el saldo y **después** se paga la semana que acaba de
-  cerrar. Así las monedas de la última semana cuentan en la season nueva.
+- **Orden al cambiar de season:** el saldo se reinicia el lunes 00:00 en que
+  empieza la season, y la semana que acaba de terminar se paga **después**, en
+  su cierre del martes 00:00. Así las monedas de la última semana cuentan en la
+  season nueva.
 - **Aviso:** se quita el aviso al llegar a 80 (existía por el tope). En su
   lugar se avisa **7 días antes** de que termine la season.
 - Sin póliza verificada se ganan igual pero no se pueden gastar, y al cerrar la
   season se reinician como las demás.
-- Los **cupones ya canjeados** no cambian: caducan a los 60 días del canje.
+- Los **cupones ya canjeados** no cambian con las seasons y caducan aparte, a las **3 semanas** del
+  canje (21 días; hasta el 5 oct eran 60).
 
-**[PENDIENTE] (Luis):** `services/monedas.py` aplica hoy el tope de 100 y la
-caducidad de 90 días, y nada reinicia el saldo al cambiar de season.
+**Hecho en el código (2 oct):** `services/monedas.py`.
+
+- Cada ganancia **caduca el domingo en que cierra la season en que se ganó**, y
+  ese día todavía se puede usar. El vencimiento se calcula **siempre de la
+  season de la fecha de la ganancia**, no de lo que haya quedado guardado en
+  `fecha_expiracion`: así las filas anteriores (guardadas con 90 días) también
+  siguen la regla nueva.
+- **El reinicio no necesita un proceso aparte.** Antes de leer o mover el saldo
+  se asientan las monedas vencidas con una fila `expiracion` negativa (el ledger
+  no se edita). Por eso el orden al cambiar de season sale solo: como la semana
+  que terminó se paga con la fecha de su cierre (el martes 00:00; el lunes es
+  margen de gracia) y las seasons empiezan en lunes, ese martes ya es de la
+  season nueva: primero se reinicia y después entra lo nuevo.
+- Las monedas se acreditan **sin tope**.
+- El servicio calcula cuántos días faltan para el cierre y si ya toca el aviso
+  (desde 7 días antes, inclusive el último domingo). Los dos vienen en
+  `season.dias_para_cierre` y `season.aviso_fin_de_season` de
+  `objetivos/estado` y `objetivos/semanas`.
+- **Hecho (3 oct):** `GET /api/v1/monedas/saldo`, que es lo que la app lee para
+  mostrar las monedas y el aviso. Ver "Premios, canje y cupones".
 
 ### Ciclos y cortes
 
@@ -644,92 +958,170 @@ caducidad de 90 días, y nada reinicia el saldo al cambiar de season.
   no ve ningún estado intermedio — la semana nueva ya aparece corriendo con
   normalidad desde las 00:00, sin pantalla de "evaluando" ni aviso de cambio
   de objetivo.
-- El servidor sigue aceptando datos atrasados de la semana recién cerrada
-  hasta el **mediodía del lunes** (período de gracia), pero esa corrida ya
-  **no cambia el objetivo** que se fijó a las 00:00 — solo corrige el
-  acumulado anual de puntos y el historial.
+- **Margen de gracia (decidido 3 oct 2026): el resultado de la semana se fija
+  el martes 00:00.** Los datos atrasados del domingo tienen **todo el lunes**
+  para llegar (por ejemplo, de alguien que no abrió la app el domingo) y
+  cuentan para `cumplido` y para las monedas. El martes 12:00 una corrida de
+  corrección actualiza los acumulados, pero ya no cambia `cumplido` ni paga. Un
+  ciclo cerrado no se reabre. Antes se cerraba el lunes 00:00 y un domingo que
+  llegaba tarde nunca completaba el objetivo (StepBet da 24 h; Discovery
+  Vitality, 48 h).
+- **El lunes**, la semana que terminó el domingo todavía no tiene resultado:
+  `GET /api/v1/objetivos/semanas` la devuelve con `estado: "en_revision"` hasta
+  el martes.
 - Huso horario: **zona horaria de Guatemala**, por ahora — para el piloto
   (todo Guatemala) una sola corrida alcanza.
 
-**Nota:** con esto, un día atrasado que llega entre las 00:00 y el mediodía
-del lunes ya no puede subirle ni bajarle el objetivo a nadie — solo cuenta
-para el historial y el acumulado anual. Es una simplificación deliberada: como
+**Nota:** con esto, un día atrasado que llega después del cierre del martes ya
+no puede subirle ni bajarle el objetivo a nadie — solo cuenta para el historial y
+el acumulado anual. Es una simplificación deliberada: como
 el objetivo ya no baja (se congela), el peor caso de decidir temprano es que
 alguien no suba de objetivo esa semana aunque en realidad sí había cumplido —
 no se pierde progreso acumulado, solo una semana de avance.
 
 **Por qué esto no viaja en el JSON #2:** cambia una vez por semana (o una vez
 por season), no en cada sync — incluirlo repetiría el mismo dato sin
-necesidad. Daniel lo consulta por HTTP directo: `GET /api/v1/retos/estado`
-(tickets L11 y D12), que también debe devolver la season actual, su fecha de
-cierre, y el historial de seasons pasadas. *El path conserva el nombre viejo
-"retos" — ver "Puntos abiertos".*
+necesidad. Daniel lo consulta por HTTP directo: `GET /api/v1/objetivos/estado`
+(tickets L11 y D12), que también devuelve la season actual, su fecha de
+cierre, y el historial de seasons pasadas. *Hasta el 3 oct se llamaba
+`GET /api/v1/retos/estado`; se renombró junto con el cambio de respuesta, antes
+de que la app lo consumiera. La ruta vieja ya no existe (404).*
 
-**Respuesta de `GET /api/v1/retos/estado` (demo 1):**
+**Respuesta de `GET /api/v1/objetivos/estado`** (con token; desde el 3 oct):
 
 ```json
 {
-  "objetivo": {
-    "meta_pasos": 30000,
-    "meta_workouts": 1,
-    "monedas_al_cumplir": 20,
-    "fecha_inicio": "2026-09-21",
-    "fecha_fin": "2026-09-27"
+  "semana": { "numero": 2, "fecha_inicio": "2026-10-05", "fecha_fin": "2026-10-11" },
+  "pasos": { "meta": 45000, "monedas": 5, "acumulados": 46000, "cumplido": true },
+  "workouts": { "meta": 1, "monedas": 5, "acumulados": 0, "cumplido": false },
+  "completada": false,
+  "season": {
+    "numero": 4,
+    "anio": 2026,
+    "fecha_inicio": "2026-09-28",
+    "fecha_cierre": "2027-01-03",
+    "semanas": 14,
+    "dias_para_cierre": 88,
+    "aviso_fin_de_season": false
   },
-  "progreso": {
-    "pasos_acumulados": 12400,
-    "workouts_acumulados": 0,
-    "cumplido": false
-  },
-  "season": { "numero": 3, "fecha_cierre": "2026-09-30" },
   "historial_seasons": []
 }
 ```
 
-`objetivo.monedas_al_cumplir` es lo que paga **hoy el código**: 20 monedas por
-cumplir los dos componentes. **[PENDIENTE] (2 oct):** pasa a pagarse por
-componente (5 + 5 provisional), así que la respuesta tiene que traer las
-monedas de cada componente y, en `progreso`, si se cumplió cada uno además de
-si la semana quedó completada. Las monedas ya no tienen tope y caducan al
-cerrar la season (ver "Monedas y seasons").
+- Todo es del usuario que pregunta. `semana.numero` es la semana **dentro de la
+  season** (1 a 13, o 14).
+- `pasos.meta` es la del **rango de edad del usuario** (ver "Meta de pasos por
+  edad"); `workouts.meta` es igual para todos. La app **no calcula** ninguna de
+  las dos.
+- `monedas` es lo que paga **ese componente** al cerrar la semana, aunque el
+  otro no se cumpla. `cumplido` dice si el componente ya alcanzó su meta.
+- `completada` es `true` solo con los dos componentes cumplidos.
+- `season.anio` es el año ISO de la season; `dias_para_cierre` cuenta hasta el
+  domingo de cierre (0 ese domingo) y `aviso_fin_de_season` se pone en `true`
+  desde 7 días antes: es el aviso de que las monedas se reinician.
+- `historial_seasons` viene vacío en el demo (no hay objetivo máximo que
+  registrar mientras no haya progresión).
+- `403` si la cuenta no tiene perfil de usuario; `401` sin token.
 
-`progreso` es del usuario que pregunta. La meta de workouts es igual para todos;
-la de pasos, desde el 2 oct, depende del rango de edad (**[PENDIENTE]** en el
-código, que hoy usa la misma para todos). `historial_seasons` viene vacío en el demo (no
-hay objetivo máximo que registrar mientras no haya progresión).
+**Respuesta de `GET /api/v1/objetivos/semanas`** (con token; vista tipo "battle
+pass"): la misma `season` y **todas las semanas de la season en curso**, en
+orden.
 
-**Cómo está construido hoy (backend, 1 oct):**
+```json
+{
+  "season": { "numero": 4, "anio": 2026, "fecha_inicio": "2026-09-28", "...": "..." },
+  "semanas": [
+    {
+      "numero": 1,
+      "fecha_inicio": "2026-09-28",
+      "fecha_fin": "2026-10-04",
+      "estado": "parcial",
+      "pasos": { "meta": 45000, "monedas": 5, "acumulados": 46000, "cumplido": true },
+      "workouts": { "meta": 1, "monedas": 5, "acumulados": 0, "cumplido": false },
+      "patrocinador": null
+    },
+    {
+      "numero": 3,
+      "fecha_inicio": "2026-10-12",
+      "fecha_fin": "2026-10-18",
+      "estado": "futura",
+      "pasos": { "meta": 45000, "monedas": 5, "acumulados": null, "cumplido": null },
+      "workouts": { "meta": 1, "monedas": 5, "acumulados": null, "cumplido": null },
+      "patrocinador": null
+    }
+  ]
+}
+```
 
-- Las metas de cada semana viven en la tabla `ObjetivoSemanal` y se editan a
-  mano en el admin. Cada semana nueva copia las metas de la anterior; la
-  primera arranca con 30.000 pasos y 1 workout.
-- `progreso` se calcula en vivo: la suma de `pasos_totales_dia` y de workouts
+- `estado`: `completada` (los dos componentes), `parcial` (uno solo),
+  `no_cumplida` (ninguno), `en_curso`, `en_revision` o `futura`.
+- **`en_revision` (3 oct):** el lunes, la semana que terminó el domingo sigue en
+  su margen de gracia hasta el cierre del martes 00:00 (ver "Ciclos y cortes").
+  Sus `acumulados` y `cumplido` vienen **en vivo y son provisionales**: todavía
+  pueden llegar datos del domingo. La app no la muestra como cumplida ni como no
+  cumplida.
+- Las semanas cerradas muestran lo que quedó guardado al cerrarlas, **con la
+  meta que se usó ese día** aunque después se edite la tabla. Si ya pasó el
+  margen y el cierre no corrió (por ejemplo, falló), se calculan en vivo.
+- En las `futura`, `acumulados` y `cumplido` vienen en `null`: solo se conocen
+  la meta y las monedas, que todavía se pueden editar en el admin.
+- `patrocinador` es la marca que compró esa semana (misma forma que el
+  `patrocinio` de La Liga, ver "Patrocinios") o `null` si no tiene. Sale en las
+  pasadas, la en curso y las futuras.
+
+**Cómo está construido hoy (backend, 3 oct):**
+
+- La meta de pasos sale de `MetaPasosPorEdad`; la de workouts y las monedas de
+  cada componente, de `ObjetivoSemanal`. Todo se edita a mano en el admin. Cada
+  semana nueva copia la meta de workouts y las monedas de la anterior; la
+  primera arranca con 1 workout y 5 + 5 monedas.
+- El avance se calcula en vivo: la suma de `pasos_totales_dia` y de workouts
   de `resumen_diario` de lunes a domingo.
-- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del lunes** fija
-  `cumplido` de la semana que terminó y paga `monedas_al_cumplir` a quien
-  cumplió; con `--correccion`, a las **12:00**, solo actualiza los acumulados
-  (no cambia `cumplido` ni paga). Correrlo dos veces no paga dos veces. Lo
-  dispara el servicio `programador` (ver "Cierre semanal programado").
+- El cierre lo hace el comando `cerrar_semana`: a las **00:00 del martes** (el
+  lunes es margen de gracia) guarda, por usuario, la meta de pasos que se usó, si
+  cumplió cada componente y si completó la semana, y **paga cada componente
+  cumplido por separado** (una fila `objetivo_cumplido` por componente). Con
+  `--correccion`, a las **12:00 del martes**, solo actualiza los acumulados (no
+  cambia el resultado ni paga). Antes del martes no cierra nada: el margen vive
+  en `goals.DIAS_DE_GRACIA` (1 día) y vale también para la puesta al día, así que
+  un servidor que arranca un lunes no cierra la semana antes de tiempo. Correrlo
+  dos veces no paga dos veces. Lo dispara el servicio `programador` (ver "Cierre
+  semanal programado").
+- Las semanas que se cerraron antes del 3 oct (cuando se pagaba todo junto) se
+  completan con la migración `objetivos/0002`: si estaban cumplidas quedan con
+  los dos componentes cumplidos; las monedas que ya se pagaron no se tocan.
 - Las monedas se ganan **con o sin póliza**; lo que exige póliza verificada es
-  **gastarlas**. Hoy el código aplica el tope de 100 y la caducidad de 90 días;
-  **[PENDIENTE] (2 oct):** sin tope y con reinicio al cerrar la season (ver
+  **gastarlas**. Sin tope, y caducan al cerrar la season (hecho el 2 oct; ver
   "Monedas y seasons").
-- **[PENDIENTE]** los días anulados por retroactivo denegado (ver "Póliza
-  vinculada") **sí** cuentan para el progreso de la semana en curso. Las
-  monedas solo se anulan si la semana entera cerró antes de la verificación.
+- Los días anulados por **retroactivo denegado** (ver "Retroactividad") **no
+  cuentan** para el progreso de la semana (decidido y hecho el 5 oct 2026): la
+  semana que cruza la verificación solo cuenta desde ese día. Los pasos de esos días
+  siguen guardados y visibles en Progreso. Las monedas de una semana que cerró
+  antes de la verificación se anulan; las de una que cierra después se pagan con lo
+  que cuenta.
 
-### Cierre semanal programado (1 oct)
+### Cierre semanal programado (1 oct; martes desde el 3 oct)
 
 **Quién lo corre.** El servicio `programador` de `mas-vida_backend/compose.yaml`,
 que ejecuta `python manage.py programador`:
 
-- **Al arrancar se pone al día:** cierra las semanas ya terminadas que sigan sin
-  cerrar, hasta **4 semanas atrasadas** (más viejas se omiten y queda un aviso en
+- **Al arrancar se pone al día:** cierra las semanas que ya pasaron su margen de
+  gracia y sigan sin cerrar, hasta **4 semanas atrasadas** (más viejas se omiten y queda un aviso en
   el log, para no pagar monedas de hace meses al arrancar por primera vez).
-- **Lunes 00:00** → cierre: fija `cumplido` y paga. También pone al día lo que
-  haya quedado pendiente, así que **un lunes que falló se recupera solo** en la
+- **Martes 00:00** → cierre: fija `cumplido` y paga. También pone al día lo que
+  haya quedado pendiente, así que **un martes que falló se recupera solo** en la
   corrida siguiente.
-- **Lunes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
+- **Martes 12:00** → corrección: actualiza los acumulados, sin pagar ni reabrir.
+- **Día 2 de cada mes, 00:00** → cierre de La Liga del mes anterior (ver
+  "Endpoints de La Liga y Tus Ligas"): tabla final y lo que gana cada uno, sin
+  pagar. El día 1 entero es margen de gracia, igual que el lunes para la semana.
+- **Día 9 de cada mes, 00:00** → pago del podio (`pago_liga`, 6 oct 2026): las monedas
+  y el cupón de La Liga. Si el día 2 o el 9 es martes no hay corrida aparte: la
+  hace el cierre semanal de esa hora, que también cierra y paga La Liga. Al
+  arrancar, el programador también cierra y paga los meses que hayan quedado
+  pendientes (si el servidor estuvo apagado el día 2, el pago cierra primero el
+  mes). El programador no agenda nada antes del primer mes de La Liga (octubre
+  de 2026).
 - Siempre **hora de Guatemala**, sin importar en qué zona esté el servidor.
 - Si una corrida falla (por ejemplo la base de datos caída un momento) reintenta
   cada 5 minutos, hasta 12 veces, y nunca se cae por un error. Si el servidor
@@ -745,9 +1137,9 @@ que ejecuta `python manage.py programador`:
 
 | Opción | Qué hace |
 |---|---|
-| (ninguna) | Cierra solo la semana anterior a hoy |
+| (ninguna) | Cierra solo la semana anterior a hoy (un lunes avisa que todavía está en su margen y no cierra) |
 | `--ponerse-al-dia` | Cierra todas las semanas terminadas sin cerrar (tope de 4) |
-| `--correccion` | Corrida de las 12:00: solo actualiza acumulados |
+| `--correccion` | Corrida del martes 12:00: solo actualiza acumulados |
 | `--fecha AAAA-MM-DD` | Trata esa fecha como "hoy" (para simular o recuperar) |
 
 `--ponerse-al-dia` no se combina con `--correccion`. `programador --una-vez` hace
@@ -759,16 +1151,16 @@ programan dos tareas semanales en el servidor. Guatemala es UTC−6 todo el año
 
 | Cuándo | Hora UTC | Comando |
 |---|---|---|
-| Lunes, cierre | 06:05 | `python manage.py cerrar_semana --ponerse-al-dia` |
-| Lunes, corrección | 18:05 | `python manage.py cerrar_semana --correccion` |
+| Martes, cierre | 06:05 | `python manage.py cerrar_semana --ponerse-al-dia` |
+| Martes, corrección | 18:05 | `python manage.py cerrar_semana --correccion` |
 
 Los cinco minutos de margen son a propósito. Si lo dispara un programador
 externo (por ejemplo uno de AWS) y el reloj del servidor va unos segundos
-atrasado, a las 06:00 en punto el comando todavía vería domingo en Guatemala y no
-cerraría nada hasta el lunes siguiente.
+atrasado, a las 06:00 en punto el comando todavía vería lunes en Guatemala y no
+cerraría nada hasta el martes siguiente.
 
-**Las monedas se pagan con la fecha del día en que corre el cierre**, no con la
-fecha de la semana que se cerró. Desde el 2 oct ya no caducan a los 90 días sino
+**Las monedas se pagan con la fecha del día en que corre el cierre** (el martes),
+no con la fecha de la semana que se cerró. Desde el 2 oct ya no caducan a los 90 días sino
 al cerrar la season (ver "Monedas y seasons"): una semana que se cierra con
 retraso, si mientras tanto empezó otra season, paga en la season nueva.
 
@@ -787,27 +1179,139 @@ toca el contrato.
 - **Compite por puntos** (decidido 2 oct 2026): la suma de los puntos del mes,
   los mismos que dan el cashback, **tal cual** (con el tope diario de 200 y el
   bono 60+). Antes competía por pasos.
-- **Desempate:** a igualdad de puntos gana quien tenga **más pasos** en el mes
-  (suma de `pasos_totales_dia`). La app lo explica con un botón de información.
+- **Desempate** (3 oct 2026): a igualdad de puntos gana quien tenga **más pasos**
+  en el mes (suma de `pasos_totales_dia`); si también empatan en pasos, gana
+  quien tenga **más workouts** en el mes (suma de `workouts_cantidad`). La app
+  lo explica con un botón de información.
 - **Qué se muestra:** los **puntos** de cada participante sí; la **cantidad de
-  pasos** nunca, ni siquiera para explicar un desempate (decidido 2 oct 2026).
+  pasos y de workouts** nunca, ni siquiera para explicar un desempate (decidido
+  2 oct 2026; los workouts se suman el 3 oct).
 - **Patrocinio:** algunos meses La Liga tiene una marca. Es la misma Liga, no
   una aparte: la marca se muestra arriba, junto al nombre de la liga,
-  destacada, y los 3 primeros ganan además un cupón de esa marca.
-  **[PENDIENTE] (Luis):** el endpoint de patrocinios.
-- **Premios por percentil** de la posición final: el corte de cada tramo es
-  `max(1, floor(N × percentil_acumulado))`. Tramos de partida: top 3% /
-  siguiente 7% (hasta 10%) / 10%–25% / "y así" (por definir). Luis calcula
-  posición, percentil y tramo **una sola vez, al cierre del mes**.
+  destacada, y los 3 primeros ganan además un cupón de esa marca. **Hecho
+  (4 oct):** ver "Patrocinios".
+- **Premio: monedas a los 3 primeros** del mes (decidido 3 oct 2026; reemplaza
+  los premios por percentil). Nadie más gana monedas en La Liga. El servidor
+  calcula la posición **una sola vez, al cierre del mes** (día 2), con el desempate
+  de arriba, y **paga las monedas el día 9** (6 oct 2026; antes se pagaban al cerrar).
+  Lo que gana cada uno se fija al cerrar: si se editan los montos del admin entre el
+  2 y el 9, se paga lo ya fijado.
+  - **Cuántas monedas a cada puesto (1.º, 2.º, 3.º): [PENDIENTE] (Diego).**
+    Mientras tanto el código paga **30, 20 y 10** (provisional, 3 oct),
+    editables en el admin (tabla `PremioPodioLiga`).
+  - **Empate total** (mismos puntos, pasos y workouts en el mes):
+    **[PENDIENTE]**. Opciones: compartir el puesto y la misma cantidad de
+    monedas, o desempatar por quien llegó antes a esos puntos. **Provisional en
+    el código (3 oct):** comparten el puesto y cada uno se lleva sus monedas; el
+    siguiente puesto se salta (1, 1, 3).
+  - Para ganar hay que tener **al menos 1 punto** en el mes: con 0 no se entra
+    al podio aunque haya menos de 3 participantes con puntos.
+  - El ranking devuelve `premios_monedas`: una lista con las monedas del 1.º, el
+    2.º y el 3.º (vacía si el grupo no premia, como Tus Ligas). Flutter ya la lee
+    (`GrupoRanking.premiosMonedas`).
+  - Con patrocinio, el cupón de la marca es **además** de las monedas, para los
+    mismos 3.
 
 **Tus Ligas:** grupos que crea o a los que se une el usuario. Ranking mensual
 **por puntos** entre miembros (decidido 2 oct 2026, igual que La Liga; antes era
-por pasos), con el mismo desempate por pasos, **sin premios y sin exigir póliza** (cambia el 23
+por pasos), con el mismo desempate (pasos y luego workouts), **sin premios y sin exigir póliza** (cambia el 23
 sep; antes exigían póliza).
 
 **Duelos 1 contra 1:** eliminados del demo 1 — no construir endpoints ni
-pantallas. Los endpoints de La Liga y de Tus Ligas: por definir con Luis y
-Daniel.
+pantallas.
+
+### Endpoints de La Liga y Tus Ligas (3 oct 2026)
+
+Con token; `403` si la cuenta no tiene perfil. **La forma sigue la de
+`social.json`** de la app (`GrupoRanking` y `RankingPersona`).
+
+**`GET /api/v1/ligas`** → La Liga (solo con póliza verificada) y después Tus
+Ligas del usuario, en el orden en que entró.
+
+```json
+{
+  "puede_entrar_a_la_liga": true,
+  "grupos": [
+    {
+      "id": "la-liga", "nombre": "La Liga", "tipo": "desconocidos",
+      "mostrar_puntos": true, "ciclo": "mes",
+      "miembros": [
+        { "nombre": "Ana M.", "puntos_periodo": 200, "posicion": 1, "tendencia": "subida", "es_usuario": false },
+        { "nombre": "Luis M.", "puntos_periodo": 150, "posicion": 2, "tendencia": "igual", "es_usuario": true }
+      ],
+      "liga": { "arranca": "2026-10-01", "cierra": "2026-10-31", "premios_monedas": [30, 20, 10], "patrocinio": null }
+    },
+    {
+      "id": "12", "nombre": "Oficina", "tipo": "conocidos",
+      "mostrar_puntos": true, "ciclo": "mes", "codigo": "K7QM2X", "creado_por_mi": true,
+      "miembros": [ "..." ],
+      "liga": { "arranca": "2026-10-01", "cierra": "2026-10-31", "premios_monedas": [], "patrocinio": null }
+    }
+  ]
+}
+```
+
+- `miembros` viene **ya ordenado** por el servidor: puntos del mes hasta hoy y,
+  a igualdad, pasos. **Nunca viajan los pasos.** `posicion` se repite en un
+  empate total.
+- `tendencia` compara la posición de hoy con la de ayer (`subida`, `bajada` o
+  `igual`; el día 1, todos `igual`).
+- **Nombre público:** con póliza verificada, el nombre y la inicial del apellido
+  que manda la aseguradora ("Ana M."); sin ella, "Usuario 4F2A" (del id
+  público). **Nunca el `username`**, que es la mitad del inicio de sesión.
+  **[PENDIENTE]:** decidir si cada quien elige un alias.
+- `puede_entrar_a_la_liga` es `false` sin póliza verificada: La Liga no viene
+  en `grupos` y la app muestra el CTA de vincular póliza.
+- Tus Ligas traen `premios_monedas` vacío (no premian) y `patrocinio` en `null`;
+  La Liga trae el `patrocinio` del mes si está vendido y `null` si no (ver
+  "Patrocinios").
+
+**`POST /api/v1/ligas`** `{"nombre": "Oficina"}` → **201** con el grupo nuevo
+(misma forma). Quien lo crea queda adentro. El código tiene 6 caracteres, sin
+O/0 ni I/1. `400` `nombre_invalido` si el nombre está vacío o pasa de 60
+caracteres.
+
+**`POST /api/v1/ligas/unirse`** `{"codigo": "k7qm2x"}` → **200** con el grupo.
+No distingue mayúsculas e ignora espacios. Repetirlo no duplica. `404`
+`codigo_invalido` si ningún grupo tiene ese código. No exige póliza.
+
+**`POST /api/v1/ligas/<id>/salir`** (sin cuerpo) → **204**. Sale de un grupo de
+Tus Ligas; `<id>` es el `id` del grupo.
+
+- **De La Liga no se sale:** con `la-liga` responde `400` `la_liga_no_se_sale`
+  (la app no debe ofrecer el botón de salir en La Liga).
+- `404` `no_eres_miembro` si el grupo no existe o el usuario no está adentro
+  (también al salir dos veces).
+- Los demás miembros siguen. Quien creó el grupo también puede salir: el grupo
+  no pasa a nadie. Si sale el **último** miembro, el grupo se **borra** y su
+  código deja de valer.
+- Se puede volver a entrar con el código. Lo que se acumuló sale de los puntos
+  del mes, no de la membresía, así que no se pierde ni se reinicia nada.
+
+**Cierre de La Liga.** El **día 2 a las 00:00** (hora de Guatemala) el
+servicio `programador` cierra el mes anterior. **Margen de gracia (3 oct
+2026):** el día 1 entero queda para que lleguen los datos atrasados del último
+día del mes (lo caminado el 31 y sincronizado el 1 todavía cuenta para el
+podio), con el mismo `goals.DIAS_DE_GRACIA` que el cierre semanal del martes.
+Guarda la tabla final de todos los participantes (`DesgloseLigaMensual`, con
+puntos, pasos, workouts, posición y las monedas que le tocan) **sin pagar**. Una
+sola vez por mes; un mes cerrado no se reabre. Participan los usuarios con póliza
+verificada **al momento del cierre**. El primer cierre es el **2 nov 2026**
+(octubre); los meses anteriores nunca se cierran.
+
+**Pago del podio (6 oct 2026).** El **día 9 a las 00:00** el programador paga lo que
+se fijó al cerrar: monedas `liga_mensual` fechadas ese día 9 y, si el mes tiene
+patrocinio, el cupón (ver "Patrocinios"). Una sola vez por mes (`LigaMensual.pagada_en`);
+pagar un mes que no está cerrado o antes del día 9 no hace nada. **Por qué el 9:** las
+seasons arrancan un lunes entre el 28 de sep y el 4 de oct (y análogo en enero, abril y
+julio); lo pagado el día 2 podía caer en la season que estaba por terminar y vencer a
+los pocos días (en 2027, por ejemplo, octubre arranca el día 4). El día 9 siempre es de
+la season nueva, así que lo ganado dura casi toda. Las monedas ganadas por el podio
+cuentan en la season del día en que se pagan, también si el pago se atrasa.
+**Dar a la app:** la app dice "tus monedas llegan el día 9" (texto fijo; el servidor no
+manda la fecha). Entre el 2 y el 9 la tabla ya es la final.
+
+A mano: `python manage.py cerrar_liga [--mes AAAA-MM]` cierra y, desde el día 9, paga.
 
 ---
 
@@ -880,12 +1384,23 @@ Salida: `{ "estado": string, "sincronizado_en": string?, "detalle": string? }`
 | `estado` | Qué significa | Qué hace Flutter |
 |---|---|---|
 | `ok` | Guardado en Luis. `sincronizado_en` viene con el timestamp | Confirmación normal |
-| `encolado` | Sin red o backend caído — el día quedó en cola local, se reintenta solo al volver del background | Aviso suave, **no** como falla — el dato no se perdió |
+| `encolado` | Sin red, backend caído, sin sesión o consentimiento pendiente (`403`) — el día quedó en cola local, se reintenta solo al volver a primer plano | Aviso suave, **no** como falla — el dato no se perdió |
 | `sin_acceso_a_salud` | No se pudo leer HealthKit — casi siempre permisos | Guiar a Ajustes › Salud › +Vida |
 | `error_permanente` | URL mal configurada o backend rechazó el payload (4xx) — no se reintenta | Usuario no puede resolverlo; registrar y reportar |
 
 `sincronizado_en` solo viene con `estado: ok` — leer como `String?`. `detalle`
 es texto técnico para logs, nunca mostrárselo crudo al usuario.
+
+**Respuesta ilegible (decidido 3 oct 2026):** si el servidor responde `2xx` pero
+Swift no entiende el cuerpo, el día **ya quedó guardado**: Flutter ve `ok` y
+Swift lo deja anotado en el log del dispositivo (solo la fecha y el código; ni
+el cuerpo ni el token). Es lo que hacen Google y Stripe: un éxito no se
+reintenta. Si aparece en el log, el servidor y la app ya no coinciden en el
+formato.
+
+**Flutter no necesita llamar a `sincronizar` para que los datos lleguen:** Swift
+se pone al día solo (ver "Cuándo se manda cada día"). Sirve para un "jalar para
+refrescar".
 
 **Sin token, o token rechazado (`401`):** no es `error_permanente`. Swift no pierde
 datos: el día queda pendiente y se envía cuando haya sesión. **Hoy Flutter ve
@@ -898,22 +1413,43 @@ Le entrega a Swift el token de la sesión actual, o le avisa que se cerró. Swif
 lo guarda en su propio Keychain y lo manda como `Authorization` en cada envío.
 
 Flutter lo llama:
-1. **Al iniciar sesión o registrarse**, con el token.
+1. **Al iniciar sesión o registrarse**, con el token y el `usuario_id` de la respuesta.
 2. **Al cerrar sesión**, con `null`.
 3. **Cada vez que abre la app**, con el token actual (o `null` si no hay
    sesión). Así la copia de Swift no se desincroniza, ni siquiera después de
    reinstalar: el Keychain sobrevive a desinstalar la app.
 
-Entrada: `{ "token": string? }` — `null` significa "no hay sesión".
+Entrada: `{ "token": string?, "usuario_id": string? }` — `token` en `null` significa
+"no hay sesión". `usuario_id` llega desde A35; una versión de Flutter que no lo manda
+sigue funcionando (ver abajo).
 
 Salida: `{ "estado": string, "detalle": string? }`
 
 | `estado` | Qué significa |
 |---|---|
 | `ok` | Guardado (o borrado, si vino `null`) |
-| `error_almacenamiento` | No se pudo escribir en el Keychain: el token no quedó guardado |
+| `error_almacenamiento` | No se pudo escribir o borrar en el Keychain, y **Swift se queda con el token que tenía antes**: en un primer ingreso no firma (los días quedan pendientes); al cambiar de cuenta o cerrar sesión **sigue mandando datos a la cuenta anterior** hasta el próximo arranque. Reintentar si importa cerrar esa ventana |
+
+En Dart, el wrapper devuelve `EstadoSesionNativa` (`ok`, `errorAlmacenamiento`,
+`noDisponible` sin lado nativo, `desconocido`) y **nunca lanza**, porque la
+sesión lo llama sin esperar la respuesta. Un `FlutterError` de Swift
+(`ARGUMENTOS_INVALIDOS`, error de programación) llega como `desconocido`.
 
 - Es **idempotente**: mandar el mismo token dos veces no cambia nada.
+- **Si entra otra persona**, Swift olvida hasta qué día se había mandado y **vacía
+  la cola**: empieza como la primera vez (sus 7 días) y no recibe días que esperaban
+  a nombre de la anterior. **Desde A35 "otra persona" se decide por el
+  `usuario_id`, no por el token** (4 oct 2026), porque cada login trae un token
+  nuevo: si la misma persona vuelve a entrar después de que su token venció, sigue
+  donde iba y no pierde los días de la cola. Es lo que hace el SDK de Rook
+  (`updateUserID` solo reinicia si cambia el usuario).
+  - `token` en `null` (cerró sesión o venció): **solo se borra el token**. La marca y
+    la cola esperan a ver quién entra. Swift recuerda el último `usuario_id`
+    (`UserDefaults`, clave `vida.cuentaDeLosEnvios`; no es secreto).
+  - Sin `usuario_id` se compara el token, como antes: el mismo token no cambia
+    nada; otro token cuenta como otra persona.
+- **Con un token, Swift se pone al día** sin esperar (ver "Cuándo se manda cada
+  día").
 - **No hay forma de leer el token desde Flutter** (no existe un método para
   eso). Flutter conserva su propia copia y, al cerrar sesión, borra **las dos**.
 - Swift lo guarda en el Keychain con acceso "después del primer desbloqueo"
@@ -922,28 +1458,63 @@ Salida: `{ "estado": string, "detalle": string? }`
   seguridad ni a otro teléfono**. Servicio `com.assures.masvida.sesion`, cuenta
   `token_api`. **Nunca se escribe en logs.**
 
-### Backfill de los últimos 7 días
+### Cuándo se manda cada día (decidido 3 oct 2026)
 
-Cuando `solicitarPermisos` confirma acceso, el lado nativo dispara
-automáticamente el sync de los últimos 7 días, **una sola vez por
-instalación** — no bloquea la respuesta de `solicitarPermisos` y no tiene un
-método propio. Solo se dispara con acceso confirmado (si no, la bandera de
-"ya hecho" se quemaría con cero datos guardados). Los días que fallen por red
-quedan en la cola de reintentos y drenan solos al volver a primer plano.
-**Si en ese momento no hay sesión, el backfill no se da por hecho** (la bandera de
-"ya hecho" no se enciende). Ojo: hoy **no** se reintenta solo al iniciar sesión;
-se reintenta la próxima vez que Flutter llame a `solicitarPermisos` y el acceso
-siga concedido. Por eso el orden de pantallas importa: sesión primero, permisos
-después (ver "Notas para Daniel").
+Antes había un backfill de 7 días **una sola vez por instalación**, y nadie
+mandaba los días nuevos: en la app real nadie llamaba a `sincronizar`, así que
+después del primer día el servidor no recibía nada. Se decidió tras comparar con
+Vitality, Betterfly, Sweatcoin, StepBet, Oura, Strava, Junction, Terra, Rook y
+Thryve (las plataformas especializadas combinan "al abrir" con "segundo plano").
+
+**Ponerse al día** — Swift lo hace solo, sin método propio, cuando:
+1. la app vuelve a primer plano (`SceneDelegate`);
+2. llega un token (`actualizarSesion`);
+3. `solicitarPermisos` confirma el acceso.
+
+Una vuelta a la vez. Qué manda:
+
+| Paso | Qué |
+|---|---|
+| 1. La cola | Los días que fallaron antes (caducan a los 14 días) |
+| 2. Desde la marca | Desde **el último día enviado** (otra vez: pudo sumar pasos después) **hasta hoy**, del más viejo al más nuevo, sin pasar de la ventana del servidor (15 días con hoy) |
+| La primera vez | Sin marca (teléfono nuevo, reinstalación o cambio de cuenta): **los últimos 7 días, con puntos** (decidido 3 oct; Vitality y Sweatcoin solo premian desde la inscripción, se eligió mantener el comportamiento de siempre) |
+
+- **La marca solo avanza** con lo que ya no hay que volver a mandar: lo que
+  llegó y lo que el servidor rechazó por viejo (`422`). Un día vacío no la mueve:
+  puede ser un permiso de Salud que todavía no se dio.
+- **Fallo general → se corta la vuelta.** Sin red, servidor caído, token
+  rechazado, consentimiento pendiente (`403 consentimiento_requerido`) o Salud
+  bloqueada fallan igual para todos los días: tras el primero
+  no se intenta ninguno más, y si la cola se cortó así no se sigue con la marca.
+  No se pierde nada (lo que no se intentó sigue en la cola o detrás de la
+  marca). Así, con el servidor caído hay **un** intento por apertura, no uno por
+  día.
+- **Rechazo permanente** (otro `4xx`, incluido cualquier `403` que no sea de
+  consentimiento) → se saca ese día y se corta la vuelta.
+- **Sin sesión** → no se manda nada y la marca no se mueve.
+- **Antes de dar el permiso de Salud**, HealthKit no deja leer: los días quedan
+  en la cola y salen solos cuando se concede.
+
+**Segundo plano (decidido, sin construir — A32):** iOS despierta la app cuando
+Salud tiene datos nuevos (`HKObserverQuery` con *background delivery*; para pasos,
+como mucho una vez por hora). Límites de Apple: con el teléfono **bloqueado** no
+se puede leer Salud; si el usuario **cierra la app a la fuerza**, iOS deja de
+despertarla hasta que la vuelva a abrir; el modo de bajo consumo lo apaga. Por
+eso "al abrir" sigue siendo el piso garantizado.
+
+**Notificaciones push (decidido, sin construir):** para que abra la app quien no
+sincroniza (por ejemplo, "abre +Vida para que tu registro cuente"). El servidor
+sabe cuándo recibió datos de cada usuario por última vez; ese es el dato
+confiable para avisar. Ver "Puntos abiertos".
 
 ### Wrapper
 
-`lib/datos/healthkit_bridge.dart` expone los métodos tipados
-(`EstadoPermisos`, `EstadoSync`, `TiposVisibles` y el resultado de
-`actualizarSesion`). **[PENDIENTE]** hoy solo tiene `solicitarPermisos` y
-`sincronizar`; falta agregar `actualizarSesion` (Alvaro). Es la **frontera del
-contrato**, no UI — lo mantiene Alvaro junto con el lado Swift. Daniel lo
-consume, no lo edita: si le falta algo ahí, es un cambio de contrato.
+`lib/datos/healthkit_bridge.dart` expone los tres métodos tipados
+(`EstadoPermisos`, `EstadoSync`, `TiposVisibles` y `EstadoSesionNativa`). El
+`actualizarSesion` lo escribió Daniel en D11 junto con su conexión a la sesión, y
+Alvaro le ajustó en A31 el caso del `FlutterError` y el texto de
+`errorAlmacenamiento`. Es la **frontera del contrato**, no UI: un cambio ahí es
+un cambio de contrato y se avisa a Alvaro, que mantiene el lado Swift.
 
 Banco de pruebas sin UI: `lib/debug/pantalla_prueba_healthkit.dart` (no
 ruteado, necesita iPhone físico — HealthKit no existe en el simulador).
@@ -957,9 +1528,9 @@ a un día vacío:
 
 | Camino | Día vacío |
 |---|---|
-| Sync de hoy | Lo manda igual |
-| Cola de reintentos (A8) | Lo salta |
-| Backfill de 7 días (A9) | Lo salta |
+| Sync de hoy (`sincronizar`) | Lo manda igual |
+| Cola de reintentos | Lo salta (y lo deja en la cola) |
+| Ponerse al día | Lo salta (y la marca no avanza) |
 
 Un payload vacío es indistinguible entre "sin actividad" y "permiso negado" —
 mandarlo haría que Luis lo diera por entregado con cero datos para siempre.
@@ -981,7 +1552,7 @@ antes, pero sigue sin resolverse.
 llegar al servidor se rechaza.
 
 ```
-ventana ≥ día más viejo del backfill + holgura para reintentos
+ventana ≥ día más viejo de la primera vez + holgura para reintentos
         = 6 días + 7 días de gracia
         = 13 → 14
 ```
@@ -989,12 +1560,12 @@ ventana ≥ día más viejo del backfill + holgura para reintentos
 | Cifra | Valor | Qué contesta |
 |---|---|---|
 | Ventana del servidor | 14 días | ¿Hasta qué tan viejo acepto un dato? |
-| Cola de reintentos (cliente) | 14 días (**[PENDIENTE]** hoy guarda hasta 30 días pendientes, sin caducidad por antigüedad) | ¿Cuánto sigo intentando mandar un día que falló? |
-| Backfill (cliente) | 7 días | ¿Cuánto historial le traigo a un usuario nuevo? |
+| Cola de reintentos (cliente) | 14 días: un día con `fecha < hoy − 14` sale solo de la cola; tope de 15 días | ¿Cuánto sigo intentando mandar un día que falló? |
+| Primera vez (cliente) | 7 días | ¿Cuánto historial le traigo a un teléfono nuevo? |
 
 Ventana y cola comparten cifra a propósito (si la cola fuera más corta,
-tiraría días que el servidor aceptaría; más larga, reintentaría en vano). El
-backfill es deliberadamente menor — necesita holgura de reintentos.
+tiraría días que el servidor aceptaría; más larga, reintentaría en vano). La
+primera vez es deliberadamente menor — necesita holgura de reintentos.
 
 **Respuesta de rechazo**, distinguible de un payload inválido:
 
@@ -1007,12 +1578,16 @@ Un `4xx` genérico haría que el cliente descarte el día **y aborte el
 procesamiento de los días siguientes** — con motivo identificable, descarta
 ese día y sigue con el resto.
 
-**[PENDIENTE] Lo que hace Swift hoy:** todavía no distingue el `422`. Cualquier
-`4xx` que no sea `401`, `408` ni `429` (incluido el `422`) saca el día de la
-cola **y corta** los días que quedaban en esa vuelta, tanto en la cola de
-reintentos como en el backfill. No se pierden: en la cola, los días que
-quedaban siguen ahí y salen en la siguiente vuelta; en el backfill, el backfill
-no se da por hecho y se repite entero la próxima vez que se dispare.
+**Lo que hace Swift (hecho en A31):** distingue el `422` con
+`"error": "fuera_de_ventana"` (cualquier otro `422`, o el mismo cuerpo con otro
+código, sigue siendo un rechazo normal). Una sola regla para los tres caminos:
+
+| Qué pasó | Ese día | La vuelta |
+|---|---|---|
+| Sin red, `401`, `403` de consentimiento, `408`, `429`, `5xx`, Salud bloqueada | Queda pendiente | **Se corta** (fallaría igual) |
+| `422` de la ventana | Se descarta | Sigue |
+| Respuesta `2xx` ilegible | Cuenta como enviado (y va al log) | Sigue |
+| Otro `4xx` | Se descarta | Se corta |
 
 **Frontera de ciclo — decidido:** un ciclo ya cerrado (La Liga u
 objetivo semanal) es **inmutable**. Un dato del 29 de septiembre que llega el
@@ -1049,7 +1624,8 @@ existe en memoria al procesar el payload.
     "fc_promedio": 148,
     "fc_maxima": 162
   },
-  "puntos_dia": 150
+  "puntos_dia": 150,
+  "ritmo_cardiaco": { "minutos_ligero": 310, "minutos_moderado": 42, "minutos_intenso": 18 }
 }
 ```
 
@@ -1060,7 +1636,29 @@ existe en memoria al procesar el payload.
 | `workouts_dia.fc_promedio` | promedio de `sesiones[].fc_promedio` del día — **no** un promedio de las 24h de `frecuencia_cardiaca[]` cruda (eso incluiría horas de reposo y no dice nada) |
 | `workouts_dia.fc_maxima` | máximo de `sesiones[].fc_maxima` del día |
 | `workouts_dia` | `null` si no hubo sesión ese día — no `0`, para no confundir "sin actividad intensa" con "FC de cero" |
-| `puntos_dia` | mismo valor que ya viaja en el JSON #2, **salvo** un día anulado por retroactivo denegado (ver "Póliza vinculada"), que aquí y en el historial va en `0` |
+| `ritmo_cardiaco` | minutos del día en cada zona (4 oct 2026); ver "Minutos por zona de ritmo cardíaco" abajo. `null` los días sin lecturas de ritmo cardíaco (casi siempre, sin reloj) — no ceros |
+| `puntos_dia` | **lo acreditado** (desde el 5 oct 2026): la suma de las filas de actividad de ese día en el ledger, o sea con el techo diario, el techo anual, los ajustes por datos tardíos y el retroactivo denegado ya aplicados. **Ya no es el mismo valor que el del JSON #2 del sync** (ese es lo que calculó el día): pasado el techo anual un día puede calcular 200 y acreditar 0, y Progreso tiene que decir lo mismo que Mi Plan. Un día anulado por retroactivo denegado va en `0` (sus pasos siguen guardados y se ven) |
+
+### Minutos por zona de ritmo cardíaco (hecho 4 oct 2026)
+
+Para la gráfica de ritmo cardíaco de Progreso (ligero, moderado e intenso por
+semana, mes y año). Los totales y la tendencia se suman en la app a partir de las
+filas diarias, igual que los pasos.
+
+- **Zonas** con la misma FCmáx de los puntos (219 − edad, la de la aseguradora
+  si hay póliza verificada): **ligero** por debajo del 60 %, **moderado** del 60 %
+  al 70 % (sin llegar) e **intenso** del 70 % hacia arriba. El reposo cuenta como
+  ligero. Con 36 años: ligero hasta 109 bpm, moderado de 110 a 128, intenso desde 129.
+- **Cuánto vale una lectura:** el tiempo hasta que empieza la siguiente, sin pasar
+  de 15 minutos (un hueco más largo es tiempo sin dato, como al armar las
+  sesiones inferidas). La última lectura vale lo que dura ella misma.
+- **Un dispositivo a la vez:** si dos registran el mismo rato (reloj y pulsera),
+  se usa el que cubre más minutos del día y no se suman.
+- Sale de `frecuencia_cardiaca[]`, no de los workouts: cuenta todo el día.
+- Se recalcula con cada sync del día. Los días anteriores al 4 oct 2026 quedan en
+  `null` hasta que se vuelva a mandar ese día.
+- **[PENDIENTE]:** la edad de una persona cambia con los años y los minutos ya
+  guardados no se recalculan si la aseguradora corrige la fecha de nacimiento.
 
 Mostrar máximo y promedio de FC por workout (no un promedio diario plano) es
 también lo que justifica ante Apple el permiso de `.heartRate`: tiene que
@@ -1119,6 +1717,121 @@ usuario sale del token.
 
 ---
 
+## Consentimiento con la aseguradora (hecho 6 oct 2026)
+
+La persona acepta, en una pantalla propia, que +Vida le pase a la aseguradora sus datos
+**del día y por persona**: pasos totales, ritmo cardíaco promedio y workouts (nunca el
+dato crudo de Salud). **Es obligatorio para usar la app** (decidido el 6 oct 2026): quien
+no lo acepta, o lo revoca, no puede usarla. El texto vive en la app; el servidor solo
+conoce su **versión**.
+
+| Petición | Cuerpo | Respuesta |
+|---|---|---|
+| `GET /api/v1/consentimiento` | — | `200` con el estado (abajo) |
+| `POST /api/v1/consentimiento` | `{ "version": "1" }` | `200` con el estado. Idempotente. `409` `{"error": "version_desactualizada", "version_vigente": "2"}` si el texto cambió; `400` `{"version": [...]}` si falta |
+| `POST /api/v1/consentimiento/revocar` | — | `200` con el estado. Idempotente |
+
+```json
+{
+  "obligatorio": false,
+  "version_vigente": "1",
+  "aceptado": true,
+  "version_aceptada": "1",
+  "aceptado_en": "2026-10-06T09:30:00-06:00",
+  "revocado_en": null
+}
+```
+
+- Con token; `403` si la cuenta no tiene perfil. `aceptado` es lo que decide si la app
+  muestra la pantalla: `true` solo con la versión vigente aceptada y sin revocar.
+- `version_aceptada`, `aceptado_en` y `revocado_en` son de la última aceptación (o
+  `null` si nunca aceptó).
+- Cada aceptación es una fila nueva (`Consentimiento`): el historial no se borra.
+  Revocar la marca con la fecha. En el admin se ve, solo de lectura.
+- **Cuando cambie el texto** se sube `VERSION_VIGENTE` en `services/consentimiento.py`:
+  lo aceptado antes deja de valer y la app vuelve a pedirlo. Solo los cambios de fondo
+  (qué datos, con quién, para qué) deberían subirla.
+- **Reporte a la aseguradora:** solo entra quien tiene el consentimiento vigente
+  (`consentimiento.con_consentimiento_vigente(usuarios)`). El reporte todavía es un
+  Excel manual: hay que filtrarlo igual a mano.
+- **Bloqueo del sync:** con `CONSENTIMIENTO_OBLIGATORIO=true` (variable de entorno),
+  `POST /sync` sin consentimiento vigente responde `403`
+  `{"error": "consentimiento_requerido", "version": "1"}` **antes de guardar nada**. El
+  resto de la API sigue abierto (la persona tiene que poder entrar y aceptarlo). **Viene
+  apagado** y no se enciende hasta que:
+  1. ~~**Swift** trate ese `403` como el `401`~~ — **hecho en A38** (7 oct): el día queda
+     pendiente y se corta la vuelta, como con el `401`. Antes lo trataba como rechazo
+     permanente y sacaba de la cola los días que solo vivían ahí (ver "Consentimiento
+     pendiente" en "Errores de `POST /api/v1/sync`").
+  2. **Flutter** tenga la pantalla, que no se puede saltar, con el texto nuevo.
+  Las cuentas que ya existen no tienen consentimiento (no se les inventa uno): al
+  encenderlo, todas lo aceptan desde la app.
+- **[PENDIENTE]:** el texto. El actual (D11) promete menos de lo que se comparte; hay que
+  reescribirlo y que lo apruebe quien vea lo legal. Esa es la versión `"1"`.
+
+## Baja de cuenta — `POST /api/v1/cuenta/baja` (hecho 6 oct 2026)
+
+Apple exige que la cuenta se pueda borrar desde la app (App Store 5.1.1(v)). Con token.
+
+- Cuerpo `{ "password": "..." }` en las cuentas con contraseña: `400`
+  `{"password": [...]}` si falta o no es la correcta. Las contraseñas malas cuentan para
+  el mismo límite del login (5 por minuto, `429`). Una cuenta sin contraseña (Google o
+  Apple) no la pide.
+- `204` sin cuerpo. Desde ahí el token ya no sirve (se cierran **todas** las sesiones) y
+  la app vuelve al inicio, como con el `401`.
+- **Se borra lo personal:** el correo (el `username` pasa a `baja-<usuario_id>` y queda
+  libre para una cuenta nueva), el nombre, la contraseña (queda inutilizable), la póliza
+  (queda libre para otra cuenta), los nombres de fuente y de dispositivo de las muestras
+  (pueden decir "Apple Watch de Ana") y la fecha de nacimiento exacta (queda el 1 de
+  enero de su año). Se revoca el consentimiento y sale de Tus Ligas (si era el último
+  miembro, el grupo se borra).
+- **Se conserva lo anónimo:** puntos y monedas (los ledgers no se tocan), resúmenes
+  diarios, muestras de salud, cupones y tablas de ligas ya cerradas. El `usuario_id` es
+  aleatorio y no identifica a nadie.
+- Quien se dio de baja ya no entra a La Liga, no cobra un podio cerrado y sin pagar, y no
+  se le cierra la semana. No se puede deshacer: para volver, se registra de nuevo y
+  arranca de cero.
+- **[PENDIENTE] (paquete 9):** en las cuentas de Apple, la baja también tiene que revocar
+  el token de Apple (lo exige Apple), y la baja de una cuenta de Google o Apple tendría
+  que pedir una credencial fresca del proveedor en vez de la contraseña.
+
+## Perfil — `GET /api/v1/perfil` (hecho 4 oct 2026)
+
+Los datos de la propia cuenta para la pantalla de Perfil. Con token; `403` si la
+cuenta no tiene perfil.
+
+```json
+{
+  "usuario_id": "6f1c0e52-…",
+  "correo": "ana@correo.com",
+  "nombre": "Ana Martínez",
+  "fecha_nacimiento": "1990-05-17",
+  "edad": 36,
+  "poliza_verificada": true,
+  "dispositivos": [
+    { "nombre": "Apple Watch de Ana", "modelo": "Watch", "fuente": "Apple Watch", "ultimo_dato": "2026-10-04" }
+  ]
+}
+```
+
+- `correo`: el `username` en las cuentas con contraseña (la app lo guarda así) y
+  `User.email` en las de Google y Apple; `null` si no hay ninguno (un nombre
+  generado como `google-4f2a…`).
+- `nombre`: nombre y apellido que dio la aseguradora; `null` sin póliza
+  verificada (pendiente y rechazada cuentan como sin póliza).
+- `fecha_nacimiento` y `edad` son las **que usa el servidor** para los puntos: la
+  confirmada por la aseguradora si hay póliza verificada y, si no, la del
+  registro. La app no las calcula.
+- `dispositivos`: los que mandaron datos (pasos, ritmo cardíaco o workouts) en
+  los últimos 30 días, el más reciente primero. Es el mismo dispositivo si
+  coinciden fuente, modelo y fabricante (la clave del puntaje); el nombre es el
+  de su dato más nuevo y, si no trae, el de la fuente. No hay un máximo de
+  dispositivos. Un reloj que se deja de usar sale solo.
+- **Lo que no tiene el backend:** el "uso del seguro" del mock depende de lo que
+  mande la aseguradora; no hay endpoint.
+
+---
+
 ## Póliza vinculada
 
 Una cuenta base (gratis) no tiene póliza. Vincularla es un paso aparte, después
@@ -1138,11 +1851,25 @@ Vincula y verifica en el mismo paso, contra el registro de la aseguradora.
 | `birth_date` | `YYYY-MM-DD` | la que escribe el usuario; se compara con la de la aseguradora |
 
 Respuesta `200`: `{ "estado_verificacion": "verificada" | "rechazada", "motivo_rechazo": string | null }`.
-Motivos: `no_existe`, `aseguradora_no_coincide`, `no_vigente`,
-`fecha_nacimiento_no_coincide`. Una póliza puede estar vinculada a varios
-usuarios (pólizas familiares). `409` si el usuario ya tiene una póliza
-verificada; `400` por campos faltantes; `403` si la cuenta no tiene perfil.
-Una rechazada se puede volver a enviar.
+Motivos: `no_existe`, `aseguradora_no_coincide`, `no_vigente` (la aseguradora
+la **canceló o la suspendió**; las fechas no se miran),
+`fecha_nacimiento_no_coincide` y `poliza_en_otra_cuenta`.
+
+**Una sola cuenta verificada por póliza** (decidido y hecho el 4 oct 2026; sin
+pólizas familiares hasta hablarlo con las aseguradoras). Si el número y la fecha
+son correctos pero la póliza ya está verificada en otra cuenta, la segunda queda
+`rechazada` con el motivo `poliza_en_otra_cuenta`: sugerencia de texto, "Esta
+póliza ya está vinculada a otra cuenta. Si es tuya, escríbenos." No se aplica
+retroactivo ni se toca su historial, y **ese rechazo no gasta intentos** del límite.
+La regla está en la base de datos (no distingue mayúsculas ni espacios en el número
+ni en la aseguradora), así que dos verificaciones a la vez no la burlan. Pendientes
+y rechazadas sí pueden repetirse; solo cuentan las verificadas. **Hoy no hay forma de
+liberar una póliza desde el admin** (no deja rechazar una verificada): lo hará el
+panel (ver `panel-admin.md`).
+
+`409` si el usuario ya tiene una póliza verificada; `400` por campos faltantes;
+`403` si la cuenta no tiene perfil; `429` si se pasó el límite de intentos (ver
+"Límite de intentos"). Una rechazada se puede volver a enviar.
 
 *Hoy la aseguradora es un registro simulado cargado desde un CSV (comando
 `cargar_registro_aseguradora`); cuando haya integración real se reemplaza sin
@@ -1156,71 +1883,178 @@ nunca se edita a mano.
 
 ```json
 { "estado": "sin_poliza" | "pendiente" | "verificada" | "rechazada",
-  "verificada": false,
+  "verificada": true,
   "motivo_rechazo": null,
   "poliza": { "policy_number": "POL-100001", "insurer": "Seguros Demo GT",
-              "policy_start_date": "2026-01-15" } }
+              "policy_start_date": "2026-01-15",
+              "nombre": "Ana", "apellido": "Morales", "plan": "Plan Plus",
+              "prima_anual_gtq": "15000.00",
+              "fecha_renovacion": "2027-01-14" } }
 ```
 
-`poliza` es `null` si no hay póliza; `policy_start_date` es `null` hasta que la
-aseguradora confirma la póliza. `verificada` es el único valor que debe usarse
+`poliza` es `null` si no hay póliza. `policy_start_date`, `nombre`, `apellido`,
+`plan`, `prima_anual_gtq` y `fecha_renovacion` son `null` hasta que la
+aseguradora confirma la póliza (y vuelven a `null` si se rechaza).
+`prima_anual_gtq` viaja como **texto con dos decimales** (es dinero: no debe
+pasar por un número de punto flotante). `fecha_renovacion` es la **próxima**
+renovación anual, no un vencimiento: se guarda la que dio la aseguradora y, si
+ya pasó **o es hoy**, se responde la del año siguiente (y así hasta después de
+hoy; el 29 de febrero cae en el 28 los años que no son bisiestos). El día de la
+renovación ya es el primero del año de póliza nuevo, igual que en
+`GET /api/v1/cashback` (4 oct 2026). `verificada` es el único valor que debe usarse
 para habilitar canje, cashback y La Liga.
 
 ### Datos que entrega la aseguradora (decidido 2 oct 2026)
 
 **Nombre, apellido, prima anual, número de póliza, fecha de nacimiento, plan y
 fecha de renovación.** El registro simulado tiene todos (más deducible,
-coaseguro y red), salvo que guarda la prima **mensual**.
+coaseguro y red).
 
 - **La póliza es anual:** se renueva cada año, y la **prima es anual**.
 - La fecha de la aseguradora es la de **renovación**, no un vencimiento: una
   póliza médica no vence. **Solo deja de dar beneficios si la aseguradora la
   cancela o la suspende.**
-- **[PENDIENTE] (código):**
-  - `services/policy_verification.py` rechaza hoy con `no_vigente` si la fecha
-    de hoy queda fuera de inicio y fin de vigencia. Con esta regla, una póliza
-    pasada su fecha de renovación no se debe rechazar; solo una cancelada o
-    suspendida.
-  - El registro simulado tiene un estado `vencida` (póliza `POL-100004`) que con
-    esta regla no existe, y guarda `prima_mensual_gtq` en vez de la prima
-    anual.
-  - La póliza vinculada guarda hoy solo número, aseguradora, fecha de inicio y
-    fecha de nacimiento confirmada. Falta guardar nombre, apellido, plan, prima
-    y fecha de renovación, y devolverlos en `GET /api/v1/polizas/estado`.
-  - Cómo se entera el sistema de que una póliza ya verificada fue cancelada
-    (depende de la integración real con la aseguradora).
+- **Hecho en el código (3 oct):**
+  - La verificación ya no mira fechas: solo rechaza con `no_vigente` una
+    póliza **cancelada o suspendida**. Pasada la fecha de renovación, sigue
+    valiendo.
+  - El registro simulado guarda la **prima anual** (`prima_anual_gtq`; la
+    migración multiplicó por 12 la mensual que hubiera) y ya no tiene el estado
+    `vencida` (las filas que lo tenían pasaron a `vigente`; el comando de carga
+    lo rechaza explicando por qué). `POL-100004`, con la renovación ya pasada,
+    queda como ejemplo de póliza que se verifica igual.
+  - La póliza vinculada guarda nombre, apellido, plan, prima anual y fecha de
+    renovación al verificarse, y los devuelve en `GET /api/v1/polizas/estado`.
+    En el registro, la fecha de renovación sigue en la columna `vigencia_fin`
+    (se dejó el nombre para no romper la carga del CSV).
+- **[PENDIENTE]:** cómo se entera el sistema de que una póliza ya verificada fue
+  cancelada (depende de la integración real con la aseguradora). Si se verifica
+  a mano desde el admin, estos cinco datos no se llenan solos.
 
-### Cashback en quetzales (decidido 2 oct 2026)
+### Cashback en quetzales (decidido 2 oct 2026, hecho 4 oct 2026)
 
-**Monto = % del nivel × prima anual.** Se devuelve como dinero **después** del
-pago de la prima, nunca como descuento (regla regulatoria, ver `CLAUDE.md`). Se
-muestra en Mi Plan, debajo de las gráficas.
+**Monto = % del nivel × prima anual**, redondeado a centavos. Se devuelve como
+dinero **después** del pago de la prima, nunca como descuento (regla
+regulatoria, ver `CLAUDE.md`). Se muestra en Mi Plan, debajo de las gráficas.
 
-**El año del cashback es el año de póliza** (decidido 2 oct 2026): los puntos
-anuales, el techo de 12.000, el nivel y el cashback se cuentan desde la fecha de
-inicio (o la última renovación) de la póliza hasta su siguiente renovación, no
-del 1 de enero al 31 de diciembre. Con varias personas en la misma póliza
-(pólizas familiares), todas comparten esas fechas.
+**El año del cashback es el año de póliza:** los puntos anuales, el techo de
+12.000, el nivel y el cashback se cuentan desde un aniversario de la
+renovación hasta el día antes del siguiente, no del 1 de enero al 31 de
+diciembre. El ancla es `fecha_renovacion` (la que dio la aseguradora; si ya
+pasó se proyecta un año tras otro) o, si falta, `policy_start_date`. El día de
+la renovación ya es del año nuevo. Por ahora una póliza tiene una sola cuenta
+verificada (sin pólizas familiares); si más adelante hay varias, compartirían esas
+fechas.
 
-**[PENDIENTE] (Luis):**
-- No hay endpoint que devuelva el cashback.
-- El código cuenta el año por calendario (`fecha__year` en el ledger y en el
-  techo anual); hay que pasarlo al año de póliza.
+**Cada año de póliza arranca en cero** (decidido 4 oct 2026): los puntos de
+antes de su inicio no cuentan para él ni gastan su techo de 12.000, y al
+renovar el total vuelve a 0. Esto vale también con retroactividad: lo ganado
+antes del inicio del año en curso pertenece a un año anterior (la regla de
+retroactividad de abajo solo decide si lo de la cuenta base existe o no). No
+se borra ni se edita nada del ledger: solo cambia qué filas entran en la
+ventana. Como los días ya asentados se recortaron con la ventana de su
+momento (año calendario antes de verificar), al pasar al año de póliza la
+actividad del año **se limita a 12.000 al sumarla**; el chequeo médico va
+aparte, como en el techo.
+
+**Sin póliza verificada** (pendiente y rechazada incluidas) la cuenta base
+cuenta sus puntos por año calendario, solo como referencia: se ve el avance y
+el nivel, pero no hay prima ni monto. Al verificar, pasa al año de póliza.
+
+**Cuándo se paga:** el backend solo calcula y muestra. El pago lo hace la
+aseguradora, fuera de la app, después de cobrar la prima. Mientras el año
+corre, el monto es una **proyección** con el nivel de hoy; al cerrar el año
+(la renovación), el del año que terminó queda **por pagar** en el bloque
+`anterior`. El backend no mueve dinero ni registra si ya se pagó.
+
+#### `GET /api/v1/cashback`
+
+Con token. Cuenta sin perfil: `403`.
+
+```json
+{
+  "con_poliza": true,
+  "anio": {"inicio": "2026-03-01", "fin": "2027-02-28", "renovacion": "2027-03-01"},
+  "puntos_ano": 5200,
+  "nivel": 2,
+  "porcentaje": 7.5,
+  "siguiente_nivel": {"nivel": 3, "desde": 10000, "faltan": 4800, "porcentaje": 10.0, "cashback_gtq": "600.00"},
+  "prima_anual_gtq": "6000.00",
+  "cashback_gtq": "450.00",
+  "estado": "proyeccion",
+  "anterior": {
+    "inicio": "2025-03-01", "fin": "2026-02-28", "puntos_ano": 2600,
+    "nivel": 1, "porcentaje": 5.0, "cashback_gtq": "300.00", "estado": "por_pagar"
+  }
+}
+```
+
+- `estado`: `proyeccion` (póliza verificada) o `sin_poliza`. Sin póliza,
+  `anio.renovacion`, `prima_anual_gtq`, `cashback_gtq` y
+  `siguiente_nivel.cashback_gtq` son `null`, y `anterior` también.
+- El dinero va como **texto con dos decimales**; el porcentaje, como número.
+- `siguiente_nivel` es `null` en el último nivel (con el techo de 12.000, el
+  nivel 4 no se alcanza en el piloto).
+- `anterior` es `null` si la póliza todavía no tenía un año cerrado o si ese
+  año no llegó al nivel 1 (no hay nada por pagar). **[PENDIENTE]:** usa la
+  prima actual; si la prima cambia en una renovación, el monto del año
+  anterior se calcula con la nueva.
 
 ### Retroactividad
 
 Al verificarse, la fecha de nacimiento de la **cuenta** (la del registro) se
 compara con la **confirmada por la aseguradora**:
 
-- **Coinciden:** todo lo ganado en la cuenta base (puntos y monedas) cuenta.
-- **No coinciden:** no hay retroactividad. Los días anteriores a la
+- **Coinciden:** todo lo ganado en la cuenta base (puntos y monedas) cuenta
+  (veredicto `aplicado`).
+- **Difieren poco y sin ventaja:** se toma como un error y **no se le quita nada**
+  (`tolerado`).
+- **Mentira:** no hay retroactividad (`denegado`). Los días anteriores a la
   verificación se anulan con una fila negativa por día en el ledger
   (`retroactivo_denegado`), y las monedas ganadas antes también. Nada se edita
-  ni se borra. La edad que se usa para el puntaje es, desde la verificación, la
-  confirmada por la aseguradora.
+  ni se borra. Los pasos y workouts de esos días tampoco cuentan para la meta
+  semanal ni para el desempate de La Liga y Tus Ligas (siguen guardados y se ven en
+  Progreso).
 
-Como la verificación ocurre al vincular, "desde la vinculación" y "desde la
-verificación" son el mismo momento.
+La edad que se usa para el puntaje es, desde la verificación, la confirmada por la
+aseguradora. Como la verificación ocurre al vincular, "desde la vinculación" y
+"desde la verificación" son el mismo momento.
+
+**Qué es error y qué es mentira** (decidido el 4 oct 2026, hecho el 5 oct; es la regla
+**del demo**, se revisa con casos reales):
+
+- Una fecha distinta se **tolera** si difiere en **hasta 2 años** de la de la
+  aseguradora (mes y día incluidos) **y no le da ventaja**.
+- Es **mentira** si difiere en **más de 2 años**, o si **le da ventaja** aunque
+  difiera poco.
+- **Ventaja** es cruzar los 60 años (bono +25), una meta semanal de pasos más baja o una
+  FCmáx más baja (que hace más fácil la intensidad). Como la meta y la FCmáx bajan con
+  la edad, en la práctica es ser **más vieja en años cumplidos**, aunque sea uno. Se
+  mide con las edades del día de la verificación: alguien que se puso unos meses más
+  vieja es tolerada o no según cuándo verifique (nacida el 2 ene en vez del 17 may:
+  verificando en octubre las dos ya cumplieron 36; verificando en marzo una tiene 36 y
+  la otra 35, y cuenta como ventaja). Quien se puso más joven nunca le conviene y se
+  tolera hasta 2 años.
+- `POST /api/v1/polizas/vincular` no dice el veredicto (queda en la póliza). **[PENDIENTE]**
+  decidir si la respuesta lo lleva para que la app lo explique con tono cálido.
+
+**El veredicto se toma una vez y no se recalcula** (5 oct 2026). Se guarda en la póliza
+(`retroactivo` y, si fue denegado, `corte_retroactivo`, el día de la verificación).
+Las filas anteriores a este campo se fijaron con lo que ya se les había aplicado
+(cualquier diferencia de fecha anulaba lo anterior).
+
+**Si la aseguradora corrige su fecha después de verificar** (error suyo, 5 oct 2026):
+
+- **No se le quita nada a la persona.** El veredicto no cambia y la corrección **vale
+  hacia adelante**: para un día anterior se sigue usando la fecha de entonces (los
+  puntos, el bono 60+, la FCmáx, las zonas de ritmo cardíaco y la meta semanal), así
+  que un dato tardío de ayer conserva lo que tenía aunque la fecha corregida ya no se
+  lo daría. Con varias correcciones, cada tramo usa su fecha.
+- Hoy se hace **cambiando la fecha confirmada de la póliza en el admin de Django**: queda
+  registrada como `CorreccionDeNacimiento` (fecha anterior, nueva y desde cuándo vale; se
+  ve en la ficha de la póliza) y el admin avisa. Solo se agregan filas.
+- **Sumar hacia atrás**, si la fecha corregida le daba más puntos, **no es automático**:
+  lo decide un administrador caso por caso (el panel; ver `panel-admin.md`).
 
 ---
 
@@ -1243,7 +2077,7 @@ verificación" son el mismo momento.
   puntos ni para `pasos_totales_dia`. Jerarquía de fuentes antes de sumar,
   siempre: sistema (`com.apple.health.*`) vs. terceros (Garmin, Whoop, Zepp,
   Fitbit, etc.) al mismo nivel de confianza. **Elección de fuente (1 oct): pasos
-  por hora, workouts sin duplicar los que se cruzan, intensidad por el
+  por bloque (hora o varias horas), workouts sin duplicar los que se cruzan, intensidad por el
   dispositivo que más puntos da — ver "Elección de fuente". Nunca se suman.**
   La decisión se re-evalúa en cada sync de esa fecha, no solo la primera vez
   (los relojes de terceros pueden sincronizar a Health con retraso).
@@ -1269,7 +2103,7 @@ verificación" son el mismo momento.
   tiene nombre. **Hoy ni el dashboard ni el historial devuelven
   `tipo_actividad`** (el dashboard agrega los workouts del día); la regla
   aplica cuando exista una lista de workouts.
-- **`pasos_totales_dia`** usa la misma regla por hora que el motor de puntos —
+- **`pasos_totales_dia`** usa la misma regla por bloques que el motor de puntos —
   no es un cálculo nuevo y separado.
 - **Sesión intensa sin workout (L7):** se detecta en el backend sobre
   `frecuencia_cardiaca[]` cruda. Umbral: ≥30 min continuos al 60-70% de FCM,
@@ -1277,26 +2111,26 @@ verificación" son el mismo momento.
 - **Techos:** diario 200 pts (pasos + intensidad), anual 12.000 pts.
 - **Nivel anual (0–4):** implementado con los pisos de `CLAUDE.md`: 2.500 /
   5.000 / 10.000 / 15.000 puntos → 5% / 7,5% / 10% / 20%.
-- **Ventana de sync:** mismo endpoint para sync diario y backfill de 7 días —
+- **Ventana de sync:** mismo endpoint para el día de hoy y para ponerse al día —
   cada día es una llamada independiente con su propio `fecha`.
 - **Ventana de aceptación (L14):** 14 días, no 3. Rechazo por antigüedad
   devuelve `422` con `{"error": "fuera_de_ventana"}`, no un `400` genérico.
 - **Frontera de ciclo:** un ciclo ya cerrado (La Liga, objetivo semanal)
   es inmutable — un dato tardío dentro de la ventana de 14 días se guarda
   para historial/acumulado anual, pero nunca recalcula un ciclo ya cerrado.
-- **Ráfagas de usuario nuevo:** cada usuario que concede permisos dispara 7
-  POSTs seguidos en segundos (backfill). Con 50 personas del piloto entrando
-  el mismo día, ~350 requests en ráfaga.
+- **Ráfagas de usuario nuevo:** la primera vez de cada teléfono son 7 POSTs
+  seguidos en segundos. Con 50 personas del piloto entrando el mismo día, ~350
+  requests en ráfaga. Después, cada apertura de la app manda desde el último día
+  enviado hasta hoy (normalmente 1 o 2 POSTs); con el servidor caído, un solo
+  intento por apertura.
 - **Un día ausente es ambiguo** — ver "Días sin actividad" arriba. Afecta la
   evaluación del objetivo semanal.
-- **Cuándo se fija el objetivo semanal:** se calcula y fija a las **00:00 del
-  lunes**, con los datos hasta el corte del domingo 23:59 — no espera al
-  mediodía, y el usuario no ve ningún estado intermedio. Sigue existiendo una
-  corrida a las **12:00 del lunes**, pero esa ya no cambia el objetivo — solo
-  acepta datos atrasados para el acumulado anual y el historial. El motor de
-  objetivos necesita **dos corridas programadas** (00:00 y 12:00), no un cálculo
-  en vivo al cierre del domingo. Ya las programa el servicio `programador` (ver
-  "Cierre semanal programado").
+- **Cuándo se fija el objetivo semanal:** el objetivo de la semana nueva rige
+  desde las **00:00 del lunes**. El **resultado** de la semana que terminó
+  (`cumplido` y monedas) se fija el **martes 00:00**, después del margen de
+  gracia del lunes (decidido 3 oct, hecho en A34 por Alvaro); el martes 12:00
+  una corrección actualiza acumulados sin cambiar el resultado. Las dos corridas
+  las programa el servicio `programador` (ver "Cierre semanal programado").
 - **Objetivos semanales (L11) — implementado para el demo 1 (1 oct; ver "Cómo
   está construido hoy"). Lo que sigue vigente del ticket:** un
   objetivo sin progresión (meta de pasos totales de la semana + meta de
@@ -1314,14 +2148,14 @@ verificación" son el mismo momento.
   cualquier duración** (decidido 1 oct 2026).
 - **La Liga (demo 1):** un solo grupo con todos los usuarios con póliza
   vinculada y verificada. Desde el 2 oct compite **por puntos** del mes (tal
-  cual, con tope y bono 60+), con desempate por pasos del mes. Al cierre del
-  mes calcular una vez posición,
-  percentil y tramo de premio de cada participante
-  (`max(1, floor(N × percentil_acumulado))`) y guardarlos. Tabla de tramos y
-  premios en configuración — por definir con Diego. Sin franja de edad ni
-  sub-ligas (diseño futuro).
-- **Tus Ligas:** grupos que crea/une el usuario; ranking mensual de pasos;
-  **sin premios y sin exigir póliza**. **Duelos 1 contra 1: no construir.**
+  cual, con tope y bono 60+), con desempate por pasos y luego workouts del mes. Al cierre del
+  mes calcular una vez la posición de cada participante, guardarla y **pagar las
+  monedas a los 3 primeros** (decidido 3 oct; ya no hay percentiles ni tramos).
+  Las monedas de cada puesto, en configuración — por definir con Diego. Sin
+  franja de edad ni sub-ligas (diseño futuro).
+- **Tus Ligas:** grupos que crea/une el usuario; ranking mensual **por puntos**
+  (desde el 2 oct), con el mismo desempate; **sin premios y sin exigir póliza**.
+  **Duelos 1 contra 1: no construir.**
 - **Endpoint de resumen para el dashboard (decidido):** tabla `resumen_diario`
   (`usuario_id` + `fecha`), upsert en cada sync con lo que el sync ya calcula
   — `pasos_totales_dia`, agregado de los workouts del día que cuentan
@@ -1330,7 +2164,11 @@ verificación" son el mismo momento.
   Ver sección "Endpoint de resumen del dashboard" arriba para el shape
   completo.
 - **Ledger append-only:** cada acreditación es una fila nueva con la versión
-  de la regla que la generó — nunca `UPDATE` sobre una fila existente. Tipos:
+  de la regla que la generó — nunca `UPDATE` sobre una fila existente.
+  **Se hace cumplir en el código (3 oct):** en `Ledger` (puntos) y
+  `MonedaLedger` (monedas), editar una fila, `update()` y borrar (una fila o en
+  bloque) lanzan `FilaInmutable`. En el admin se pueden ver y **agregar** filas
+  (acreditaciones manuales del demo), nunca editarlas ni borrarlas. Tipos:
   `pasos` e `intensidad` (el primer cálculo del día), `ajuste_manual` (cada
   corrección por datos tardíos, positiva o negativa; el nombre se presta a
   confusión porque también lo usa el sistema), `retroactivo_denegado` y
@@ -1344,18 +2182,24 @@ verificación" son el mismo momento.
   - Objetivo semanal: pago por componente (5 + 5 provisional), meta de pasos
     por rango de edad y lista de semanas de la season para la vista "battle
     pass".
-  - Seasons por semanas ISO (hoy por trimestre de calendario).
-  - Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
-    cambia (primero reiniciar, después pagar).
-  - La Liga y Tus Ligas por puntos, con desempate por pasos; en La Liga se
-    devuelven los puntos de cada participante pero nunca sus pasos.
-  - Póliza: no rechazar por la fecha de renovación (solo cancelada o
-    suspendida), y guardar y devolver nombre, apellido, plan, prima y fecha de
-    renovación.
-  - Endpoints nuevos: cashback en quetzales, cupones (activos, usados y
-    vencidos) y patrocinios.
-  - Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**
-    (hoy por año calendario), y prima anual en el registro de la aseguradora.
+  - ~~Seasons por semanas ISO~~ — **hecho** (2 oct): ver "Seasons".
+  - ~~Monedas: sin tope, reinicio al cerrar la season y el orden del lunes en que
+    cambia~~ — **hecho** (2 oct): ver "Monedas y seasons".
+  - La Liga y Tus Ligas por puntos, con desempate por pasos y luego workouts; en La Liga se
+    devuelven los puntos de cada participante pero nunca sus pasos ni sus workouts.
+  - ~~Póliza: no rechazar por la fecha de renovación, y guardar y devolver
+    nombre, apellido, plan, prima y fecha de renovación~~ — **hecho** (3 oct):
+    ver "Datos que entrega la aseguradora".
+  - Endpoints nuevos: ~~cupones (activos, usados y vencidos)~~ — **hecho**
+    (3 oct): ver "Premios, canje y cupones"; ~~cashback en quetzales~~ —
+    **hecho** (4 oct, `GET /api/v1/cashback`); ~~patrocinios~~ — **hecho**
+    (4 oct): ver "Patrocinios".
+  - ~~Puntos anuales, techo de 12.000, nivel y cashback por **año de póliza**,
+    y prima anual en el registro de la aseguradora~~ — **hecho** (4 oct): ver
+    "Cashback en quetzales".
+- **Sincronización (3 oct) [PENDIENTE]:** para las notificaciones push, guardar
+  los dispositivos y mandar el recordatorio (ver "Puntos abiertos"). Lo puede
+  hacer Luis o Alvaro. El margen de gracia del cierre ya está hecho (A34).
 
 ## Notas para Daniel (Flutter)
 
@@ -1369,8 +2213,13 @@ verificación" son el mismo momento.
 - **`actualizarSesion`:** llamalo al iniciar sesión (con el token), al cerrar sesión
   (con `null`) y **cada vez que se abre la app** (con el token actual, o `null`).
   Al cerrar sesión borrá tu copia **y** avisale a Swift.
-- **Orden de pantallas:** primero la sesión y después `solicitarPermisos`. El
-  backfill de 7 días arranca al conceder el permiso y necesita sesión.
+- **Orden de pantallas:** primero la sesión y después `solicitarPermisos` (ya
+  está así en D11). Si se invirtiera tampoco se pierde nada: los días esperan en
+  la cola hasta que haya sesión y permiso.
+- **Sesión real [PENDIENTE]:** la app usa `ServicioSesionLocal`, que inventa
+  tokens (`local-…`). Swift los guarda y el servidor rechaza cada envío con
+  `401`: los días esperan, pero **no llega nada al servidor** hasta pasar a
+  `ServicioSesionApi`.
 - **Si una llamada HTTP responde `401`:** limpiá la sesión, llamá
   `actualizarSesion(null)` y llevá a la persona a iniciar sesión.
 - `usuario_id` viene en la respuesta del registro y es solo un nombre público;
@@ -1401,10 +2250,15 @@ verificación" son el mismo momento.
   tiene nombre de actividad. (Hoy ningún endpoint devuelve `tipo_actividad`;
   aplica cuando haya una lista de workouts.)
 - `encolado` **no** es una falla — el dato quedó a salvo y se reintenta solo.
-- **No implementar reintentos propios** — ya corren del lado nativo cuando la
-  app vuelve a primer plano.
+- **No implementar reintentos propios ni llamar a `sincronizar` al abrir** —
+  Swift se pone al día solo cada vez que la app vuelve a primer plano (ver
+  "Cuándo se manda cada día").
+- **Segundo plano (A32, cuando se construya):** iOS va a despertar la app sin
+  pantalla, y eso también corre el `main()` de Flutter (carga de datos, sesión,
+  relevo de semana). Habrá que revisar que sea seguro y liviano.
 - El **objetivo semanal** no viene en la respuesta del sync — pedirlo aparte
-  con `GET /api/v1/retos/estado`. No confundirlo con `nivel` (el anual, de
+  con `GET /api/v1/objetivos/estado` (antes `retos/estado`, que ya no existe), y
+  las semanas de la season con `GET /api/v1/objetivos/semanas`. No confundirlo con `nivel` (el anual, de
   cashback) que sí viene en la respuesta del sync.
 - **Objetivos semanales (D12) — demo 1:** meta de pasos + meta de workouts de
   la semana, con el progreso del usuario en cada una. **Desde el 2 oct:** cada
@@ -1415,16 +2269,21 @@ verificación" son el mismo momento.
   cuánto falta para que cierre (las seasons se mantienen). La progresión
   completa vuelve después del demo — no construir hoy.
 - **La Liga:** un solo grupo, todos los usuarios con póliza verificada,
-  premios por percentil (el servidor calcula posición y tramo). **Desde el 2
-  oct compite por puntos**, con desempate por pasos y un botón de información
+  **monedas a los 3 primeros** del mes (el servidor calcula la posición y manda
+  `premios_monedas`; los textos de los términos ya dicen "los 3 primeros"). **Desde el 2
+  oct compite por puntos**, con desempate por pasos y luego workouts, y un botón de información
   que lo explique; si el mes está patrocinado, la marca va arriba junto al
   nombre de la liga. **Tus Ligas también compite por puntos.** En La Liga se
-  muestran los puntos de cada participante, **nunca la cantidad de pasos**. Sin franjas
+  muestran los puntos de cada participante, **nunca la cantidad de pasos ni de workouts**. Sin franjas
   de edad ni sub-ligas. **Tus Ligas:** cualquiera se une (con o sin póliza),
   sin premios. **Duelos 1 contra 1: eliminar.**
 - **El objetivo de la semana se fija a las 00:00 del lunes y ya no cambia
-  después** — no hace falta construir ningún estado de "evaluando" ni
-  pantalla de carga especial entre domingo y lunes al mediodía.
+  después** — la semana nueva arranca normal, sin pantalla de "evaluando".
+  **Desde el 3 oct:** el **resultado** de la semana anterior (si se completó y
+  sus monedas) llega el **martes 00:00**. El lunes, `objetivos/semanas` la
+  devuelve con `estado: "en_revision"` (cifras provisionales): mostrarla "en
+  revisión", nunca "no cumplida". Es un estado nuevo que la app tiene que
+  manejar.
 - `dispositivo_*` (nuevo) no cambia nada del lado de Flutter — son campos que
   Swift agrega al payload de sync; Daniel no los toca ni los muestra.
 - Nada de SDKs de terceros (ej. Firebase) puede tocar datos de HealthKit, ni
@@ -1438,7 +2297,7 @@ verificación" son el mismo momento.
   - **Objetivo semanal:** vista tipo "battle pass" con las semanas de la season
     en scroll horizontal.
   - **Monedas:** sin tope; se quita el aviso de 80 y se avisa 7 días antes de
-    que termine la season (la fecha de cierre ya viene en `retos/estado`).
+    que termine la season (`season.aviso_fin_de_season` de `objetivos/estado`).
   - **Mi Plan:** la gráfica de nivel y la de barras se unen, con el cashback en
     quetzales debajo.
   - **Premios:** lista desplegable con los cupones usados y vencidos.
@@ -1452,25 +2311,32 @@ verificación" son el mismo momento.
   guarda en su propio Keychain (acceso "después del primer desbloqueo", solo en
   este dispositivo) y **nunca lo escribe en logs**.
 - **Sin token:** no enviar. El día queda pendiente. Aplica a los tres caminos de
-  envío: el sync de hoy, la cola de reintentos y el backfill.
-- **`401`:** no es error permanente. El día queda pendiente y **no se corta el
-  procesamiento de los demás días**. Hecho (A24).
+  envío: el sync de hoy, la cola de reintentos y ponerse al día.
+- **`401`:** no es error permanente: el día queda pendiente (A24). **Desde el 3
+  oct corta la vuelta**, igual que sin red o con el servidor caído: fallaría
+  igual para los demás días. No se pierde nada.
 - **`usuario_id` fuera del payload** y sin la constante `"alvaro-001"`. Hecho (A24).
 - **`actualizarSesion(null)`:** borra el token del Keychain. Hecho (A24).
-- **[PENDIENTE] Cola, caducidad:** la regla es 14 días (confirmado el 1 oct).
-  Hoy Swift guarda hasta 30 días pendientes, sin mirar la antigüedad de cada
-  uno.
-- **[PENDIENTE] Cola, error `422`:** cuando el servidor rechaza un día por
-  viejo, Swift debería sacar solo ese día y **seguir** con los demás. Hoy
-  cualquier `4xx` que no sea `401`/`408`/`429` corta toda la vuelta: los días
-  que quedaban esperan a la siguiente vez que la app vuelve a primer plano.
-- **[PENDIENTE] Wrapper de Dart:** agregar `actualizarSesion` a
-  `lib/datos/healthkit_bridge.dart`. Es el puente por el que Flutter le entrega
-  el token a Swift: sin él, Swift no puede enviar el `sync` con sesión y todo
-  queda `encolado`.
-- **[PENDIENTE] Backfill después del login:** hoy solo se reintenta en la
-  siguiente llamada a `solicitarPermisos`. Decidir si `actualizarSesion` con un
-  token debe dispararlo.
+- **Hecho en A31 (3 oct):** cola de 14 días; `422` de la ventana (descarta y
+  sigue); una sola regla para los días que fallan (`AccionDiaFallido`,
+  `RecorridoDias`); ponerse al día al abrir la app, al iniciar sesión y al dar
+  el permiso (`MarcaEnvios`, reemplaza al backfill); al cambiar de cuenta se
+  olvidan la marca y la cola; respuesta ilegible como enviada, con log. El
+  wrapper de Dart lo hizo Daniel (D11), con dos ajustes de Alvaro.
+- **[PENDIENTE] Segundo plano (A32):** `HKObserverQuery` con *background
+  delivery* registrados en `AppDelegate` al arrancar; con el teléfono bloqueado
+  no leer (`isProtectedDataAvailable`); mandar solo hoy y ayer en ~25 s y
+  **siempre** llamar al `completionHandler` (si no, a las 3 veces iOS deja de
+  despertar la app); pedirle a iOS tiempo extra si la app pasa a segundo plano a
+  mitad de una vuelta. Solo se prueba en un iPhone real.
+- **[PENDIENTE] Identidad de la app:** el identificador es
+  `com.example.vidaDemo`. Push y *background delivery* se configuran en Apple
+  Developer para un identificador concreto: hay que fijar el definitivo antes
+  (ver "Puntos abiertos"). Lo mismo la URL del backend (IP fija, A10) antes de
+  TestFlight.
+- **Carrera angosta (anotada):** si un envío de la cuenta anterior sigue en vuelo
+  cuando entra otra cuenta, puede mover la marca de la nueva, que recibiría
+  menos días.
 - **Workouts y lo manual (1 oct) — hecho:** Swift no manda una sesión si no hay
   ritmo cardíaco medido en su ventana (antes mandaba `fc_promedio`/`fc_maxima`
   en `0`), ni los workouts, pasos o lecturas de ritmo cardíaco escritos a mano
@@ -1486,26 +2352,330 @@ verificación" son el mismo momento.
 
 ---
 
+## Premios, canje y cupones (3 oct 2026)
+
+Todo con token (`Authorization: Token <clave>`); `401` sin él y `403` si la
+cuenta no tiene perfil de usuario. **La forma sigue la del mock de la app**
+(`premios.json`) para que Daniel cambie el origen de los datos sin tocar los
+modelos; los `id` son texto.
+
+### `GET /api/v1/monedas/saldo`
+
+```json
+{
+  "saldo": 35,
+  "vence": "2027-01-03",
+  "dias_para_cierre": 88,
+  "aviso_fin_de_season": false,
+  "puede_canjear": true,
+  "season": { "numero": 4, "anio": 2026, "monedas_ganadas": 50, "semanas_completas": 2 }
+}
+```
+
+- `vence` es el domingo en que cierra la season: ese día todavía se pueden usar
+  y al siguiente el saldo vuelve a 0. `aviso_fin_de_season` es `true` desde 7
+  días antes (el aviso de que las monedas se reinician).
+- `puede_canjear` es `false` sin póliza verificada (sin póliza, pendiente o
+  rechazada): las monedas se ganan igual, pero no se gastan. La app lo usa para
+  el candado del botón de compra.
+- `season.monedas_ganadas` suma lo ganado en la season (no baja al gastar) y
+  `semanas_completas` cuenta las semanas con los dos objetivos cumplidos: son
+  los datos de la hoja de la temporada.
+
+### `GET /api/v1/monedas/periodo?desde=&hasta=` (hecho 4 oct 2026)
+
+Qué pasó con las monedas en un período, para los filtros de semana, mes y año.
+`desde` y `hasta` son obligatorios (`AAAA-MM-DD`, `desde` ≤ `hasta`, máximo 366
+días; fuera de eso `400`).
+
+```json
+{
+  "desde": "2026-10-01", "hasta": "2026-10-31",
+  "ganadas": 40, "por_objetivos": 10, "por_liga": 30, "otras": 0,
+  "gastadas": 40, "vencidas": 0, "anuladas": 0
+}
+```
+
+- `ganadas` = `por_objetivos` + `por_liga` + `otras` (lo que se acreditó a mano).
+  `gastadas` son los canjes. `vencidas`, las que caducaron al cerrar la season.
+  `anuladas`, lo que se descontó a mano (por ejemplo, el retroactivo denegado).
+  Todo en positivo.
+- **Cada movimiento cuenta en su fecha**, no en la de la actividad: las ganadas,
+  cuando se pagaron (el cierre del martes o el pago del día 9 de La Liga); las
+  vencidas, cuando se asentaron, que es la primera vez que se pidió el saldo
+  después del cierre de la season. Antes de contar se asientan las pendientes,
+  igual que en `monedas/saldo`.
+- Sirve para cuadrar: `ganadas − gastadas − vencidas − anuladas` es lo que cambió
+  el saldo en ese período.
+
+### `GET /api/v1/premios`
+
+```json
+{
+  "categorias": ["Todos", "Cafecitos", "Restaurantes"],
+  "premios": [{
+    "id": "7", "nombre": "Ookii", "zona": "Guatemala", "categoria": "Restaurantes",
+    "descripcion": "2x1 en sushi", "detalle": "...", "condiciones": "...",
+    "costo_monedas": 40, "vence": "2026-12-31",
+    "foto": "assets/img/premios/restaurantes/ookii.webp", "fondo": null,
+    "destacado": false
+  }]
+}
+```
+
+- Solo salen los premios **activos** y dentro de su fecha de canje. El catálogo
+  se ve **completo con o sin póliza**.
+- `vence` es el último día para canjearlo y puede venir en **`null`** (premio
+  sin fecha). `foto` y `fondo` vienen en `null` si el premio no tiene logo o
+  usa fondo blanco: el catálogo tiene que seguir saliendo con el placeholder.
+- `destacado` es `true` para el comercio que compró visibilidad hoy (ver
+  "Patrocinios") y `false` para los demás.
+- `categorias` empieza con `"Todos"` y sigue con las que tengan los premios
+  que salen, en orden alfabético.
+
+### `POST /api/v1/premios/<id>/canjear`
+
+Sin cuerpo. Canjea el premio con las monedas del usuario y devuelve **201** con
+el cupón y el saldo que queda:
+
+```json
+{ "cupon": { "...": "ver abajo" }, "saldo": 60 }
+```
+
+| Código | `error` | Cuándo |
+|---|---|---|
+| 403 | `poliza_no_verificada` | Sin póliza verificada. No se toca nada. |
+| 404 | — | El premio no existe. |
+| 409 | `premio_no_disponible` | Está apagado o ya pasó su fecha de canje. |
+| 409 | `saldo_insuficiente` | No alcanzan las monedas; trae `saldo` y `costo`. |
+
+- El descuento (una fila `canje` negativa en el ledger) y el cupón se escriben
+  **en la misma transacción**: nunca queda uno sin el otro.
+- El cupón **caduca a las 3 semanas** (21 días) del canje (hora de Guatemala),
+  aparte de las monedas. Los cupones ya emitidos conservan la fecha que tenían. El código es único, con la forma `MV-XXXX-XXXX` (sin 0, O, 1, I
+  ni L, para que se lea y se teclee bien en caja).
+- Se puede canjear el mismo premio más de una vez; cada canje es otro cupón.
+- Un premio con costo 0 (promoción gratis) se canjea igual, sin mover el ledger.
+- Los canjes que existían antes del 3 oct reciben un código al migrar
+  (`coins/0002`).
+
+### `GET /api/v1/cupones`
+
+```json
+{
+  "cupones": [{
+    "id": "12", "comercio": "Ookii", "beneficio": "2x1 en sushi",
+    "codigo": "MV-OK41-7XQ2", "origen": "tienda",
+    "canjeado": "2026-10-03", "vence": "2026-12-02", "dias_para_vencer": 60,
+    "estado": "activo", "foto": null, "fondo": null,
+    "costo_monedas": 40, "ganado_en": null, "usado_el": null
+  }],
+  "por_usar": 1
+}
+```
+
+- Trae **todos** los cupones del usuario en una lista: `origen` es `tienda`
+  (comprado con monedas), `semana` o `liga` (ganados en una semana o un podio
+  patrocinados). Primero los activos —el que vence antes arriba— y después los
+  usados y vencidos, del más reciente al más viejo. La app arma "Mis cupones"
+  y el desplegable de usados y vencidos con `estado`.
+- `estado`: `activo`, `usado` o `vencido`. **El servidor lo calcula**: un
+  cupón activo pasa a `vencido` al día siguiente de su `vence` (el último día
+  todavía vale). `dias_para_vencer` es 0 en los que no están activos.
+- `costo_monedas` es `null` en los que se ganaron; `ganado_en` ("Semana 1")
+  solo viene en esos.
+- `por_usar` cuenta los activos (la píldora de la pestaña).
+
+### Admin
+
+- **Premios:** se crean y editan a mano (nombre, comercio, categoría, costo,
+  detalle, condiciones, logo, fondo, fecha límite y `activo`). Apagar un premio
+  lo saca del catálogo sin borrarlo: los cupones ya canjeados siguen
+  apuntando a él.
+- **Cupones:** acción "Marcar como usado" (ver "Puntos abiertos").
+- **Patrocinios:** aquí se venden las semanas, los meses de La Liga y los
+  premios destacados (ver "Patrocinios").
+- Para cargar el catálogo del mock de la app:
+  `python manage.py importar_premios <ruta al premios.json>`. Es idempotente
+  (un premio se identifica por nombre y comercio), no apaga lo que ya no esté
+  en el archivo y guarda todo o nada: si un premio viene mal, avisa cuál y no
+  guarda ninguno.
+
+---
+
+## Patrocinios (4 oct 2026)
+
+Una marca puede comprar tres cosas (las tres vías de ingreso del comercio): una
+**semana** del objetivo semanal, **La Liga de un mes** y el **destacado** de su
+premio en el catálogo. Todo se carga a mano en el admin (tabla *Patrocinios*);
+la marca viaja dentro de los endpoints que ya usa la app y, además, hay un
+endpoint que lista todo lo vendido (ver abajo). Sin patrocinio no se dibuja
+nada (nunca un hueco ni un cartel).
+
+**Qué lleva un patrocinio:** el comercio (el mismo del catálogo de Premios: de
+ahí salen el nombre de la marca, el logo y el color de fondo), el periodo
+(`desde` y `hasta`, inclusivos), el texto del cupón que se gana, el color de
+`acento`, las fotos del carrusel y `activo`. Apagarlo lo quita de la app sin
+borrarlo. El admin valida que una semana vaya de lunes a domingo, que un mes de
+La Liga vaya del día 1 al último, que semana y liga tengan texto de cupón y que
+el comercio tenga logo. **Una sola marca por semana y por mes de La Liga.**
+
+**La forma que lee la app** (`Patrocinio.desdeJson` en Dart), igual en las tres
+partes donde aparece:
+
+```json
+{
+  "id": "12",
+  "marca": "Montanos",
+  "logo": "assets/img/premios/restaurantes/montanos.webp",
+  "fondo": "#000000",
+  "acento": "#8C5A3C",
+  "cupon": "2x1 en Puyazo 8 oz",
+  "fotos": ["assets/img/premios/restaurantes/montanos.webp"]
+}
+```
+
+`id` es el id del premio del comercio, el mismo del catálogo. `fondo` y
+`acento` vienen en `null` si no se cargaron; `fotos` viene vacía si no hay (el
+carrusel usa solo el logo).
+
+**Dónde sale:**
+
+| Compra | Dónde viaja |
+|---|---|
+| Semana | `patrocinador` de cada semana en `GET /api/v1/objetivos/semanas` |
+| La Liga de un mes | `liga.patrocinio` de La Liga en `GET /api/v1/ligas` (Tus Ligas siempre `null`) |
+| Premio destacado | `destacado: true` del premio en `GET /api/v1/premios` (vigente si hoy cae entre `desde` y `hasta`) |
+
+#### `GET /api/v1/patrocinios`
+
+Con token (`403` si la cuenta no tiene perfil). Lista **todo lo vendido que
+todavía no terminó** (la semana, el mes o el destacado de hoy y los de más
+adelante; lo apagado y lo que ya pasó no salen), ordenado por fecha. Es lo mismo
+que viaja dentro de las otras pantallas, en un solo lugar, para quien necesite
+saber qué hay vendido sin pedir cada pantalla.
+
+```json
+{
+  "semanas": [{
+    "fecha_inicio": "2026-10-05", "fecha_fin": "2026-10-11",
+    "patrocinador": {"id": "12", "marca": "Montanos", "logo": "assets/img/premios/restaurantes/montanos.webp",
+                     "fondo": "#000000", "acento": "#8C5A3C", "cupon": "2x1 en Puyazo 8 oz", "fotos": []}
+  }],
+  "ligas": [{
+    "arranca": "2026-10-01", "cierra": "2026-10-31",
+    "patrocinio": {"id": "7", "marca": "Ookii", "logo": "assets/img/premios/restaurantes/ookii.webp",
+                   "fondo": null, "acento": null, "cupon": "2x1 en sushi", "fotos": []}
+  }],
+  "destacados": [{"premio_id": "7", "desde": "2026-10-04", "hasta": "2026-10-31"}]
+}
+```
+
+`patrocinador` y `patrocinio` llevan la forma de marca de arriba; los
+destacados dicen solo qué premio (`premio_id`, el id del catálogo) y hasta
+cuándo, porque el premio ya lo trae `GET /api/v1/premios`. Las tres listas
+vienen siempre, vacías si no hay nada.
+
+**Cupones que se ganan** (siempre **además** de las monedas, nunca en lugar de
+ellas). Los crea el servidor al cerrar el ciclo y aparecen en
+`GET /api/v1/cupones` con `origen` `semana` o `liga`:
+
+- **Semana patrocinada:** al cierre del martes 00:00, quien **completó** la
+  semana (los dos componentes) gana el cupón. Con un solo componente cumplido
+  cobra sus monedas pero no el cupón. `ganado_en` = "Semana 7".
+- **La Liga patrocinada:** el día 9, al pagar el podio (antes, al cerrar el día 2), los
+  que ganan monedas (el podio, con al menos 1 punto) ganan el cupón. `ganado_en` = "La Liga de octubre".
+- **Hace falta póliza verificada al momento de ganarlo** (decidido 4 oct; en La Liga, al pagar el día 9, no al cerrar): un
+  cupón es un premio, y todo premio exige póliza. Sin ella las monedas se
+  ganan igual, pero el cupón no. Tampoco se da por una semana anterior a la
+  verificación si se denegó el retroactivo.
+- **Un patrocinio da un solo cupón por persona**: correr el cierre dos veces,
+  o la corrección de las 12:00, no duplica.
+- El cupón caduca a las **3 semanas** (21 días) de ganado (igual que uno canjeado), no
+  cuesta monedas (`costo_monedas` en `null`) y su `beneficio` es el texto del
+  cupón del patrocinio, no el del premio del catálogo. Si un patrocinio se
+  carga o se apaga **después** del cierre, no se premia hacia atrás.
+- Los resúmenes de `cerrar_semana` y de `pagar_la_liga` traen `cupones`: cuántos se
+  entregaron (el cierre de La Liga ya no trae `monedas_pagadas`, sino `monedas_por_pagar`).
+
+**[PENDIENTE]:** Diego define los comercios, los textos de cupón y las fotos
+de cada marca (las del mock son de ejemplo). Qué pasa con el cupón de quien
+ganó sin póliza verificada (hoy no se da) lo confirma el negocio.
+
+---
+
 ## Puntos abiertos
+
+*De la revisión completa (6 oct 2026):*
+
+- **Contraseñas de `data.json` — [PENDIENTE] (Luis, en curso):** el archivo ya no
+  está en el repo (A37) pero **sigue en el historial de git** con los hashes de
+  `luigi` (superusuario) y `testuser`. Luis está cambiando esas contraseñas donde
+  existan las cuentas. Reescribir el historial queda fuera: obligaría a todo el
+  equipo a volver a clonar.
+- **Piloto con base simulada de la aseguradora (decidido 6 oct):** los usuarios del
+  piloto los creamos nosotros; una parte grande con póliza verificada (simulada) y
+  otra sin póliza, para probar los dos casos. **Falta:** un comando que cree ese grupo
+  (con contraseñas distintas, que se niegue a correr en el servidor real; reemplaza a
+  `sembrar_prueba`, que crea una cuenta con contraseña fija) y el estado "sin póliza"
+  en la app (Premios con candado y Mi Plan con "Ingresa tu póliza").
+- **Login con correo o con usuario — [PENDIENTE]:** hoy la app manda el correo como
+  `username`. Aceptar las dos formas exige guardar el correo aparte, único y sin
+  distinguir mayúsculas ("Ana@" y "ana@" hoy son cuentas distintas). Para el piloto lo
+  más simple es solo correo.
+- **Límite de 2,5 MB del sync — [PENDIENTE]:** un día de más de ~8.000 muestras
+  responde 400 en HTML y Swift lo toma como permanente (pierde ese día y frena los
+  siguientes). Opciones: subir el límite a 10 MB con un tope de muestras y un 413 claro
+  (recomendada), partir el envío en Swift, o mandar menos datos.
+- **Plausibilidad anti-fraude — [PENDIENTE]:** una lectura de ritmo cardíaco de 95
+  minutos o una sesión que no cuadra con su duración dan 150 puntos de intensidad. El
+  techo de 200 puntos al día limita el daño; volver a verlo antes de usuarios reales.
+- **Servidor del piloto — [PENDIENTE]:** dónde vive el backend, su dominio y HTTPS; con
+  eso la URL deja de estar fija en `http://192.168.1.21:8000` (Swift). Va junto con el
+  bundle ID de más abajo.
+
+*Del 3 oct (sincronización):*
+
+- **Identificador definitivo de la app (*bundle ID*):** hoy es
+  `com.example.vidaDemo`, el de ejemplo de Flutter. Es el nombre de la app para
+  Apple (App Store, Apple Developer, notificaciones push, permisos de Salud), no
+  la dirección del backend. **Una vez publicada no se puede cambiar** (sería otra
+  app). Candidato: `com.assures.masvida`, que ya usan el canal de Swift y el
+  Keychain. Frena A32 (segundo plano) y las notificaciones push.
+- **Margen de gracia del cierre semanal — resuelto (3 oct):** martes 00:00
+  (ver "Ciclos y cortes"). Hecho en A34.
+- **Notificaciones push:** cómo se registra el teléfono (directo en Swift con
+  APNs, recomendado: sin un tercero con datos del usuario, o con Firebase desde
+  Flutter) y cuándo suena el recordatorio (24 h sin datos, domingo en la tarde,
+  o las dos). Necesita: llave `.p8` en Apple Developer, modelo y endpoint de
+  dispositivos en el backend, envío programado y la pantalla del permiso.
+- **Monedas de La Liga — resuelto (3 oct):** van a los 3 primeros, como ya
+  decían los términos y `CLAUDE.md`. Quedan abiertos cuántas monedas da cada
+  puesto y qué pasa con un empate total (ver "La Liga y Tus Ligas").
+- ~~Textos de los términos~~ — **corregidos el 6 oct (A37)**: ya no hablan de grupos
+  de edad en La Liga ni de "prioridad del reloj" (los pasos se eligen por hora);
+  dicen que los demás ven nombre público, posición y puntos (nunca pasos), "4
+  temporadas de 13 semanas; en los años con 53 semanas, la última tiene 14", y
+  cupones de 3 semanas. El registro dejó de prometer "compites con gente de tu
+  edad" y la hoja de monedas de decir que hay que cumplir los dos objetivos (cada
+  uno paga por separado). La versión del texto es del 6 oct 2026
+  (`versionTerminos`). **Sigue [PENDIENTE]** la revisión legal del texto completo.
 
 *De la reunión del 2 oct:*
 
-- **Endpoints que faltan definir:** inicio de sesión con Google y Apple, lista de
-  semanas de la season (vista "battle pass"), cashback en quetzales, cupones
-  (activos, usados y vencidos) y patrocinios.
+- **Endpoints que faltan definir:** inicio de sesión con Google y Apple y
+  patrocinios (el de cashback en quetzales y los patrocinios ya están). (Ya están hechos la lista de semanas de
+  la season, `objetivos/semanas`, y los de saldo, premios, canje y cupones.)
 - **Póliza cancelada después de verificada:** cómo se entera el sistema y qué
   pasa con los puntos y monedas de ese momento.
-- **Año de póliza y cuentas sin póliza:** una cuenta base no tiene año de
-  póliza. ¿Con qué fechas cuenta sus puntos anuales y su nivel mientras no
-  vincula una póliza?
-- **Puntos de antes del inicio de la póliza:** al verificar con retroactividad,
-  ¿los días anteriores al inicio del año de póliza en curso cuentan para ese
-  año o para el anterior?
-- **Cuándo se paga el cashback:** ¿al cerrar cada año de póliza (en la
-  renovación, después de pagar la prima)?
+- ~~Año de póliza y cuentas sin póliza~~, ~~puntos de antes del inicio de la
+  póliza~~ y ~~cuándo se paga el cashback~~ — **decididos el 4 oct**: ver
+  "Cashback en quetzales".
 - **Transición de la season en curso:** según la regla nueva, la season 4 de
-  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas); el
-  código la empezó el jueves 1 oct. Hay que decidir si se corrige hacia atrás.
+  2026 empezó el lunes 28 sep y termina el domingo 3 ene 2027 (14 semanas), y
+  el código ya la calcula así (2 oct). Falta decidir qué pasa con las monedas
+  que se pagaron en las semanas de la season 3 (hasta el 27 sep) cuando se
+  construya el reinicio de saldo: ¿se reinician el 28 sep o no se tocan?
 
 *Encontrados en la revisión contra el código (1 oct):*
 
@@ -1519,8 +2689,8 @@ verificación" son el mismo momento.
   límite de HealthKit; se mitiga con las reglas del servidor (topes por muestra,
   ventana de 14 días), no se resuelve.
 
-- **Días anulados y objetivo semanal:** un día anulado por retroactivo denegado
-  sigue contando para el progreso de la semana en curso. ¿Debe contar?
+- ~~Días anulados y objetivo semanal~~ — **resuelto** (5 oct): no cuentan para la meta
+  semanal ni para el desempate de las ligas (ver "Retroactividad").
 - **Programar `cerrar_semana` — resuelto en el repo (1 oct):** lo corre el
   servicio `programador` de Compose (ver "Cierre semanal programado"). Falta
   confirmar con quien despliegue que producción usa Compose; si no, hay que
@@ -1530,9 +2700,17 @@ verificación" son el mismo momento.
   o se dejan solo como dato.
 - **Cuánto paga el objetivo semanal:** desde el 2 oct, 5 monedas por pasos +
   5 por workouts, de forma **provisional** (la reunión los dio de ejemplo). El
-  código paga hoy 20 por cumplir los dos.
-- **La Liga, Tus Ligas, Premios y Canje:** las tablas existen en el backend,
-  pero no hay cálculo ni endpoints todavía.
+  código ya paga por componente (3 oct); los montos se editan en el admin.
+- **La Liga y Tus Ligas:** endpoints, salir de un grupo y cierre mensual hechos
+  (3 oct). Falta el cupo de miembros y el alias público (ver "Endpoints de La
+  Liga y Tus Ligas"). La tabla `TramoPremio` (premios por percentil) quedó
+  sin uso: decidir si se borra. El código de invitación se valida único al
+  crearlo, pero la columna todavía no tiene restricción `unique` en la base.
+- ~~Cupones que se ganan (semanas y podios patrocinados)~~ — **hecho** (4 oct):
+  los crean el cierre semanal y el pago del podio de La Liga (ver "Patrocinios").
+- **Quién marca un cupón como usado:** hoy solo se hace a mano en el admin
+  (acción "Marcar como usado"). Falta decidir si el comercio lo marca (por
+  ejemplo con un endpoint que reciba el código) o si basta con que venza.
 
 *Abiertos desde antes:*
 
@@ -1550,24 +2728,29 @@ verificación" son el mismo momento.
   la versión 1 sola, con cualquier `migrate`; no hace falta comando ni fixture.
   Cuando cambie una regla de puntaje o de monedas, se agrega una versión nueva
   con su `vigente_desde` (por ejemplo con otra migración de datos igual a esa).
+  **La versión 2** (migración `poincs/0008`, vigente desde el **2 oct 2026**)
+  marca las reglas de la reunión de ese día, empezando por las monedas sin tope
+  que caducan con la season. Cada fila de los ledgers queda sellada con la versión
+  vigente en su fecha: lo anterior al 2 oct es versión 1 y lo posterior, versión 2.
+  La versión es solo una etiqueta de auditoría: los cálculos los hace el código.
 - **Filas antiguas del ledger (`puntos_diarios`):** el formato viejo de una
   fila por día ya no se lee. No hay datos reales en ese formato; una base de
   pruebas vieja se vuelve a sincronizar.
-- **Logout en el servidor:** hoy no existe un endpoint que borre el token. Como
-  hay un token por cuenta, borrarlo cerraría la sesión en **todos** los
-  dispositivos de esa persona. Mientras tanto, cerrar sesión en la app solo borra
-  las copias locales (`actualizarSesion(null)`).
+- ~~Logout en el servidor~~ — **hecho** (4 oct): `POST /api/v1/logout` cierra este
+  teléfono y `POST /api/v1/logout/todos` todos (A35, un token por sesión con Knox).
+  Borrar la cuenta ya cierra todas las sesiones (6 oct). **[PENDIENTE]:** que cambiar
+  la contraseña también lo haga (todavía no existe ese endpoint).
 - **Qué estado ve Flutter cuando Swift no tiene sesión:** hoy recibe `encolado`.
   Falta decidir si se queda así o se agrega un estado nuevo (cambia el contrato).
-- **Cola y backfill al cerrar sesión o entrar otra cuenta:** HealthKit pertenece
-  al teléfono, no a la cuenta. Sin una regla, los días pendientes de una cuenta se
-  subirían a nombre de la siguiente. Propuesta: al cerrar sesión, Swift vacía la
-  cola y reinicia la bandera del backfill.
-- **Caducidad y renovación del token:** hoy no caduca. Las plataformas grandes usan
-  tokens de vida corta con uno de renovación. Conviene también exigir HTTPS fuera
-  de pruebas locales.
+- **Cola y marca al cerrar sesión o entrar otra cuenta — resuelto (3 oct; cambiado
+  en A35, 4 oct):** se vacían solo si entra **otra persona** (otro `usuario_id`);
+  cerrar sesión solo borra el token. La cuenta que entra nueva recibe sus 7 días.
+- ~~Caducidad del token~~ — **hecha** (4 oct; A35 la pasó a Knox): vence a los 30 días
+  sin uso, cada uso la renueva, tope de 90 días y guardado como hash. Queda abierto
+  exigir HTTPS fuera de pruebas locales (paquete 7) y, más adelante, tokens de vida
+  corta con uno de renovación como las plataformas grandes.
 - **`Token` o `Bearer` en el encabezado:** se dejó `Token` porque es lo que espera
-  Django REST Framework; `Bearer` es el estándar de OAuth 2.0 y se puede configurar
+  django-rest-knox (y antes Django REST Framework); `Bearer` es el estándar de OAuth 2.0 y se puede configurar
   más adelante.
 - **Días vacíos:** emparejar los tres caminos de envío frente a un día sin
   actividad (ver "Días sin actividad").
@@ -1580,12 +2763,9 @@ verificación" son el mismo momento.
 - **Metas del objetivo semanal:** la tabla de pasos por edad es provisional
   (ver "Meta de pasos por edad"); falta ajustarla con 2 a 4 semanas de datos
   del piloto. Falta decidir cuántos workouts y qué meta tiene un menor de 18
-  (la tabla empieza en 18). (Qué es un
+  (la tabla empieza en 18; mientras tanto el código le da la de 18 a 29). (Qué es un
   workout ya está decidido: cualquier entrenamiento con ritmo cardíaco, de
   cualquier duración.)
-- **Tramos y premios de La Liga:** porcentajes más allá de 3% / 7% / 10–25%
-  y qué premio le toca a cada tramo (Diego).
-- **Endpoints de La Liga y de Tus Ligas:** sin especificar.
-- **Nombre del path `GET /api/v1/retos/estado`:** conserva "retos" aunque el
-  concepto ya se llama objetivo semanal. Decidir con Luis si se renombra
-  (p. ej. `/objetivos/estado`) antes de que Daniel lo consuma.
+- **Monedas de cada puesto de La Liga:** cuántas al 1.º, al 2.º y al 3.º
+  (Diego), y qué pasa con un empate total en puntos y pasos. El código usa
+  30 / 20 / 10 y puesto compartido, provisionales.

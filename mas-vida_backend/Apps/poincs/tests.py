@@ -1,11 +1,11 @@
 from datetime import date
 
 from django.contrib.auth.models import User
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from Apps.poincs.models import Ledger, VersionRegla
 from Apps.users.models import Usuario
+from Apps.users.pruebas import token_de
 
 
 class HistorialTests(APITestCase):
@@ -20,8 +20,8 @@ class HistorialTests(APITestCase):
         )
         self.version = VersionRegla.objects.get_or_create(version=1, defaults={"vigente_desde": date(2026, 1, 1)})[0]
         # El token lo crea la senal de users al crear el User.
-        token = Token.objects.get(user=self.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def _ledger(self, fecha, pasos, intensidad, tope=False, usuario=None):
         """Escribe un día como lo hace el sync: una fila de pasos y una de intensidad."""
@@ -47,8 +47,8 @@ class HistorialTests(APITestCase):
     def test_una_cuenta_sin_perfil_de_usuario_da_403(self):
         # Cuenta que existe y tiene token pero no tiene fila en Usuario (p. ej. un admin).
         sin_perfil = User.objects.create_user(username="admin2", password="clave-segura-2")
-        token = Token.objects.get(user=sin_perfil)
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        token = token_de(sin_perfil)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
         self.assertEqual(self.client.get(self.url).status_code, 403)
 
     def test_devuelve_los_dias_del_mas_nuevo_al_mas_viejo(self):

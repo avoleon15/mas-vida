@@ -442,6 +442,771 @@ final class ApiErrorReintentableTests: XCTestCase {
   }
 }
 
+/// Base de las pruebas que mandan un envío a un servidor falso y miran el error
+/// que sale: `cliente` ya apunta a `ProtocoloEspia` y `errorAl` lo usa.
+class PruebaConServidorFalso: XCTestCase {
+
+  var cliente: ApiClient!
+
+  override func setUp() {
+    super.setUp()
+    ProtocoloEspia.reiniciar()
+    let almacen = AlmacenEnMemoria()
+    almacen.token = "abc123-secreto"
+    let configuracion = URLSessionConfiguration.ephemeral
+    configuracion.protocolClasses = [ProtocoloEspia.self]
+    cliente = ApiClient(
+      baseURL: URL(string: "http://servidor.prueba")!,
+      session: URLSession(configuration: configuracion),
+      almacen: almacen
+    )
+  }
+
+  /// Responde `status` con `cuerpo` y devuelve el error que lanzó el envío.
+  func errorAl(responder status: Int, _ cuerpo: String) async -> Error? {
+    ProtocoloEspia.status = status
+    ProtocoloEspia.respuesta = Data(cuerpo.utf8)
+    do {
+      _ = try await cliente.enviarSincronizacion(payloadDePrueba())
+      return nil
+    } catch {
+      return error
+    }
+  }
+}
+
+/// El `422` de la ventana de 14 días se distingue de cualquier otro rechazo:
+/// solo con ESE motivo se puede descartar el día y seguir con los demás.
+final class ApiClientVentanaTests: PruebaConServidorFalso {
+
+  func testEl422DeLaVentanaSeReconoce_ConSuFecha() async {
+    // Tal cual lo arma Apps/activities/views.py.
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    guard case .fueraDeVentana(let fecha)? = error as? ApiError else {
+      return XCTFail("Debió ser fueraDeVentana, fue: \(String(describing: error))")
+    }
+    XCTAssertEqual(fecha, "2026-09-01")
+  }
+
+  func testEl422DeLaVentanaNoSeReintenta() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    XCTAssertEqual((error as? ApiError)?.esReintentable, false,
+                   "Un día fuera de la ventana mañana estará más fuera: reintentarlo es inútil")
+  }
+
+  func testSinFechaEnElCuerpo_IgualSeReconoce() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana"}"#)
+
+    guard case .fueraDeVentana(let fecha)? = error as? ApiError else {
+      return XCTFail("Debió ser fueraDeVentana, fue: \(String(describing: error))")
+    }
+    XCTAssertNil(fecha)
+    XCTAssertFalse((error?.localizedDescription ?? "").isEmpty)
+  }
+
+  func testOtro422_SigueSiendoUnErrorDelServidor() async {
+    for cuerpo in [
+      #"{"error":"otra_cosa","fecha":"2026-09-01"}"#,   // otro motivo
+      #"{"fecha":["Formato inválido."]}"#,               // error de validación
+      #"<html>Unprocessable</html>"#,                    // no es JSON
+      "",                                                // sin cuerpo
+    ] {
+      let error = await errorAl(responder: 422, cuerpo)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con cuerpo \(cuerpo) debió ser servidor(422), fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, 422)
+    }
+  }
+
+  func testElMismoCuerpoConOtroCodigo_NoEsDeVentana() async {
+    for status in [400, 403, 500] {
+      let error = await errorAl(responder: status, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(status) debió ser servidor, fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, status)
+    }
+  }
+
+  func testElMensajeDiceElDia_YNoTraeElToken() async {
+    let error = await errorAl(responder: 422, #"{"error":"fuera_de_ventana","fecha":"2026-09-01"}"#)
+
+    let mensaje = error?.localizedDescription ?? ""
+    XCTAssertTrue(mensaje.contains("2026-09-01"))
+    XCTAssertFalse(mensaje.contains("abc123-secreto"))
+  }
+}
+
+/// La única regla para un día que falló: reintentar, descartar y seguir, o
+/// descartar y cortar.
+final class AccionDiaFallidoTests: XCTestCase {
+
+  private func servidor(_ codigo: Int) -> ApiError { .servidor(codigo: codigo, cuerpo: nil) }
+
+  func testSinRedOHealthKit_SeReintenta() {
+    XCTAssertEqual(AccionDiaFallido.para(URLError(.notConnectedToInternet)), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(URLError(.timedOut)), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(NSError(domain: "com.apple.healthkit", code: 6)), .reintentarDespues)
+  }
+
+  func testSinSesion401_408_429Y5xx_SeReintentan() {
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.sinSesion), .reintentarDespues)
+    for codigo in [401, 408, 429, 500, 503] {
+      XCTAssertEqual(AccionDiaFallido.para(servidor(codigo)), .reintentarDespues, "\(codigo)")
+    }
+  }
+
+  func testElConsentimientoPendiente_SeReintentaComoElTokenRechazado() {
+    // El 403 de `consentimiento_requerido` se arregla cuando la persona acepta,
+    // igual que el 401 cuando vuelve a entrar: el día no se descarta.
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.consentimientoRequerido), .reintentarDespues)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.consentimientoRequerido),
+                   AccionDiaFallido.para(servidor(401)))
+    XCTAssertTrue(ApiError.consentimientoRequerido.esReintentable)
+  }
+
+  func testUn403QueNoEsDeConsentimiento_SigueSiendoPermanente() {
+    // Por ejemplo, la cuenta sin perfil: reintentar no lo arregla.
+    for cuerpo in [nil, "", #"{"mensaje":"El usuario autenticado no tiene un perfil asociado."}"#] {
+      XCTAssertEqual(
+        AccionDiaFallido.para(ApiError.servidor(codigo: 403, cuerpo: cuerpo)),
+        .descartarYCortar, "cuerpo: \(String(describing: cuerpo))")
+    }
+  }
+
+  func testEl422DeLaVentana_SeDescartaYSigue() {
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: "2026-09-01")), .descartarYSeguir)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.fueraDeVentana(fecha: nil)), .descartarYSeguir)
+  }
+
+  func testOtrosPermanentes_SeDescartanYCortan() {
+    for codigo in [400, 403, 404, 422] {
+      XCTAssertEqual(AccionDiaFallido.para(servidor(codigo)), .descartarYCortar, "\(codigo)")
+    }
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.urlInvalida), .descartarYCortar)
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaInvalida), .descartarYCortar)
+  }
+
+  func testUnaRespuestaIlegible_SeTomaComoEnviada() {
+    // El servidor respondió 2xx: el día ya está guardado (decidido 3 oct 2026).
+    XCTAssertEqual(AccionDiaFallido.para(ApiError.respuestaIlegible), .tomarComoEnviado)
+  }
+}
+
+/// La vuelta día por día de la cola y el backfill: cuándo sigue y cuándo corta.
+@MainActor
+final class RecorridoDiasTests: XCTestCase {
+
+  /// Un desenlace sin el error adentro, para poder comparar.
+  private enum Visto: Equatable { case enviado, saltado, reintentar, descartado, cortado }
+
+  private struct Falla: Error {}
+
+  /// Corre la vuelta con `respuestas[dia]` (nil = se envía bien) y devuelve
+  /// qué días se intentaron y qué se registró de cada uno.
+  private func recorrer(
+    _ dias: [String],
+    _ respuestas: [String: Result<Bool, Error>]
+  ) async -> (intentados: [String], registrados: [String], vistos: [Visto], fin: FinDeVuelta) {
+    var intentados: [String] = []
+    var registrados: [String] = []
+    var vistos: [Visto] = []
+    let fin = await RecorridoDias.recorrer(
+      dias,
+      enviar: { dia in
+        intentados.append(dia)
+        return try (respuestas[dia] ?? .success(true)).get()
+      },
+      registrar: { dia, desenlace in
+        registrados.append(dia)
+        switch desenlace {
+        case .enviado: vistos.append(.enviado)
+        case .saltado: vistos.append(.saltado)
+        case .reintentarDespues: vistos.append(.reintentar)
+        case .descartado: vistos.append(.descartado)
+        case .cortado: vistos.append(.cortado)
+        }
+      }
+    )
+    return (intentados, registrados, vistos, fin)
+  }
+
+  private let ventana = ApiError.fueraDeVentana(fecha: "2026-09-01")
+  private let invalido = ApiError.servidor(codigo: 400, cuerpo: nil)
+
+  func testTodoBien_SeEnvianTodosEnOrden() async {
+    let r = await recorrer(["d1", "d2", "d3"], [:])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"])
+    XCTAssertEqual(r.vistos, [.enviado, .enviado, .enviado])
+  }
+
+  func testUn422EnMedio_SeDescartaYLosDemasSiguen() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(ventana)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"], "El 422 no debe cortar la vuelta")
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .enviado])
+  }
+
+  func testVarios422Seguidos_NingunoCorta() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d1": .failure(ventana), "d2": .failure(ventana)])
+
+    XCTAssertEqual(r.vistos, [.descartado, .descartado, .enviado])
+  }
+
+  func testUnPermanenteEnMedio_CortaYNoTocaLosDemas() async {
+    let r = await recorrer(["d1", "d2", "d3", "d4"], ["d2": .failure(invalido)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2"], "Después de cortar no se intenta ningún día más")
+    XCTAssertEqual(r.registrados, ["d1", "d2"], "Ni se registra nada de los que no se intentaron")
+    XCTAssertEqual(r.vistos, [.enviado, .cortado])
+  }
+
+  func testSinRed_SeReintentaDespuesYCorta() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d1": .failure(URLError(.notConnectedToInternet))])
+
+    XCTAssertEqual(r.vistos, [.reintentar])
+    XCTAssertEqual(r.intentados, ["d1"], "Los demás fallarían igual: no se gastan intentos")
+    XCTAssertEqual(r.fin, .cortadaPorFalloGeneral)
+  }
+
+  func testServidorCaidoOTokenRechazado_TambienCortan() async {
+    for error in [ApiError.servidor(codigo: 503, cuerpo: nil),
+                  ApiError.servidor(codigo: 401, cuerpo: nil),
+                  ApiError.sinSesion] {
+      let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(error)])
+
+      XCTAssertEqual(r.intentados, ["d1", "d2"], "\(error)")
+      XCTAssertEqual(r.fin, .cortadaPorFalloGeneral, "\(error)")
+    }
+  }
+
+  func testComoTermina_CadaVuelta() async {
+    let completa = await recorrer(["d1", "d2"], [:])
+    XCTAssertEqual(completa.fin, .completa)
+
+    let conVentanaEIlegible = await recorrer(
+      ["d1", "d2"], ["d1": .failure(ventana), "d2": .failure(ApiError.respuestaIlegible)])
+    XCTAssertEqual(conVentanaEIlegible.fin, .completa, "Ninguno de los dos corta")
+
+    let rechazo = await recorrer(["d1", "d2"], ["d1": .failure(invalido)])
+    XCTAssertEqual(rechazo.fin, .cortadaPorRechazo)
+
+    let vacia = await recorrer([], [:])
+    XCTAssertEqual(vacia.fin, .completa)
+  }
+
+  func testUnDiaVacio_SeSaltaYSigue() async {
+    let r = await recorrer(["d1", "d2"], ["d1": .success(false)])
+
+    XCTAssertEqual(r.vistos, [.saltado, .enviado])
+  }
+
+  func testMezcla_ElCorteGanaSoloDesdeDondeAparece() async {
+    let r = await recorrer(
+      ["d1", "d2", "d3", "d4", "d5"],
+      ["d2": .failure(ventana), "d3": .failure(invalido), "d4": .failure(Falla())]
+    )
+
+    XCTAssertEqual(r.vistos, [.enviado, .descartado, .cortado])
+    XCTAssertEqual(r.intentados.last, "d3", "d4 y d5 nunca se intentan")
+  }
+
+  func testUnaRespuestaIlegible_CuentaComoEnviadaYSigue() async {
+    let r = await recorrer(["d1", "d2", "d3"], ["d2": .failure(ApiError.respuestaIlegible)])
+
+    XCTAssertEqual(r.intentados, ["d1", "d2", "d3"], "No corta la vuelta")
+    XCTAssertEqual(r.vistos, [.enviado, .enviado, .enviado])
+  }
+
+  func testSinDias_NoLlamaANada() async {
+    let r = await recorrer([], [:])
+
+    XCTAssertTrue(r.intentados.isEmpty)
+    XCTAssertTrue(r.registrados.isEmpty)
+  }
+}
+
+/// La cola de reintentos: orden, duplicados, tope, y que los días caduquen
+/// a los 14 días, igual que la ventana del servidor.
+final class SyncQueueTests: XCTestCase {
+
+  private var almacen: UserDefaults!
+  private var nombreAlmacen: String!
+  private var ahora: Date!
+  private var cola: SyncQueue!
+
+  private static func dia(_ texto: String, hora: Int = 15) -> Date {
+    FormatoFechas.diaCalendario.date(from: texto)!.addingTimeInterval(Double(hora) * 3600)
+  }
+
+  /// `yyyy-MM-dd` de hace `n` días respecto de `ahora`.
+  private func haceDias(_ n: Int) -> String {
+    FormatoFechas.diaCalendario.string(from: Calendar.current.date(byAdding: .day, value: -n, to: ahora)!)
+  }
+
+  override func setUp() {
+    super.setUp()
+    nombreAlmacen = "pruebas.cola.\(UUID().uuidString)"
+    almacen = UserDefaults(suiteName: nombreAlmacen)
+    ahora = Self.dia("2026-10-03")
+    cola = SyncQueue(almacen: almacen, hoy: { self.ahora })
+  }
+
+  override func tearDown() {
+    almacen.removePersistentDomain(forName: nombreAlmacen)
+    super.tearDown()
+  }
+
+  private var guardado: [String] { almacen.stringArray(forKey: "vida.diasPendientes") ?? [] }
+
+  func testEncolarGuardaEnOrden_SinDuplicar() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-09-30")
+    cola.encolar(fecha: "2026-10-01")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01", "2026-09-30"])
+  }
+
+  func testRemover() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-09-30")
+
+    cola.remover(fecha: "2026-10-01")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-09-30"])
+  }
+
+  func testElDiaDeHace14DiasSigue_ElDeHace15Caduca() {
+    XCTAssertEqual(haceDias(14), "2026-09-19")
+    cola.encolar(fecha: haceDias(14))
+    cola.encolar(fecha: haceDias(15))
+
+    XCTAssertEqual(cola.pendientes(), ["2026-09-19"])
+  }
+
+  func testLaCuentaEsLaMismaQueLaDelServidor() {
+    // views.py: rechaza si fecha < hoy - 14.
+    for n in 0...20 {
+      XCTAssertEqual(cola.vencido(haceDias(n)), n > 14, "hace \(n) días")
+    }
+  }
+
+  func testLaHoraDelDiaNoCambiaLaCuenta() {
+    for hora in [0, 1, 12, 23] {
+      ahora = Self.dia("2026-10-03", hora: hora)
+      XCTAssertFalse(cola.vencido("2026-09-19"), "a las \(hora)h")
+      XCTAssertTrue(cola.vencido("2026-09-18"), "a las \(hora)h")
+    }
+  }
+
+  func testUnDiaYaVencidoNoSeEncola() {
+    cola.encolar(fecha: "2026-09-01")
+
+    XCTAssertTrue(guardado.isEmpty)
+  }
+
+  func testLosDiasCaducanSolosConElTiempo() {
+    cola.encolar(fecha: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    ahora = Self.dia("2026-10-15")   // hace 14 días: sigue
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    ahora = Self.dia("2026-10-16")   // hace 15 días: fuera
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testLeerLaColaBorraDelDiscoLosVencidos() {
+    // Como quedaría una cola guardada por la versión anterior (sin caducidad).
+    almacen.set(["2026-08-01", "2026-10-01", "2026-09-01"], forKey: "vida.diasPendientes")
+
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+    XCTAssertEqual(guardado, ["2026-10-01"], "Los vencidos se borran, no solo se esconden")
+  }
+
+  func testUnaFechaIlegibleNoSeDaPorVencida() {
+    // La saca reintentarPendientes(), que sabe que no se puede mandar.
+    almacen.set(["no-es-fecha", "2026-10-01"], forKey: "vida.diasPendientes")
+
+    XCTAssertEqual(cola.pendientes(), ["no-es-fecha", "2026-10-01"])
+  }
+
+  func testElTopeEs15_YSaleElPrimeroQueEntro() {
+    XCTAssertEqual(SyncQueue.maximoDias, 15)
+    for n in (0...14).reversed() { cola.encolar(fecha: haceDias(n)) }   // 15 días válidos
+    XCTAssertEqual(cola.pendientes().count, 15)
+
+    cola.encolar(fecha: "2026-10-10")   // uno más (futuro, solo para pasar el tope)
+
+    XCTAssertEqual(cola.pendientes().count, 15)
+    XCTAssertFalse(cola.pendientes().contains(haceDias(14)), "Sale el que entró primero")
+    XCTAssertTrue(cola.pendientes().contains("2026-10-10"))
+  }
+
+  func testLaColaDePruebaNoTocaLaReal() {
+    let real = UserDefaults.standard.stringArray(forKey: "vida.diasPendientes")
+
+    cola.encolar(fecha: "2026-10-01")
+
+    XCTAssertEqual(UserDefaults.standard.stringArray(forKey: "vida.diasPendientes"), real)
+  }
+
+  func testVaciar() {
+    cola.encolar(fecha: "2026-10-01")
+    cola.encolar(fecha: "2026-10-02")
+
+    cola.vaciar()
+
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testAplicarCadaEfecto() {
+    cola.encolar(fecha: "2026-10-01")
+
+    cola.aplicar(.dejar, a: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01"])
+
+    cola.aplicar(.encolar, a: "2026-10-02")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-01", "2026-10-02"])
+
+    cola.aplicar(.sacar, a: "2026-10-01")
+    XCTAssertEqual(cola.pendientes(), ["2026-10-02"])
+  }
+}
+
+/// Qué le pasa a un día en la cola según cómo terminó, en cada camino.
+final class EfectoDeCadaDesenlaceTests: XCTestCase {
+
+  private struct Falla: Error {}
+  private let error = Falla()
+
+  func testEnLaColaDeReintentos() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoEnReintento, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoEnReintento, .sacar, "Un 422 sale de la cola")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoEnReintento, .sacar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoEnReintento, .dejar, "Ante la duda, un día vacío se queda")
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoEnReintento, .dejar)
+  }
+
+  func testAlPonerseAlDia() {
+    XCTAssertEqual(DesenlaceDia.enviado.efectoAlPonerseAlDia, .sacar)
+    XCTAssertEqual(DesenlaceDia.descartado(error).efectoAlPonerseAlDia, .sacar)
+    XCTAssertEqual(DesenlaceDia.reintentarDespues(error).efectoAlPonerseAlDia, .encolar)
+    XCTAssertEqual(DesenlaceDia.saltado.efectoAlPonerseAlDia, .dejar, "Un día vacío no se anota")
+    XCTAssertEqual(DesenlaceDia.cortado(error).efectoAlPonerseAlDia, .dejar,
+                   "Tras un corte la marca no avanza: se reintenta desde ahí, sin la cola")
+  }
+
+  func testSoloLoQueYaNoHayQueMandarMueveLaMarca() {
+    XCTAssertTrue(DesenlaceDia.enviado.avanzaMarca)
+    XCTAssertTrue(DesenlaceDia.descartado(error).avanzaMarca,
+                  "Un día fuera de la ventana no va a entrar nunca")
+    XCTAssertFalse(DesenlaceDia.saltado.avanzaMarca,
+                   "Un día vacío puede ser un permiso que todavía no se dio")
+    XCTAssertFalse(DesenlaceDia.reintentarDespues(error).avanzaMarca)
+    XCTAssertFalse(DesenlaceDia.cortado(error).avanzaMarca)
+  }
+}
+
+/// Desde qué día ponerse al día (decidido 3 oct 2026): la primera vez, los
+/// últimos 7 días; después, desde el último enviado (otra vez) hasta hoy,
+/// sin pasar de la ventana de 14 días del servidor.
+final class MarcaEnviosTests: XCTestCase {
+
+  private var almacen: UserDefaults!
+  private var nombreAlmacen: String!
+  private var ahora: Date!
+  private var marca: MarcaEnvios!
+
+  private static func dia(_ texto: String, hora: Int = 15) -> Date {
+    FormatoFechas.diaCalendario.date(from: texto)!.addingTimeInterval(Double(hora) * 3600)
+  }
+
+  override func setUp() {
+    super.setUp()
+    nombreAlmacen = "pruebas.marca.\(UUID().uuidString)"
+    almacen = UserDefaults(suiteName: nombreAlmacen)
+    ahora = Self.dia("2026-10-03")
+    marca = MarcaEnvios(almacen: almacen, hoy: { self.ahora })
+  }
+
+  override func tearDown() {
+    almacen.removePersistentDomain(forName: nombreAlmacen)
+    super.tearDown()
+  }
+
+  func testLaPrimeraVez_LosUltimos7Dias_DelMasViejoAHoy() {
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar(), [
+      "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30",
+      "2026-10-01", "2026-10-02", "2026-10-03",
+    ])
+  }
+
+  func testConMarca_DesdeEseDiaOtraVezHastaHoy() {
+    marca.registrarEnviado("2026-10-01")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-01", "2026-10-02", "2026-10-03"],
+                   "El último enviado se repite: pudo sumar pasos después del envío")
+  }
+
+  func testEnviadoHoy_SoloHoy() {
+    marca.registrarEnviado("2026-10-03")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-03"])
+  }
+
+  func testUnaMarcaMuyVieja_SeRecortaALaVentanaDelServidor() {
+    marca.registrarEnviado("2026-08-01")
+
+    let dias = marca.diasPorMandar()
+    XCTAssertEqual(dias.first, "2026-09-19", "hoy - 14: el más viejo que el servidor acepta")
+    XCTAssertEqual(dias.last, "2026-10-03")
+    XCTAssertEqual(dias.count, 15)
+  }
+
+  func testUnaMarcaEnElFuturo_NoDejaAHoyAfuera() {
+    marca.registrarEnviado("2026-10-09")   // el reloj del teléfono se movió
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-03"])
+  }
+
+  func testLaMarcaSoloAvanza() {
+    marca.registrarEnviado("2026-10-02")
+    marca.registrarEnviado("2026-09-30")   // un día viejo que llegó tarde
+
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02")
+  }
+
+  func testOlvidar_VuelveAEmpezarComoLaPrimeraVez() {
+    marca.registrarEnviado("2026-10-02")
+
+    marca.olvidar()
+
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar().count, MarcaEnvios.diasPrimeraVez)
+  }
+
+  func testUnaFechaIlegibleNoSeGuarda_YLaGuardadaSeIgnora() {
+    marca.registrarEnviado("no-es-fecha")
+    XCTAssertNil(marca.ultimoDiaEnviado)
+
+    almacen.set("basura", forKey: "vida.ultimoDiaEnviado")
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar().count, MarcaEnvios.diasPrimeraVez)
+  }
+
+  func testCruzandoElCambioDeMes() {
+    ahora = Self.dia("2026-11-01")
+    marca.registrarEnviado("2026-10-30")
+
+    XCTAssertEqual(marca.diasPorMandar(), ["2026-10-30", "2026-10-31", "2026-11-01"])
+  }
+
+  func testLaHoraDelDiaNoCambiaLaCuenta() {
+    marca.registrarEnviado("2026-10-02")
+    for hora in [0, 1, 23] {
+      ahora = Self.dia("2026-10-03", hora: hora)
+      XCTAssertEqual(marca.diasPorMandar(), ["2026-10-02", "2026-10-03"], "a las \(hora)h")
+    }
+  }
+
+  func testLaMarcaDePruebaNoTocaLaReal() {
+    let real = UserDefaults.standard.string(forKey: "vida.ultimoDiaEnviado")
+
+    marca.registrarEnviado("2026-10-02")
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: "vida.ultimoDiaEnviado"), real)
+  }
+}
+
+/// Al entrar otra persona se olvida hasta qué día se había mandado: tiene que
+/// recibir sus 7 días. Desde A35 cada login trae un token nuevo, así que "otra
+/// persona" se decide por el `usuario_id` y la misma persona no pierde la cola.
+final class SesionYMarcaTests: XCTestCase {
+
+  private var almacen: AlmacenEnMemoria!
+  private var defaults: UserDefaults!
+  private var nombre: String!
+  private var marca: MarcaEnvios!
+  private var cola: SyncQueue!
+  private var cuenta: CuentaDeEnvios!
+
+  override func setUp() {
+    super.setUp()
+    almacen = AlmacenEnMemoria()
+    nombre = "pruebas.sesionmarca.\(UUID().uuidString)"
+    defaults = UserDefaults(suiteName: nombre)
+    let hoy = { FormatoFechas.diaCalendario.date(from: "2026-10-03")!.addingTimeInterval(15 * 3600) }
+    marca = MarcaEnvios(almacen: defaults, hoy: hoy)
+    cola = SyncQueue(almacen: defaults, hoy: hoy)
+    cuenta = CuentaDeEnvios(almacen: defaults)
+  }
+
+  override func tearDown() {
+    defaults.removePersistentDomain(forName: nombre)
+    super.tearDown()
+  }
+
+  @discardableResult
+  private func aplicar(_ token: String?, _ usuarioId: String?) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
+    Sesion.aplicar(token: token, usuarioId: usuarioId, en: almacen, marca: marca, cola: cola, cuenta: cuenta)
+  }
+
+  /// Ana entró, mandó hasta el 2 y le queda el 25 en la cola.
+  private func anaConDiasPendientes() {
+    aplicar("abc", "ana")
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
+  }
+
+  private func nadaSeOlvido(_ mensaje: String = "", file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-02", mensaje, file: file, line: line)
+    XCTAssertEqual(cola.pendientes(), ["2026-09-25"], mensaje, file: file, line: line)
+  }
+
+  private func seOlvidoTodo(_ mensaje: String = "", file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertNil(marca.ultimoDiaEnviado, mensaje, file: file, line: line)
+    XCTAssertEqual(cola.pendientes(), [], mensaje, file: file, line: line)
+  }
+
+  func testElMismoTokenEnCadaArranque_NoOlvidaNada() {
+    anaConDiasPendientes()
+
+    let r = aplicar("abc", "ana")
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertTrue(r.haySesion)
+    nadaSeOlvido()
+  }
+
+  func testLaMismaPersonaConUnTokenNuevo_NoPierdeLaCola() {
+    // Su token venció (o entró de nuevo): Knox le da otro, pero es Ana.
+    anaConDiasPendientes()
+
+    let r = aplicar("token-nuevo", "ana")
+
+    XCTAssertTrue(r.haySesion)
+    nadaSeOlvido("Es la misma persona: sigue donde iba")
+  }
+
+  func testOtraPersona_OlvidaLaMarcaYVaciaLaCola() {
+    anaConDiasPendientes()
+
+    let r = aplicar("otra", "beto")
+
+    XCTAssertTrue(r.haySesion)
+    seOlvidoTodo("Beto no recibe días de Ana")
+    XCTAssertEqual(cuenta.usuarioId, "beto")
+  }
+
+  func testCerrarSesion_SoloBorraElToken() {
+    anaConDiasPendientes()
+
+    let r = aplicar(nil, nil)
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertFalse(r.haySesion)
+    XCTAssertNil(almacen.leerToken())
+    nadaSeOlvido("Se decide cuando alguien entre")
+    XCTAssertEqual(cuenta.usuarioId, "ana", "Se recuerda para comparar")
+  }
+
+  func testCerrarSesionYVuelveLaMisma_SigueDondeIba() {
+    anaConDiasPendientes()
+    aplicar(nil, nil)
+
+    aplicar("token-nuevo", "ana")
+
+    nadaSeOlvido()
+  }
+
+  func testCerrarSesionYEntraOtra_SeOlvidaTodo() {
+    anaConDiasPendientes()
+    aplicar(nil, nil)
+
+    aplicar("token-de-beto", "beto")
+
+    seOlvidoTodo()
+  }
+
+  func testSiFallaElKeychain_NoSeOlvidaNada() {
+    anaConDiasPendientes()
+    almacen.falla = ErrorAlmacenSesion(operacion: "guardar", estado: -25308)
+
+    let r = aplicar("otra", "beto")
+
+    guard case .errorAlmacenamiento = r.resultado else { return XCTFail("Debió fallar") }
+    XCTAssertTrue(r.haySesion, "Sigue el token anterior")
+    nadaSeOlvido("El token no cambió, así que la cuenta tampoco")
+    XCTAssertEqual(cuenta.usuarioId, "ana")
+  }
+
+  func testElPrimerLogin_AnotaLaCuenta_YQuedaSesion() {
+    let r = aplicar("abc", "ana")
+
+    XCTAssertEqual(r.resultado, .ok)
+    XCTAssertTrue(r.haySesion)
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(cuenta.usuarioId, "ana")
+  }
+
+  // MARK: Sin `usuario_id`: se compara el token, como antes de A35
+
+  func testSinUsuarioId_ElMismoToken_NoOlvidaNada() {
+    anaConDiasPendientes()
+
+    aplicar("abc", nil)
+
+    nadaSeOlvido()
+    XCTAssertEqual(cuenta.usuarioId, "ana", "Con el mismo token sigue siendo Ana")
+  }
+
+  func testSinUsuarioId_OtroToken_OlvidaTodo_YYaNoSabeDeQuienEs() {
+    anaConDiasPendientes()
+
+    aplicar("otra", nil)
+
+    seOlvidoTodo("Sin saber quién es, otro token cuenta como otra persona")
+    XCTAssertNil(cuenta.usuarioId)
+  }
+
+  func testUnUsuarioIdVacioOSoloEspacios_CuentaComoQueNoVino() {
+    anaConDiasPendientes()
+
+    aplicar("otra", "  ")
+
+    seOlvidoTodo()
+    XCTAssertNil(cuenta.usuarioId)
+  }
+
+  func testAlActualizarDesdeUnaVersionSinCuentaAnotada_ElMismoToken_NoOlvidaNada() {
+    // La versión anterior guardó el token pero nunca anotó la cuenta.
+    _ = Sesion.aplicar(token: "abc", en: almacen)
+    marca.registrarEnviado("2026-10-02")
+    cola.encolar(fecha: "2026-09-25")
+    XCTAssertNil(cuenta.usuarioId)
+
+    aplicar("abc", "ana")
+
+    nadaSeOlvido("La migración a Knox conserva la clave del token")
+    XCTAssertEqual(cuenta.usuarioId, "ana")
+  }
+
+  func testLaCuentaSeGuardaDondeSeLeVaABuscar() {
+    aplicar("abc", "ana")
+
+    XCTAssertEqual(defaults.string(forKey: "vida.cuentaDeLosEnvios"), "ana")
+    XCTAssertEqual(CuentaDeEnvios(almacen: defaults).usuarioId, "ana", "Sobrevive a reiniciar la app")
+  }
+}
+
 /// `actualizarSesion`: qué hace Swift con lo que entrega Flutter.
 final class SesionAplicarTests: XCTestCase {
 
@@ -824,5 +1589,449 @@ final class FCParaEnviarTests: XCTestCase {
     XCTAssertFalse(ReglasWorkout.esSinDatos(HKError(.errorAuthorizationDenied)))
     XCTAssertFalse(ReglasWorkout.esSinDatos(HKError(.errorDatabaseInaccessible)))
     XCTAssertFalse(ReglasWorkout.esSinDatos(NSError(domain: "otro", code: 11)))
+  }
+}
+
+/// El `403 consentimiento_requerido`: el servidor todavía no deja recibir datos de
+/// quien no aceptó el consentimiento. Es "pendiente", no "rechazado": el día no se
+/// pierde y sale solo cuando la persona acepte.
+final class ApiClientConsentimientoTests: PruebaConServidorFalso {
+
+  func testElCuerpoTalComoLoMandaElServidor_SeReconoceYSeReintenta() async {
+    // Tal cual lo arma Apps/activities/views.py (PR #51).
+    let error = await errorAl(
+      responder: 403, #"{"error":"consentimiento_requerido","version":"1"}"#)
+
+    guard case .consentimientoRequerido? = error as? ApiError else {
+      return XCTFail("Debió ser consentimientoRequerido, fue: \(String(describing: error))")
+    }
+    XCTAssertEqual((error as? ApiError)?.esReintentable, true)
+    XCTAssertEqual(AccionDiaFallido.para(error!), .reintentarDespues)
+  }
+
+  func testUnMensajeDeMas_NoImporta() async {
+    let error = await errorAl(
+      responder: 403,
+      #"{"error":"consentimiento_requerido","mensaje":"Acepta el consentimiento para continuar."}"#)
+
+    guard case .consentimientoRequerido? = error as? ApiError else {
+      return XCTFail("Debió ser consentimientoRequerido, fue: \(String(describing: error))")
+    }
+  }
+
+  func testSiLaFormaEsOtra_PeroTraeElMotivo_IgualSeReconoce() async {
+    // El servidor lo manda como `{"error": ..., "version": ...}`. Si la forma
+    // cambiara, perder el día sería peor que reintentarlo de más.
+    for cuerpo in [
+      #"{"detail":"consentimiento_requerido"}"#,
+      #"{"codigo":"consentimiento_requerido","version":"2026-10-06"}"#,
+      "consentimiento_requerido",
+    ] {
+      let error = await errorAl(responder: 403, cuerpo)
+
+      guard case .consentimientoRequerido? = error as? ApiError else {
+        return XCTFail("Con \(cuerpo) debió ser consentimientoRequerido, fue: \(String(describing: error))")
+      }
+    }
+  }
+
+  func testOtro403_SigueSiendoPermanente() async {
+    for cuerpo in [
+      #"{"mensaje":"El usuario autenticado no tiene un perfil asociado."}"#,  // cuenta sin perfil
+      #"{"error":"otra_cosa"}"#,                                               // otro motivo
+      #"<html>Forbidden</html>"#,                                              // no es JSON
+      "",                                                                      // sin cuerpo
+    ] {
+      let error = await errorAl(responder: 403, cuerpo)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(cuerpo) debió ser servidor(403), fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, 403)
+      XCTAssertEqual(AccionDiaFallido.para(error!), .descartarYCortar, cuerpo)
+    }
+  }
+
+  func testEl403QueDiceOtroMotivo_NoSeConfundeConElDeConsentimiento() async {
+    // Un `error` distinto pesa más que un texto suelto: no se reintenta por
+    // casualidad.
+    let error = await errorAl(
+      responder: 403, #"{"error":"cuenta_suspendida","nota":"no es consentimiento_requerido"}"#)
+
+    guard case .servidor(let codigo, _)? = error as? ApiError else {
+      return XCTFail("Debió ser servidor(403), fue: \(String(describing: error))")
+    }
+    XCTAssertEqual(codigo, 403)
+  }
+
+  func testElMotivoDelError_MandaAunqueOtroCampoTengaOtroTipo() async {
+    // Lo encontraron las pruebas al azar: con `fecha` que no es texto, el decodificador
+    // fallaba y el respaldo por texto veía el motivo en otro campo.
+    for cuerpo in [
+      #"{"error":"cuenta_suspendida","fecha":false,"nota":"consentimiento_requerido"}"#,
+      #"{"error":"otra_cosa","fecha":3.14,"detail":"consentimiento_requerido"}"#,
+      #"{"error":"x","fecha":{"a":1},"codigo":"consentimiento_requerido"}"#,
+    ] {
+      let error = await errorAl(responder: 403, cuerpo)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(cuerpo) debió ser servidor(403), fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, 403)
+    }
+    // Y el motivo correcto se reconoce aunque los demás campos tengan cualquier tipo.
+    let error = await errorAl(responder: 403, #"{"error":"consentimiento_requerido","fecha":false,"version":1}"#)
+    guard case .consentimientoRequerido? = error as? ApiError else {
+      return XCTFail("Debió ser consentimientoRequerido, fue: \(String(describing: error))")
+    }
+  }
+
+  func testElMismoCuerpoConOtroCodigo_NoEsDeConsentimiento() async {
+    for status in [400, 401, 404, 422, 500] {
+      let error = await errorAl(responder: status, #"{"error":"consentimiento_requerido"}"#)
+
+      guard case .servidor(let codigo, _)? = error as? ApiError else {
+        return XCTFail("Con \(status) debió ser servidor, fue: \(String(describing: error))")
+      }
+      XCTAssertEqual(codigo, status)
+    }
+  }
+
+  func testElMensajeEsClaro_YNoTraeElToken() async {
+    let error = await errorAl(responder: 403, #"{"error":"consentimiento_requerido"}"#)
+
+    let mensaje = error?.localizedDescription ?? ""
+    XCTAssertTrue(mensaje.lowercased().contains("consentimiento"))
+    XCTAssertFalse(mensaje.contains("abc123-secreto"))
+  }
+}
+
+/// Lo que pasa con los días mientras el consentimiento está pendiente, y cuando se
+/// acepta. Es la razón del cambio: el servidor deja de aceptar días y ninguno se
+/// puede perder en el camino (revisión del 6 de octubre de 2026).
+@MainActor
+final class ConsentimientoPendienteTests: XCTestCase {
+
+  private var defaults: UserDefaults!
+  private var nombre: String!
+  private var marca: MarcaEnvios!
+  private var cola: SyncQueue!
+
+  override func setUp() {
+    super.setUp()
+    nombre = "pruebas.consentimiento.\(UUID().uuidString)"
+    defaults = UserDefaults(suiteName: nombre)
+    let hoy = { FormatoFechas.diaCalendario.date(from: "2026-10-14")!.addingTimeInterval(15 * 3600) }
+    marca = MarcaEnvios(almacen: defaults, hoy: hoy)
+    cola = SyncQueue(almacen: defaults, hoy: hoy)
+  }
+
+  override func tearDown() {
+    defaults.removePersistentDomain(forName: nombre)
+    super.tearDown()
+  }
+
+  /// La vuelta de la cola de reintentos (`reintentarPendientes`), con `respuesta`
+  /// como servidor.
+  private func reintentar(_ respuesta: Result<Bool, Error>) async -> FinDeVuelta {
+    await RecorridoDias.recorrer(
+      cola.pendientes(),
+      enviar: { _ in try respuesta.get() },
+      registrar: { dia, desenlace in
+        self.cola.aplicar(desenlace.efectoEnReintento, a: dia)
+        if desenlace.avanzaMarca { self.marca.registrarEnviado(dia) }
+      }
+    )
+  }
+
+  func testUnDiaViejoEnLaCola_NoSePierdeConElConsentimientoPendiente() async {
+    // El caso que el 403 como "permanente" sí perdía: el día 8 falló antes por red,
+    // es anterior a la marca, y por eso nadie lo vuelve a calcular: solo vive en la
+    // cola.
+    marca.registrarEnviado("2026-10-10")
+    cola.encolar(fecha: "2026-10-08")
+
+    let fin = await reintentar(.failure(ApiError.consentimientoRequerido))
+
+    XCTAssertEqual(fin, .cortadaPorFalloGeneral)
+    XCTAssertEqual(cola.pendientes(), ["2026-10-08"], "El día sigue en la cola")
+    XCTAssertEqual(marca.ultimoDiaEnviado, "2026-10-10", "La marca no se mueve")
+
+    // La persona acepta: el día sale solo.
+    let despues = await reintentar(.success(true))
+
+    XCTAssertEqual(despues, .completa)
+    XCTAssertEqual(cola.pendientes(), [])
+  }
+
+  func testContraste_UnPermanenteGenerico_SacaElDiaDeLaCola() async {
+    // Así se portaba el 403 de consentimiento antes de A38 (cualquier permanente).
+    marca.registrarEnviado("2026-10-10")
+    cola.encolar(fecha: "2026-10-08")
+
+    let fin = await reintentar(.failure(ApiError.servidor(codigo: 403, cuerpo: "{}")))
+
+    XCTAssertEqual(fin, .cortadaPorRechazo)
+    XCTAssertEqual(cola.pendientes(), [], "Un 403 permanente saca el día de la cola")
+  }
+
+  func testLaVueltaSeCortaDeUnaVezComoConElToken() async {
+    var intentados: [String] = []
+    let fin = await RecorridoDias.recorrer(
+      ["d1", "d2", "d3"],
+      enviar: { dia in
+        intentados.append(dia)
+        throw ApiError.consentimientoRequerido
+      },
+      registrar: { _, _ in }
+    )
+
+    XCTAssertEqual(intentados, ["d1"], "Si el primero falla por el consentimiento, los demás también")
+    XCTAssertEqual(fin, .cortadaPorFalloGeneral)
+  }
+
+  func testConElConsentimientoPendiente_LaMarcaNoAvanza_YLosDiasSiguenAhi() async {
+    // Primera vez, sin marca: los últimos 7 días siguen siendo los candidatos
+    // aunque el servidor rechace todos los envíos.
+    let antes = marca.diasPorMandar()
+
+    _ = await RecorridoDias.recorrer(
+      antes,
+      enviar: { _ in throw ApiError.consentimientoRequerido },
+      registrar: { dia, desenlace in
+        self.cola.aplicar(desenlace.efectoAlPonerseAlDia, a: dia)
+        if desenlace.avanzaMarca { self.marca.registrarEnviado(dia) }
+      }
+    )
+
+    XCTAssertNil(marca.ultimoDiaEnviado)
+    XCTAssertEqual(marca.diasPorMandar(), antes, "Cuando acepte, se mandan los mismos días")
+  }
+}
+
+// MARK: - Consentimiento pendiente: el recorrido completo, y al azar
+
+/// Lo que hacen `reintentarPendientes` y `ponerseAlDia` (HealthKitManager.swift), con las piezas
+/// reales (cola, marca, `RecorridoDias`, `DesenlaceDia`) y un servidor falso. Sirve para probar,
+/// sin HealthKit, qué pasa con los días a lo largo de varias aperturas de la app.
+@MainActor
+private final class AperturasDeLaApp {
+  enum Servidor { case acepta, consentimientoPendiente, sinRed, caido, tokenRechazado }
+
+  var ahora: Date
+  var servidor: Servidor = .acepta
+  var entregados = Set<String>()
+  /// Los días a los que el servidor contestó "falta el consentimiento", o que fallaron por otra
+  /// causa que se arregla sola (sin red, 5xx, 401), y todavía no llegaron.
+  var debidosPorConsentimiento = Set<String>()
+  var debidosPorOtraCausa = Set<String>()
+  private let defaults: UserDefaults
+  private let nombre = "pruebas.aperturas.\(UUID().uuidString)"
+  // Leen `ahora`, que cambia de apertura en apertura.
+  lazy var marcaDeEnvios = MarcaEnvios(almacen: defaults, hoy: { self.ahora })
+  lazy var colaDeReintentos = SyncQueue(almacen: defaults, hoy: { self.ahora })
+
+  init(desde ahora: Date) {
+    self.ahora = ahora
+    defaults = UserDefaults(suiteName: nombre)!
+  }
+
+  func limpiar() { defaults.removePersistentDomain(forName: nombre) }
+
+  private func enviar(_ dia: String) throws {
+    switch servidor {
+    case .acepta:
+      let limite = FormatoFechas.diaCalendario.string(
+        from: Calendar.current.date(byAdding: .day, value: -SyncQueue.ventanaDias,
+                                    to: Calendar.current.startOfDay(for: ahora))!)
+      if dia < limite { throw ApiError.fueraDeVentana(fecha: dia) }
+      entregados.insert(dia)
+      debidosPorConsentimiento.remove(dia)
+      debidosPorOtraCausa.remove(dia)
+    case .consentimientoPendiente:
+      debidosPorConsentimiento.insert(dia)
+      throw ApiError.consentimientoRequerido
+    case .sinRed:
+      debidosPorOtraCausa.insert(dia)
+      throw URLError(.notConnectedToInternet)
+    case .caido:
+      debidosPorOtraCausa.insert(dia)
+      throw ApiError.servidor(codigo: 503, cuerpo: nil)
+    case .tokenRechazado:
+      debidosPorOtraCausa.insert(dia)
+      throw ApiError.servidor(codigo: 401, cuerpo: nil)
+    }
+  }
+
+  private func reintentarPendientes() async -> FinDeVuelta {
+    let dias = colaDeReintentos.pendientes()
+    guard !dias.isEmpty else { return .completa }
+    return await RecorridoDias.recorrer(
+      dias,
+      enviar: { dia in try self.enviar(dia); return true },
+      registrar: { dia, desenlace in
+        self.colaDeReintentos.aplicar(desenlace.efectoEnReintento, a: dia)
+        if desenlace.avanzaMarca { self.marcaDeEnvios.registrarEnviado(dia) }
+      })
+  }
+
+  /// Abrir la app: la cola primero y, si no se cortó por un fallo general, desde la marca.
+  func abrirLaApp() async {
+    guard await reintentarPendientes() != .cortadaPorFalloGeneral else { return }
+    await RecorridoDias.recorrer(
+      marcaDeEnvios.diasPorMandar(),
+      enviar: { dia in try self.enviar(dia); return true },
+      registrar: { dia, desenlace in
+        self.colaDeReintentos.aplicar(desenlace.efectoAlPonerseAlDia, a: dia)
+        if desenlace.avanzaMarca { self.marcaDeEnvios.registrarEnviado(dia) }
+      })
+  }
+
+  /// El envío manual de "hoy" (`enviarSincronizacion`).
+  func enviarHoyAMano() async {
+    let hoy = FormatoFechas.diaCalendario.string(from: ahora)
+    do {
+      try enviar(hoy)
+      colaDeReintentos.remover(fecha: hoy)
+      marcaDeEnvios.registrarEnviado(hoy)
+      _ = await reintentarPendientes()
+    } catch {
+      switch AccionDiaFallido.para(error) {
+      case .reintentarDespues: colaDeReintentos.encolar(fecha: hoy)
+      case .tomarComoEnviado:
+        colaDeReintentos.remover(fecha: hoy)
+        marcaDeEnvios.registrarEnviado(hoy)
+      case .descartarYSeguir, .descartarYCortar: break
+      }
+    }
+  }
+
+  /// ¿Sigue "vivo" ese día? Llegó, o sigue en la cola, o sigue por mandar desde la marca, o ya
+  /// es demasiado viejo para que el servidor lo acepte.
+  func vivo(_ dia: String) -> Bool {
+    entregados.contains(dia)
+      || colaDeReintentos.pendientes().contains(dia)
+      || marcaDeEnvios.diasPorMandar().contains(dia)
+      || colaDeReintentos.vencido(dia)
+  }
+}
+
+private struct SemillaFija: RandomNumberGenerator {
+  var estado: UInt64
+  mutating func next() -> UInt64 {
+    estado &+= 0x9E3779B97F4A7C15
+    var z = estado
+    z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+    return z ^ (z >> 31)
+  }
+}
+
+@MainActor
+final class ConsentimientoRecorridoCompletoTests: XCTestCase {
+
+  private func fecha(_ dia: String) -> Date {
+    FormatoFechas.diaCalendario.date(from: dia)!.addingTimeInterval(15 * 3600)
+  }
+  private func dias(_ desde: String, _ hasta: String) -> [String] {
+    var resultado: [String] = []
+    var d = Calendar.current.startOfDay(for: fecha(desde))
+    let fin = Calendar.current.startOfDay(for: fecha(hasta))
+    while d <= fin {
+      resultado.append(FormatoFechas.diaCalendario.string(from: d))
+      d = Calendar.current.date(byAdding: .day, value: 1, to: d)!
+    }
+    return resultado
+  }
+
+  func testQuienAceptaAlTercerDia_RecibeTodoDesdeQueInstalo() async {
+    // Medido contra el servidor real (A38): la primera apertura deja en la cola el día más viejo
+    // de la ventana; al aceptar, ese día "ancla" y se manda desde ahí, no solo los últimos 7.
+    let app = AperturasDeLaApp(desde: fecha("2026-10-01"))
+    defer { app.limpiar() }
+    app.servidor = .consentimientoPendiente
+
+    for dia in ["2026-10-01", "2026-10-02", "2026-10-03"] {
+      app.ahora = fecha(dia)
+      await app.abrirLaApp()
+    }
+    XCTAssertTrue(app.entregados.isEmpty, "Con el bloqueo no llega nada")
+    XCTAssertNil(app.marcaDeEnvios.ultimoDiaEnviado, "La marca no se mueve")
+
+    app.servidor = .acepta
+    app.ahora = fecha("2026-10-04")
+    await app.abrirLaApp()
+
+    // Desde el día más viejo de la primera ventana (25 sep) hasta hoy.
+    XCTAssertEqual(app.entregados, Set(dias("2026-09-25", "2026-10-04")))
+    XCTAssertTrue(app.colaDeReintentos.pendientes().isEmpty)
+  }
+
+  func testQuienAceptaMuchoDespues_ComoMinimoRecibeLosUltimos7() async {
+    // Si el ancla ya caducó (la cola olvida lo de más de 14 días), queda la regla de la
+    // primera vez: los últimos 7 días. Nunca menos.
+    let app = AperturasDeLaApp(desde: fecha("2026-10-01"))
+    defer { app.limpiar() }
+    app.servidor = .consentimientoPendiente
+    var dia = fecha("2026-10-01")
+    for _ in 0..<13 {
+      app.ahora = dia
+      await app.abrirLaApp()
+      dia = Calendar.current.date(byAdding: .day, value: 1, to: dia)!
+    }
+
+    app.servidor = .acepta
+    app.ahora = dia                      // 14 de octubre
+    await app.abrirLaApp()
+
+    XCTAssertTrue(Set(dias("2026-10-08", "2026-10-14")).isSubset(of: app.entregados),
+                  "Los últimos 7 días llegan siempre")
+    XCTAssertTrue(app.colaDeReintentos.pendientes().isEmpty)
+  }
+
+  /// La prueba larga: miles de aperturas al azar (semilla fija, se repite igual) mezclando sin red,
+  /// servidor caído, token rechazado, consentimiento pendiente y envío manual. Después de CADA una,
+  /// ningún día que falló por una causa que se arregla sola puede quedar perdido (ni en la cola,
+  /// ni por mandar desde la marca, ni demasiado viejo). Con el 403 tratado como permanente fallaba
+  /// en más de la mitad de los escenarios.
+  func testAlAzar_NingunDiaSePierdeMientrasFalteElConsentimiento() async {
+    var azar = SemillaFija(estado: 20261007)
+    let inicio = fecha("2026-10-01")
+    let servidores: [AperturasDeLaApp.Servidor] = [
+      .acepta, .consentimientoPendiente, .consentimientoPendiente, .consentimientoPendiente,
+      .sinRed, .caido, .tokenRechazado,
+    ]
+    var perdidos: [String] = []
+
+    for escenario in 0..<400 {
+      let app = AperturasDeLaApp(desde: inicio)
+      defer { app.limpiar() }
+      // Estado previo: con o sin marca, y días viejos en la cola (fallaron antes por red).
+      if Bool.random(using: &azar) {
+        let atras = Int.random(in: 0...9, using: &azar)
+        app.marcaDeEnvios.registrarEnviado(
+          FormatoFechas.diaCalendario.string(from: Calendar.current.date(byAdding: .day, value: -atras, to: inicio)!))
+      }
+      for _ in 0..<Int.random(in: 0...2, using: &azar) {
+        let atras = Int.random(in: 1...11, using: &azar)
+        app.colaDeReintentos.encolar(
+          fecha: FormatoFechas.diaCalendario.string(from: Calendar.current.date(byAdding: .day, value: -atras, to: inicio)!))
+      }
+
+      for _ in 0..<Int.random(in: 4...16, using: &azar) {
+        let salto = [0, 1, 1, 1, 2].randomElement(using: &azar)!
+        app.ahora = Calendar.current.date(byAdding: .day, value: salto, to: app.ahora)!
+        app.servidor = servidores.randomElement(using: &azar)!
+        if Int.random(in: 0..<10, using: &azar) < 7 { await app.abrirLaApp() } else { await app.enviarHoyAMano() }
+
+        let debidos = app.debidosPorConsentimiento.union(app.debidosPorOtraCausa)
+        if let dia = debidos.sorted().first(where: { !app.vivo($0) }) {
+          perdidos.append("escenario \(escenario): se perdió el día \(dia)")
+          break
+        }
+      }
+    }
+
+    XCTAssertEqual(perdidos, [], "Días perdidos: \(perdidos.prefix(3))")
   }
 }

@@ -17,7 +17,7 @@ from Apps.policies.models import RegistroAseguradora
 
 COLUMNAS = [
     "numero_poliza", "aseguradora", "nombre", "apellido", "fecha_nacimiento",
-    "plan", "prima_mensual_gtq", "deducible_gtq", "coaseguro_pct", "red",
+    "plan", "prima_anual_gtq", "deducible_gtq", "coaseguro_pct", "red",
     "vigencia_inicio", "vigencia_fin", "estado",
 ]
 
@@ -63,6 +63,11 @@ class Command(BaseCommand):
 
     def _convertir(self, fila):
         estado = fila["estado"].strip()
+        if estado == "vencida":
+            raise ValueError(
+                "el estado 'vencida' ya no existe: una póliza se renueva cada año y "
+                "solo deja de valer si está 'cancelada' o 'suspendida'"
+            )
         if estado not in RegistroAseguradora.Estado.values:
             raise ValueError(f"estado inválido: {estado!r}")
 
@@ -73,7 +78,7 @@ class Command(BaseCommand):
             "apellido": fila["apellido"].strip(),
             "fecha_nacimiento": date.fromisoformat(fila["fecha_nacimiento"].strip()),
             "plan": fila["plan"].strip(),
-            "prima_mensual_gtq": Decimal(fila["prima_mensual_gtq"].strip()),
+            "prima_anual_gtq": Decimal(fila["prima_anual_gtq"].strip()),
             "deducible_gtq": Decimal(fila["deducible_gtq"].strip()),
             "coaseguro_pct": int(fila["coaseguro_pct"].strip()),
             "red": fila["red"].strip(),

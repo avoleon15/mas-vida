@@ -1,9 +1,8 @@
 from django.db import models
-from django.db import models
-from Apps.core.models import ModeloBase, UserIdBase
+from Apps.core.models import ModeloBase, SoloAgregar, UserIdBase
 
 
-class Ledger(UserIdBase):
+class Ledger(SoloAgregar, UserIdBase):
     class TipoLedger(models.TextChoices):
         PASOS = "pasos", "Pasos"
         INTENSIDAD = "intensidad", "Intensidad"

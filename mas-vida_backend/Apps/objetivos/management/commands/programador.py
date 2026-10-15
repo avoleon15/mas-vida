@@ -1,12 +1,16 @@
-"""Deja corriendo las dos corridas del lunes (hora de Guatemala).
+"""Deja corriendo las corridas del objetivo semanal y de La Liga (hora de Guatemala).
 
   python manage.py programador            # se queda corriendo
   python manage.py programador --una-vez  # solo la puesta al día de arranque
 
 Al arrancar se pone al día con las semanas pendientes (por si estuvo apagado el
-lunes) y después espera:
-  - lunes 00:00 -> cierre: fija el resultado de la semana y paga las monedas
-  - lunes 12:00 -> corrección: actualiza los acumulados, no paga ni reabre
+martes) y después espera:
+  - martes 00:00 -> cierre: fija el resultado de la semana y paga las monedas
+    (el lunes queda para los datos atrasados del domingo)
+  - martes 12:00 -> corrección: actualiza los acumulados, no paga ni reabre
+  - día 2, 00:00 -> liga: cierra La Liga del mes anterior
+    (el día 1 queda para los datos atrasados del último día)
+  - día 9, 00:00 -> pago_liga: paga el podio (monedas y cupón) del mes cerrado
 
 Pensado para correr como un servicio aparte (ver compose.yaml).
 """
@@ -17,13 +21,13 @@ from django.core.management.base import BaseCommand
 from django.db import connections
 from django.utils import timezone
 
-from services import goals, programador
+from services import goals, ligas, programador
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Corre el cierre semanal (lunes 00:00) y su corrección (lunes 12:00)."
+    help = "Corre el cierre semanal (martes 00:00), su corrección (martes 12:00), el cierre de La Liga (día 2) y el pago de su podio (día 9)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -41,6 +45,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"Puesta al día: semana {lunes}: {resumen}")
         else:
             self.stdout.write("Puesta al día: no hay semanas pendientes.")
+        for resumen in ligas.ponerse_al_dia(hoy):
+            self.stdout.write(f"Puesta al día: La Liga {resumen['mes']}: {resumen}")
+        for resumen in ligas.pagar_al_dia(hoy):
+            self.stdout.write(f"Puesta al día: podio de La Liga {resumen['mes']}: {resumen}")
 
         proxima, tipo = programador.proxima_ejecucion(timezone.now())
         self.stdout.write(self.style.SUCCESS(

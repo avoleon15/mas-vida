@@ -90,7 +90,11 @@ expresamente por ser de Vitality.
    monedas en código, comentarios o mocks, es del plazo viejo.
 
    - Se ganan por cumplir el objetivo semanal (**cada componente paga por
-     separado**) y por quedar top 3 en La Liga.
+     separado**) y por quedar top 3 en La Liga. **El podio de La Liga se paga
+     el día 9** del mes siguiente (decidido el 4 de octubre de 2026; el mes
+     se cierra el día 2): así las monedas y el cupón caen en la season
+     siguiente y no vencen a los pocos días. La app dice "tus monedas
+     llegan el día 9".
    - **Sin tope de acumulación** (decidido el 2 de octubre de 2026; antes
      el tope era 100 y el excedente se perdía).
    - Al empezar una season, primero se reinicia el saldo y después se paga
@@ -99,7 +103,8 @@ expresamente por ser de Vitality.
    - **Aviso de fin de season:** 7 días antes de que termine la season se
      avisa que las monedas se reinician. Reemplaza el aviso al llegar a 80,
      que existía por el tope.
-   - Un cupón ya canjeado caduca aparte, a los **60 días** de canjeado.
+   - Un cupón (canjeado o ganado) caduca aparte, a las **3 semanas** (21
+     días). Hasta el 5 de octubre de 2026 eran 60 días.
    - Sin póliza verificada se ganan igual, pero **no se pueden canjear**:
      catálogo visible, botón de compra bloqueado con candado.
 
@@ -262,9 +267,13 @@ en hora de Guatemala. Quién releva la semana es el **servidor**: el teléfono
 nunca lo calcula, solo vuelve a pedir los datos al pasar el cierre
 (`programarRelevoDeSemana`). Si lo decidiera el teléfono, cambiar la zona
 horaria en Ajustes abriría una semana nueva antes de tiempo. El objetivo nuevo
-se fija a las 00:00 del lunes; no hay estado de "evaluando". El servidor
-acepta datos atrasados de la semana cerrada hasta el **mediodía del lunes**,
-pero eso ya no cambia la semana cerrada — solo el historial y el acumulado anual. Por lo mismo,
+se fija a las 00:00 del lunes; no hay estado de "evaluando". El **resultado**
+de la semana que terminó (si se completó y sus monedas) se fija el **martes
+00:00** (decidido el 3 de octubre de 2026): el lunes entero queda para los
+datos atrasados del domingo. El lunes, esa semana se muestra "en revisión"
+(el servidor la manda con `estado: "en_revision"`),
+nunca "no cumplida". Lo que llegue después del martes ya no cambia la semana
+cerrada — solo el historial y el acumulado anual. Por lo mismo,
 **ningún texto del objetivo puede sonar a plazo propio** ("Faltan 42 min" se
 leía como cuenta regresiva): se dice el avance sobre la meta ("48.000 de 70.000 pasos")
 y el plazo una sola vez, abajo.
@@ -280,10 +289,14 @@ fueguito 🔥 bajo el saludo. Antes (22 de septiembre) se habían quitado las
 recompensas por constancia y quedaba solo esa línea como motivación.
 
 La tarjeta de racha con su historial de 8 semanas (una casilla por semana:
-cumplido o no) ya había salido de Progreso el 21 de septiembre; el widget
-(`tarjeta_racha.dart`) quedó sin uso. [PENDIENTE: la racha todavía aparece en
-Perfil y en Récords. La reunión solo habló de Hoy: decidir si sale también de
-ahí.]
+cumplido o no) ya había salido de Progreso el 21 de septiembre.
+
+**Decidido el 6 de octubre de 2026: la racha sale de toda la app.** Se quitaron
+el interruptor "Racha en riesgo" de Perfil, la tarjeta "Tu racha más larga" de
+Récords, los campos `racha_semanas` y `racha_historial` del modelo
+`ResumenAnual` y de los datos de ejemplo. El servidor nunca los mandó, así que con
+la API real el modelo viejo no habría podido leer el resumen. Ya no hay ningún
+aviso de "racha en riesgo": el único aviso de Perfil es el recordatorio diario.
 
 ## Anti-fraude
 
@@ -955,7 +968,11 @@ Google" e "Iniciar sesión con Apple"** (reunión del 2 de octubre de 2026;
 Apple es obligatorio si se ofrece Google). Ninguno de los dos entrega la fecha
 de nacimiento: la primera vez se pide aparte. El servidor genera el
 `usuario_id`, un nombre público que no identifica a quien manda datos. Vincular
-póliza es un segundo paso, aparte. Flutter guarda el token en almacenamiento
+póliza es un segundo paso, aparte. **El correo no distingue mayúsculas** y no se
+repite entre cuentas con contraseña, Google y Apple (6 de octubre de 2026). **Baja
+de cuenta** (`POST /api/v1/cuenta/baja`, 6 de octubre de 2026): borra lo personal
+(correo, nombre, póliza, nombres de dispositivo, fecha exacta de nacimiento) y
+conserva lo anónimo (puntos, monedas, resúmenes y muestras). Flutter guarda el token en almacenamiento
 seguro, lo manda en cada request HTTP y se lo entrega a Swift con
 `actualizarSesion`.
 
@@ -980,6 +997,14 @@ que **no** se manda es el dato crudo de HealthKit (minuto a minuto, samples
 individuales) — todo va agregado a nivel de día. Esto es lo que define el
 reporte mensual acordado con Diego (18 de septiembre de 2026).
 
+**El consentimiento es obligatorio para usar la app** (decidido el 6 de octubre
+de 2026): quien no lo acepta, o lo revoca, no puede usarla. El servidor guarda
+cuándo se aceptó, qué versión del texto y si se revocó, y solo quien lo tiene
+vigente entra al reporte de la aseguradora (`contrato-tecnico.md`,
+"Consentimiento con la aseguradora"). El bloqueo del sync sigue apagado: Swift ya lo
+maneja (A38, 7 de octubre de 2026; el `403` deja el día pendiente) y falta la pantalla
+de consentimiento de Flutter, además de que esa versión de Swift esté instalada.
+
 [PENDIENTE] El texto de consentimiento actual de la app (D11) promete algo
 más estricto que esto — solo agregados de cohorte, nada a nivel de persona —
 y ya no refleja lo que realmente se comparte. Hay que reescribirlo para que
@@ -1000,18 +1025,23 @@ para la aseguradora son post-piloto y viven **fuera** de la app de Flutter.
   solo para HealthKit.
 - **MethodChannel:** 3 métodos, nada más — `solicitarPermisos`, `sincronizar`
   y `actualizarSesion` (le entrega a Swift el token de la sesión, o `null` al
-  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart` (todavía le falta
-  `actualizarSesion`). Todo lo demás va
+  cerrarla). Usar siempre `lib/datos/healthkit_bridge.dart`. Todo lo demás va
   por HTTP directo contra la API.
 - Backend: **Django + PostgreSQL** (decisión final). `TIME_ZONE =
   'America/Guatemala'`.
 - Sync: `POST /api/v1/sync`, el día completo cada vez. Los reintentos corren
   del lado nativo — Flutter no implementa reintentos propios.
-- Autenticación: `TokenAuthentication` de DRF, con el encabezado
-  `Authorization: Token <clave>` en todo `/api/v1/*` salvo registro y login. La
-  identidad sale del token, nunca del body: `usuario_id` ya no viaja en ningún
-  request. **Backend implementado.** Falta que Swift mande el token y las
-  pantallas de Flutter (ver `contrato-tecnico.md`, "Autenticación (token)").
+- Autenticación: tokens de **django-rest-knox** (A35, 4 oct 2026), con el
+  encabezado `Authorization: Token <clave>` en todo `/api/v1/*` salvo registro y
+  login. Un token por sesión, guardado como hash; vence a los 30 días sin uso, con
+  tope de 90; `logout` cierra un teléfono y `logout/todos` todos. La identidad sale
+  del token, nunca del body. Swift decide "cambió la cuenta" por el `usuario_id`,
+  no por el token (ver `contrato-tecnico.md`, "Autenticación (token)").
+- **Lo que no puede salir al piloto, apagado por defecto (6 oct 2026):** el botón
+  "Acceder por prueba" (`--dart-define=ACCESO_DE_PRUEBA=true` lo prende) y los botones
+  "Continuar con Apple/Google" mientras no existan sus endpoints
+  (`--dart-define=ENTRAR_CON_PROVEEDORES=true`). Las pruebas fallan si alguien los
+  vuelve a prender por defecto. Solo mayores de 18 años (el servidor también lo exige).
 - Fuente de datos: Apple HealthKit únicamente
 - Datos leídos: pasos, ritmo cardíaco, workouts (NO elevación, NO sueño en v1)
 - Distribución piloto: TestFlight, cuenta Apple Developer de organización

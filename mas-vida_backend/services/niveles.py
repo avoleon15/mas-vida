@@ -3,6 +3,8 @@
 Siempre numérico: nunca Bronze/Silver/Gold/Platinum.
 """
 
+from decimal import Decimal
+
 TOPE_ANUAL = 12_000
 
 # (piso de puntos, nivel, % de cashback)
@@ -21,3 +23,16 @@ def nivel_para(puntos_ano: int) -> int:
         if puntos_ano >= piso:
             nivel = numero
     return nivel
+
+
+def porcentaje_de(nivel: int) -> Decimal:
+    """% de cashback del nivel, exacto (7,5 no pasa por un float)."""
+    return Decimal(str(NIVELES[nivel][2]))
+
+
+def siguiente_nivel(puntos_ano: int) -> tuple[int, int] | None:
+    """(nivel, piso de puntos) del próximo nivel, o None si ya está en el último."""
+    for piso, numero, _ in NIVELES:
+        if piso > puntos_ano:
+            return numero, piso
+    return None

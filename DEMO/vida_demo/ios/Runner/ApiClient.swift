@@ -16,7 +16,15 @@
 //
 
 import Foundation
+import os
 import Security
+
+/// Diagnóstico de los envíos al servidor. Misma regla que `logSalud`: acá
+/// nunca entra un valor de salud, el token ni el cuerpo de una respuesta.
+private let logSync = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.assures.masvida",
+    category: "Sync"
+)
 
 enum ApiError: LocalizedError {
     case urlInvalida
@@ -26,11 +34,30 @@ enum ApiError: LocalizedError {
     /// No hay token guardado: no hay a nombre de quién enviar. No se hace ni
     /// la petición. No es un error permanente: el día queda pendiente.
     case sinSesion
+    /// `422` con `{"error": "fuera_de_ventana"}`: el día tiene más de 14 días
+    /// y el servidor ya no lo acepta (ver "Ventana de aceptación de datos
+    /// rezagados" en el contrato). Es permanente, pero solo para ESE día: a
+    /// diferencia de los demás errores permanentes, no dice nada malo del
+    /// payload ni de la cuenta. `fecha` es la que devolvió el servidor.
+    case fueraDeVentana(fecha: String?)
+
+    /// El servidor respondió `403 {"error": "consentimiento_requerido",
+    /// "version": "1"}` (bloqueo del sync, apagado por defecto): la persona no
+    /// tiene el consentimiento vigente. No dice nada malo del día
+    /// ni de la cuenta, y se arregla cuando acepte (como el `401` cuando
+    /// vuelve a entrar), así que el día queda pendiente y NO se descarta.
+    /// Cualquier otro `403` (por ejemplo, la cuenta sin perfil) sigue siendo
+    /// un permanente genérico.
+    case consentimientoRequerido
 
     var errorDescription: String? {
         switch self {
         case .sinSesion:
             return "No hay una sesión iniciada: el día queda pendiente hasta que la haya."
+        case .fueraDeVentana(let fecha):
+            return "El servidor ya no acepta el día \(fecha ?? "enviado"): tiene más de 14 días."
+        case .consentimientoRequerido:
+            return "Falta aceptar el consentimiento: el día queda pendiente hasta que se acepte."
         case .urlInvalida:
             return "La URL del backend no es válida."
         case .respuestaInvalida:
@@ -45,22 +72,57 @@ enum ApiError: LocalizedError {
     /// ¿Tiene sentido volver a intentar este día más tarde?
     ///
     /// Sí: sin sesión, `401` (el token falta o ya no vale; se arregla al volver
-    /// a iniciar sesión), `408`, `429` y `5xx`. No: URL mal configurada,
-    /// respuesta ilegible y cualquier otro `4xx` (el payload o la cuenta
-    /// están mal y reintentar no lo arregla).
+    /// a iniciar sesión), el `403` de consentimiento (se arregla al aceptarlo),
+    /// `408`, `429` y `5xx`. No: URL mal configurada,
+    /// respuesta ilegible, el `422` de la ventana (el día ya es demasiado
+    /// viejo, y mañana lo será más) y cualquier otro `4xx` (el payload o la
+    /// cuenta están mal y reintentar no lo arregla).
     ///
     /// Que `401` sea reintentable es lo que evita perder días de datos: un
-    /// error permanente saca el día de la cola y corta el procesamiento de los
-    /// demás.
+    /// error permanente saca el día de la cola (ver `AccionDiaFallido`).
     var esReintentable: Bool {
         switch self {
-        case .urlInvalida, .respuestaInvalida, .respuestaIlegible:
+        case .urlInvalida, .respuestaInvalida, .respuestaIlegible, .fueraDeVentana:
             return false
-        case .sinSesion:
+        case .sinSesion, .consentimientoRequerido:
             return true
         case .servidor(let codigo, _):
             return codigo == 401 || codigo >= 500 || codigo == 408 || codigo == 429
         }
+    }
+}
+
+/// Qué hacer con un día cuyo envío falló. Es la ÚNICA regla: la usan el sync
+/// de hoy, la cola de reintentos y ponerse al día (ver `RecorridoDias` en
+/// SyncQueue.swift y HealthKitManager.swift).
+enum AccionDiaFallido: Equatable {
+    /// El día queda pendiente y se vuelve a intentar: sin red, sin sesión,
+    /// `401`, el `403` de consentimiento, `408`, `429`, `5xx`, o HealthKit no
+    /// se pudo leer.
+    case reintentarDespues
+    /// Se saca de la cola y la vuelta SIGUE con los demás días. Solo el `422`
+    /// de la ventana: el problema es de ese día (es demasiado viejo), no del
+    /// payload ni de la cuenta.
+    case descartarYSeguir
+    /// Se saca de la cola y la vuelta se CORTA: cualquier otro error
+    /// permanente. Si el servidor rechaza el payload o la cuenta, lo más
+    /// probable es que rechace igual los días siguientes; esos no se pierden,
+    /// siguen en la cola para la próxima vuelta.
+    case descartarYCortar
+    /// No es una falla del envío: el servidor respondió 2xx (ya guardó el
+    /// día) y lo único que no se entendió fue su respuesta. Se cuenta como
+    /// enviado y la vuelta sigue (decidido 3 oct 2026; es lo que hacen
+    /// Google, Stripe y los clientes HTTP bien hechos: un éxito no se
+    /// reintenta). `ApiClient` lo deja anotado en el log.
+    case tomarComoEnviado
+
+    static func para(_ error: Error) -> AccionDiaFallido {
+        // Un error que no es de `ApiError` (red caída, tiempo agotado, lectura
+        // de HealthKit) se reintenta.
+        guard let error = error as? ApiError else { return .reintentarDespues }
+        if case .fueraDeVentana = error { return .descartarYSeguir }
+        if case .respuestaIlegible = error { return .tomarComoEnviado }
+        return error.esReintentable ? .reintentarDespues : .descartarYCortar
     }
 }
 
@@ -179,6 +241,84 @@ enum Sesion {
             return .errorAlmacenamiento(detalle: detalle)
         }
     }
+
+    /// Lo mismo, y además: si entró **otra persona** se olvidan hasta qué día
+    /// se había mandado y la cola de reintentos, para que empiece como la
+    /// primera vez (sus 7 días) y no reciba días que esperaban a nombre de la
+    /// anterior. Devuelve también si quedó una sesión, para saber si ponerse
+    /// al día.
+    ///
+    /// Desde A35 (Knox) cada login trae un token nuevo, así que "otra persona"
+    /// se decide por el `usuario_id`, no por el token (como `updateUserID` del
+    /// SDK de Rook): si la misma persona vuelve a entrar después de que su
+    /// token venció, sigue donde iba y no pierde los días de la cola.
+    /// - `nil` (cerró sesión o el token venció): solo se borra el token. La
+    ///   marca y la cola esperan a ver quién entra.
+    /// - Sin `usuario_id` (una versión de Flutter que no lo manda, o la primera
+    ///   vez después de actualizar) se compara el token, como antes.
+    static func aplicar(
+        token: String?,
+        usuarioId: String?,
+        en almacen: AlmacenSesion,
+        marca: MarcaEnvios,
+        cola: SyncQueue,
+        cuenta: CuentaDeEnvios
+    ) -> (resultado: ResultadoActualizarSesion, haySesion: Bool) {
+        let anterior = almacen.leerToken()
+        let resultado = aplicar(token: token, en: almacen)
+        let actual = almacen.leerToken()
+        // Si falló el Keychain, el token anterior sigue ahí: no cambió nada.
+        // Sin sesión no hay a quién comparar: se decide cuando alguien entre.
+        guard resultado == .ok, let actual else { return (resultado, actual != nil) }
+
+        let id = usuarioId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nuevoId = (id?.isEmpty ?? true) ? nil : id
+        let otraPersona: Bool
+        if let nuevoId, let dueno = cuenta.usuarioId {
+            otraPersona = nuevoId != dueno
+        } else {
+            otraPersona = actual != anterior
+        }
+        if otraPersona {
+            marca.olvidar()
+            cola.vaciar()
+        }
+        if let nuevoId {
+            cuenta.anotar(nuevoId)
+        } else if otraPersona {
+            // Los días que sigan ya no son de quien estaba anotado.
+            cuenta.olvidar()
+        }
+        return (resultado, true)
+    }
+}
+
+/// A nombre de qué cuenta (`usuario_id`) están la marca de envíos y la cola.
+///
+/// Sobrevive al cierre de sesión a propósito: así, al volver a entrar, se sabe
+/// si es la misma persona. No es secreto (es el nombre público que genera el
+/// servidor), por eso vive en `UserDefaults` y no en el Keychain.
+final class CuentaDeEnvios {
+    private static let clave = "vida.cuentaDeLosEnvios"
+
+    private let almacen: UserDefaults
+
+    init(almacen: UserDefaults = .standard) {
+        self.almacen = almacen
+    }
+
+    var usuarioId: String? {
+        guard let id = almacen.string(forKey: Self.clave), !id.isEmpty else { return nil }
+        return id
+    }
+
+    func anotar(_ usuarioId: String) {
+        almacen.set(usuarioId, forKey: Self.clave)
+    }
+
+    func olvidar() {
+        almacen.removeObject(forKey: Self.clave)
+    }
 }
 
 final class ApiClient {
@@ -240,6 +380,12 @@ final class ApiClient {
         }
 
         guard (200...299).contains(http.statusCode) else {
+            if let rechazo = Self.rechazoPorVentana(codigo: http.statusCode, cuerpo: datos) {
+                throw rechazo
+            }
+            if let rechazo = Self.rechazoPorConsentimiento(codigo: http.statusCode, cuerpo: datos) {
+                throw rechazo
+            }
             throw ApiError.servidor(codigo: http.statusCode, cuerpo: String(data: datos, encoding: .utf8))
         }
 
@@ -250,7 +396,59 @@ final class ApiClient {
         do {
             return try JSONDecoder().decode(RespuestaSincronizacion.self, from: datos)
         } catch {
+            // El día se da por enviado (`AccionDiaFallido.tomarComoEnviado`),
+            // así que sin esta línea nadie se enteraría de que el servidor y
+            // la app ya no están de acuerdo en el formato. Solo la fecha y el
+            // código: el cuerpo trae datos de salud.
+            logSync.error(
+                "Respuesta ilegible del servidor (HTTP \(http.statusCode, privacy: .public)) para el día \(payload.fecha, privacy: .public): el día quedó guardado. Revisar que el contrato y el servidor coincidan."
+            )
             throw ApiError.respuestaIlegible
         }
+    }
+
+    /// Cuerpo del `422` de la ventana: `{"error": "fuera_de_ventana", "fecha": "…"}`.
+    private struct CuerpoRechazo: Decodable {
+        let error: String
+        let fecha: String?
+    }
+
+    /// `fueraDeVentana` solo si es un `422` Y trae ese motivo. Cualquier otro
+    /// `422` (o un cuerpo que no se entiende) sigue siendo `servidor(422)`:
+    /// un permanente genérico, que no se puede tratar como "solo este día".
+    static func rechazoPorVentana(codigo: Int, cuerpo: Data) -> ApiError? {
+        guard codigo == 422,
+              let rechazo = try? JSONDecoder().decode(CuerpoRechazo.self, from: cuerpo),
+              rechazo.error == "fuera_de_ventana" else { return nil }
+        return .fueraDeVentana(fecha: rechazo.fecha)
+    }
+
+    /// El motivo con el que el servidor rechaza un envío porque falta el
+    /// consentimiento.
+    static let motivoConsentimientoRequerido = "consentimiento_requerido"
+
+    /// `consentimientoRequerido` solo si es un `403` Y trae ese motivo. Cualquier
+    /// otro `403` sigue siendo `servidor(403)`: un permanente genérico (la cuenta
+    /// sin perfil, por ejemplo), que no se puede dejar pendiente.
+    ///
+    /// Así lo manda el servidor (`Apps/activities/views.py`):
+    /// `{"error": "consentimiento_requerido", "version": "1"}`; la `version` se
+    /// ignora. Si algún día la forma cambiara pero el texto trajera el motivo,
+    /// también se toma: perder el día por una diferencia de forma sería lo peor
+    /// de las dos equivocaciones.
+    static func rechazoPorConsentimiento(codigo: Int, cuerpo: Data) -> ApiError? {
+        guard codigo == 403 else { return nil }
+        // Si el cuerpo es un objeto con `error` de texto, ESE valor manda, sin importar cómo
+        // sean los demás campos (con `JSONDecoder` y `fecha` de otro tipo, el decodificador
+        // fallaba y caía al respaldo por texto: un 403 con otro `error` que mencionara el
+        // motivo en otro campo se tomaba por consentimiento). Lo encontraron las pruebas al
+        // azar de A38.
+        if let objeto = (try? JSONSerialization.jsonObject(with: cuerpo)) as? [String: Any],
+           let error = objeto["error"] as? String {
+            return error == motivoConsentimientoRequerido ? .consentimientoRequerido : nil
+        }
+        guard let texto = String(data: cuerpo, encoding: .utf8),
+              texto.contains(motivoConsentimientoRequerido) else { return nil }
+        return .consentimientoRequerido
     }
 }

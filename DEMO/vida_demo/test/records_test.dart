@@ -49,7 +49,15 @@ void main() {
     // una oración.
     expect(find.text('Tu mejor día en puntos'), findsOneWidget);
     expect(find.text('Tu mejor mes'), findsOneWidget);
-    expect(find.text('Tu racha más larga'), findsOneWidget);
+  });
+
+  testWidgets('la racha ya no es un récord (se quitó el 6 de octubre)', (
+    t,
+  ) async {
+    await montar(t);
+
+    expect(find.text('Tu racha más larga'), findsNothing);
+    expect(find.textContaining('racha'), findsNothing);
   });
 
   testWidgets('no vuelven las notas que explicaban las reglas', (t) async {

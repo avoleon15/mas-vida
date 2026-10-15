@@ -229,6 +229,11 @@ class ResumenDiario(models.Model):
         blank=True
     )
     puntos_dia = models.IntegerField()
+    # Minutos del día en cada zona de ritmo cardíaco (FCmáx = 219 − edad). Nulos
+    # los días sin datos de ritmo cardíaco, que no es lo mismo que cero minutos.
+    minutos_ligero = models.IntegerField(null=True, blank=True)
+    minutos_moderado = models.IntegerField(null=True, blank=True)
+    minutos_intenso = models.IntegerField(null=True, blank=True)
 
     class Meta:
             constraints = [

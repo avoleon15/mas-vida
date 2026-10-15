@@ -10,8 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,7 +41,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Ya no autentica (ver REST_KNOX); queda instalada para sus migraciones y para
+    # el formulario del login.
     'rest_framework.authtoken',
+    'knox',
 
     "rest_framework",
     "corsheaders",
@@ -53,7 +59,9 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
+    # Un token por inicio de sesión, guardado como hash, que vence (ver REST_KNOX). Es el
+    # de Knox con dos casos de 500 convertidos en 401 (Apps/users/autenticacion.py).
+    "DEFAULT_AUTHENTICATION_CLASSES": ["Apps.users.autenticacion.TokenDeSesion"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
 
@@ -76,6 +84,81 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
 ]
+
+# Límites de intentos (registro, login y vincular póliza). Los de por defecto viven
+# en services/intentos.py; esto los cambia sin tocar código, por ejemplo para
+# probar en local donde todas las peticiones llegan con la misma IP:
+#   LIMITES_DE_INTENTOS=login_ip=300/60,registro_ip=300/3600   (máximo/segundos)
+def _limites_de_entorno():
+    limites = {}
+    for parte in (p.strip() for p in os.environ.get("LIMITES_DE_INTENTOS", "").split(",")):
+        if not parte:
+            continue
+        try:
+            tipo, valor = parte.split("=")
+            maximo, segundos = valor.split("/")
+            limites[tipo.strip()] = (int(maximo), int(segundos))
+        except ValueError:
+            raise ImproperlyConfigured(
+                f"LIMITES_DE_INTENTOS: no entiendo {parte!r}. Formato: tipo=máximo/segundos"
+            )
+    return limites
+
+
+LIMITES_DE_INTENTOS = _limites_de_entorno()
+
+# Días SIN uso después de los cuales el token vence; cada uso lo renueva.
+def _dias_de_vida_del_token():
+    crudo = os.environ.get("DIAS_DE_VIDA_DEL_TOKEN", "30").strip()
+    try:
+        dias = int(crudo)
+    except ValueError:
+        dias = 0
+    if dias < 1:
+        raise ImproperlyConfigured(
+            f"DIAS_DE_VIDA_DEL_TOKEN tiene que ser un número entero de días, 1 o más (llegó {crudo!r})."
+        )
+    return dias
+
+
+DIAS_DE_VIDA_DEL_TOKEN = _dias_de_vida_del_token()
+
+
+def _bool_de_entorno(nombre, defecto=False):
+    crudo = os.environ.get(nombre, "").strip().casefold()
+    if crudo == "":
+        return defecto
+    if crudo in ("1", "true", "si", "sí", "yes", "on"):
+        return True
+    if crudo in ("0", "false", "no", "off"):
+        return False
+    raise ImproperlyConfigured(f"{nombre} tiene que ser sí o no (llegó {crudo!r}).")
+
+
+# Si es True, `POST /sync` rechaza (403 consentimiento_requerido) a quien no tiene el
+# consentimiento vigente. Va APAGADO hasta que Flutter tenga la pantalla y la versión de
+# Swift con A38 esté instalada (esa versión deja el día pendiente en vez de descartarlo;
+# antes trataba cualquier 4xx como rechazo permanente).
+CONSENTIMIENTO_OBLIGATORIO = _bool_de_entorno("CONSENTIMIENTO_OBLIGATORIO")
+
+# Aunque se use a diario, a los 90 días de iniciar sesión hay que volver a entrar:
+# un token robado no sirve para siempre. Si DIAS_DE_VIDA_DEL_TOKEN es mayor, manda este.
+DIAS_MAXIMOS_DE_SESION = 90
+
+# Tokens de django-rest-knox (decidido el 4 oct 2026, ver services/sesiones.py).
+# El encabezado sigue siendo `Authorization: Token <clave>`.
+REST_KNOX = {
+    "TOKEN_TTL": timedelta(days=DIAS_DE_VIDA_DEL_TOKEN),
+    # Cada uso corre el vencimiento, sin pasar del tope.
+    "AUTO_REFRESH": True,
+    "AUTO_REFRESH_MAX_TTL": timedelta(days=DIAS_MAXIMOS_DE_SESION),
+    # El vencimiento se escribe en la base a lo más una vez por hora (decidido el 5 oct
+    # 2026, como lo tenía Luis antes de A35): sobre 30 días, una hora no se nota y la
+    # base se escribe mucho menos.
+    "MIN_REFRESH_INTERVAL": 3600,
+    # Sin TOKEN_LIMIT_PER_USER: con el límite lleno, Knox rechaza el login (403) y la
+    # persona queda afuera. Las sesiones de más se borran al entrar (sesiones.py).
+}
 
 ROOT_URLCONF = 'config.urls'
 

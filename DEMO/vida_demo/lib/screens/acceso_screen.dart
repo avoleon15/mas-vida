@@ -28,9 +28,23 @@ import 'registro_screen.dart';
 ///
 /// Es para las pruebas del equipo y NO puede salir al piloto: un usuario
 /// real que entra por ahí no tiene fecha de nacimiento ni términos
-/// aceptados. Poner en false antes del build de TestFlight para
-/// usuarios.
-const bool mostrarAccesoDePrueba = true;
+/// aceptados. **Apagado por defecto** (6 de octubre de 2026; antes era un
+/// `true` que había que acordarse de apagar a mano): se prende solo con
+/// `--dart-define=ACCESO_DE_PRUEBA=true`. Mientras la app use
+/// `ServicioSesionLocal` no hace falta: acepta cualquier correo y
+/// contraseña bien formados.
+const bool mostrarAccesoDePrueba = bool.fromEnvironment('ACCESO_DE_PRUEBA');
+
+/// Muestra "Continuar con Apple" y "Continuar con Google".
+///
+/// **Apagado por defecto** (6 de octubre de 2026): todavía no entran, y un
+/// botón de Apple que no entra es motivo de rechazo en la App Store. Se
+/// prende con `--dart-define=ENTRAR_CON_PROVEEDORES=true` para ver el
+/// diseño; el día que Luis tenga los endpoints (`login/google` y
+/// `login/apple`) se cambia el valor por defecto a `true`.
+const bool mostrarEntrarConProveedores = bool.fromEnvironment(
+  'ENTRAR_CON_PROVEEDORES',
+);
 
 /// Llaves para los tests.
 const Key llaveCorreoAcceso = ValueKey('acceso-correo');
@@ -40,7 +54,13 @@ const Key llaveAccesoPrueba = ValueKey('acceso-prueba');
 const Key llaveCrearCuenta = ValueKey('acceso-crear-cuenta');
 
 class AccesoScreen extends StatefulWidget {
-  const AccesoScreen({super.key, required this.alEntrar, this.servicio});
+  const AccesoScreen({
+    super.key,
+    required this.alEntrar,
+    this.servicio,
+    this.conAccesoDePrueba = mostrarAccesoDePrueba,
+    this.conProveedores = mostrarEntrarConProveedores,
+  });
 
   /// Qué hacer cuando hay sesión: la trae el login, el registro o el
   /// acceso de prueba.
@@ -48,6 +68,14 @@ class AccesoScreen extends StatefulWidget {
 
   /// Por defecto el de `fuente_datos.dart`; los tests pasan otro.
   final ServicioSesion? servicio;
+
+  /// Si se ve "Acceder por prueba". Por defecto, [mostrarAccesoDePrueba]
+  /// (apagado): los tests lo prenden a propósito.
+  final bool conAccesoDePrueba;
+
+  /// Si se ven los botones de Apple y de Google. Por defecto,
+  /// [mostrarEntrarConProveedores] (apagado).
+  final bool conProveedores;
 
   @override
   State<AccesoScreen> createState() => _AccesoScreenState();
@@ -202,8 +230,10 @@ class _AccesoScreenState extends State<AccesoScreen> {
                           const SizedBox(height: 28),
                           _formulario(),
                           const SizedBox(height: 22),
-                          const _AccesoConProveedores(),
-                          const SizedBox(height: 18),
+                          if (widget.conProveedores) ...[
+                            const _AccesoConProveedores(),
+                            const SizedBox(height: 18),
+                          ],
                           Center(
                             child: Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
@@ -239,7 +269,7 @@ class _AccesoScreenState extends State<AccesoScreen> {
                         padding: const EdgeInsets.only(top: 20),
                         child: Column(
                           children: [
-                            if (mostrarAccesoDePrueba) ...[
+                            if (widget.conAccesoDePrueba) ...[
                               _AccesoDePrueba(onPressed: _accederPorPrueba),
                               const SizedBox(height: 14),
                             ],
@@ -412,8 +442,9 @@ const Key llaveEntrarConGoogle = ValueKey('acceso-google');
 /// "Continuar con Apple" y "Continuar con Google" (reunión del 2 de
 /// octubre de 2026).
 ///
-/// TODAVÍA NO ENTRAN: se ven para que el diseño quede completo, y al
-/// tocarlos avisan que vienen pronto. Para que funcionen hace falta
+/// TODAVÍA NO ENTRAN: por eso están apagados por defecto
+/// ([mostrarEntrarConProveedores]). Prendidos, se ven para que el diseño
+/// quede completo, y al tocarlos avisan que vienen pronto. Para que funcionen hace falta
 /// configuración que no vive en el código —los client id de Google
 /// Cloud, la capacidad "Sign in with Apple" en el App ID de Assures— y
 /// un endpoint en el servidor que verifique el token del proveedor. El

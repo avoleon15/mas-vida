@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from Apps.users.models import Usuario
-from services import daily_scoring
+from services import consentimiento, daily_scoring
 
 from .models import Muestra, MuestraBPM, ResumenDiario, Sesion
 from .serializers import SyncSerializer
@@ -43,6 +43,14 @@ def sync(request):
     except Usuario.DoesNotExist:
         return Response(
             {"mensaje": "El usuario autenticado no tiene un perfil asociado."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Apagado por defecto (settings.CONSENTIMIENTO_OBLIGATORIO). Antes de leer el payload:
+    # sin consentimiento no se guarda ningún dato de salud.
+    if consentimiento.obligatorio() and not consentimiento.vigente(usuario):
+        return Response(
+            {"error": "consentimiento_requerido", "version": consentimiento.VERSION_VIGENTE},
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -94,9 +102,18 @@ def sync(request):
                 ignore_conflicts=True,
             )
 
-            dia = daily_scoring.calcular_dia(usuario, fecha)
-            anual = daily_scoring.asentar(usuario, dia)
-            daily_scoring.guardar_resumen(usuario, dia)
+            # El día del sync y también los demás a los que pertenecen sus muestras,
+            # del más viejo al más nuevo. La respuesta es la del día del sync.
+            dias = {fecha} | daily_scoring.dias_que_tocan(
+                datos["pasos"], datos["sesiones"], datos["frecuencia_cardiaca"],
+                desde=hoy - timedelta(days=VENTANA_DIAS), hasta=hoy,
+            )
+            for dia_a_recalcular in sorted(dias):
+                resultado_dia = daily_scoring.calcular_dia(usuario, dia_a_recalcular)
+                resultado_anual = daily_scoring.asentar(usuario, resultado_dia)
+                daily_scoring.guardar_resumen(usuario, resultado_dia)
+                if dia_a_recalcular == fecha:
+                    dia, anual = resultado_dia, resultado_anual
     except daily_scoring.SinVersionRegla:
         logger.error("Sync sin VersionRegla vigente: fecha=%s", fecha)
         return Response(
@@ -186,6 +203,16 @@ def resumen_dashboard(request):
                 }
             ),
             "puntos_dia": fila.puntos_dia,
+            # null el día que no hubo ritmo cardíaco (no es lo mismo que 0 minutos).
+            "ritmo_cardiaco": (
+                None
+                if fila.minutos_ligero is None
+                else {
+                    "minutos_ligero": fila.minutos_ligero,
+                    "minutos_moderado": fila.minutos_moderado,
+                    "minutos_intenso": fila.minutos_intenso,
+                }
+            ),
         }
         for fila in filas
     ])

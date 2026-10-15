@@ -169,6 +169,57 @@ def calculate_intensity_from_heart_rate(
     sesiones_del_dia = sesiones_reales + sesiones_inferidas
     return calculate_daily_intensity_points(sesiones_del_dia, edad)
 
+def minutos_por_zona(ritmo_por_dispositivo: dict, edad: int) -> dict | None:
+    """Minutos del día en cada zona de ritmo cardíaco, o None si no hubo ritmo.
+
+    Zonas según la misma FCmáx de los puntos (219 − edad): ligero por debajo del
+    60 %, moderado del 60 % al 70 % (sin llegar) e intenso del 70 % hacia arriba.
+    El reposo cuenta como ligero.
+
+    Una lectura representa el tiempo hasta que empieza la siguiente, sin pasar de
+    GAP_MAX minutos (un hueco más largo es tiempo sin dato, igual que al armar
+    las sesiones inferidas). La última lectura vale lo que dura ella misma.
+
+    Dos dispositivos que registran a la vez no se suman: se usa el que cubre más
+    minutos del día (el empate lo resuelve la clave del dispositivo, para que el
+    resultado sea siempre el mismo).
+    """
+    candidatos = []
+    for clave, muestras in ritmo_por_dispositivo.items():
+        if not muestras:
+            continue
+        ordenadas = ordenar_muestras_bpm(muestras)
+        minutos = _minutos_de_cada_lectura(ordenadas)
+        candidatos.append((sum(minutos), clave, ordenadas, minutos))
+    if not candidatos:
+        return None
+
+    _, _, ordenadas, minutos = max(candidatos, key=lambda c: (c[0], c[1]))
+    umbral_medio = calc_MID_INTENSITY(fcm(edad))
+    umbral_alto = calc_H_INTENSITY(fcm(edad))
+    zonas = {"minutos_ligero": 0.0, "minutos_moderado": 0.0, "minutos_intenso": 0.0}
+    for muestra, duracion in zip(ordenadas, minutos):
+        if muestra["bpm"] >= umbral_alto:
+            zonas["minutos_intenso"] += duracion
+        elif muestra["bpm"] >= umbral_medio:
+            zonas["minutos_moderado"] += duracion
+        else:
+            zonas["minutos_ligero"] += duracion
+    return {zona: round(total) for zona, total in zonas.items()}
+
+
+def _minutos_de_cada_lectura(ordenadas: list[dict]) -> list[float]:
+    minutos = []
+    for i, muestra in enumerate(ordenadas):
+        inicio = parse_fecha(muestra["inicio"])
+        if i + 1 < len(ordenadas):
+            hasta = (parse_fecha(ordenadas[i + 1]["inicio"]) - inicio).total_seconds() / 60
+        else:
+            hasta = (parse_fecha(muestra["fin"]) - inicio).total_seconds() / 60
+        minutos.append(min(max(hasta, 0), GAP_MAX))
+    return minutos
+
+
 def calculate_age(birth_date: date, scoring_date: date) -> int:
     if scoring_date < birth_date:
         raise ValueError("La fecha de puntuación no puede ser anterior al nacimiento")

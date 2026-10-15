@@ -583,8 +583,6 @@ class ResumenAnual {
     required this.puntosSemana,
     required this.puntosSemanaAnterior,
     required this.puntosMes,
-    required this.rachaSemanas,
-    required this.rachaHistorial,
     required this.monedas,
     required this.objetivosSemana,
     required this.actividadPorMes,
@@ -604,8 +602,6 @@ class ResumenAnual {
   final int puntosSemana;
   final int puntosSemanaAnterior;
   final int puntosMes;
-  final int rachaSemanas;
-  final List<bool> rachaHistorial;
   final SaldoMonedas monedas;
   final ObjetivosSemana objetivosSemana;
 
@@ -632,8 +628,6 @@ class ResumenAnual {
       puntosSemana: sem['puntos'] as int,
       puntosSemanaAnterior: sem['puntos_semana_anterior'] as int,
       puntosMes: (j['mes_actual'] as Map<String, dynamic>)['puntos'] as int,
-      rachaSemanas: j['racha_semanas'] as int,
-      rachaHistorial: (j['racha_historial'] as List).cast<bool>(),
       monedas: SaldoMonedas.desdeJson(j['monedas'] as Map<String, dynamic>),
       objetivosSemana: ObjetivosSemana.desdeJson(
         j['objetivos_semana'] as Map<String, dynamic>,
