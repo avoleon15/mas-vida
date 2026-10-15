@@ -5,7 +5,7 @@ import '../theme.dart';
 /// Ruta del logo de la marca. En un solo lugar: antes vivía dentro de
 /// `app_header.dart`, y al necesitarlo también la pantalla de carga la
 /// ruta y su plan B habrían quedado escritos dos veces.
-const String _rutaLogo = 'assets/img/logo_vida.png';
+const String _rutaLogo = 'assets/img/iconos/logo_vida.png';
 
 /// El logo de +Vida: la cruz azul y la palabra "vida".
 ///

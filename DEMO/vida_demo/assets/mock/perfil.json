@@ -1,18 +1,18 @@
 {
   "_comentario": "Mock del perfil del asegurado. La edad viene de la póliza que provee la aseguradora, NUNCA autodeclarada: autodeclararla es un vector de fraude. Va en esta dirección y solo en esta: el servidor se la manda a la app para mostrarla. El teléfono NUNCA manda para arriba la edad, ni la FCM, ni los puntos — el contrato lo prohíbe expresamente. La FCM (219 − edad) la calcula el servidor con la edad que ya tiene en el perfil.",
   "usuario_id": "diego-001",
-  "nombre": "Diego",
+  "nombre": "Daniel",
   "edad": 45,
   "zona_horaria": "America/Guatemala",
   "dispositivos_vinculados": [
-    { "nombre": "Apple Watch de Diego", "bundle": "com.apple.health.watch", "tipo": "reloj" },
-    { "nombre": "iPhone de Diego", "bundle": "com.apple.health.iphone", "tipo": "telefono" }
+    { "nombre": "Apple Watch de Daniel", "bundle": "com.apple.health.watch", "tipo": "reloj" },
+    { "nombre": "iPhone de Daniel", "bundle": "com.apple.health.iphone", "tipo": "telefono" }
   ],
   "maximo_dispositivos": 3,
   "permiso_healthkit": "concedido",
   "poliza": {
     "numero": "GT-48213",
-    "titular_y_dependientes": "Diego Piña + 2 dependientes",
+    "titular_y_dependientes": "Daniel Piñol + 2 dependientes",
     "fecha_nacimiento": "14 mar 1981",
     "tipo_plan": "Gastos Médicos Mayores — Plan Individual",
     "suma_asegurada": "Q500,000",

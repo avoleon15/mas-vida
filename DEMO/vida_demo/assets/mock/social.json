@@ -2,12 +2,12 @@
   "_comentario": [
     "Mock de la pantalla Social: La Liga y Mis competencias. Sin amigos, solicitudes ni duelos (sacados el 25 de septiembre de 2026).",
     "Mis competencias (tipo conocidos) se arman con un codigo. Compiten por PUNTOS del mes (2 oct 2026) y no piden poliza. Quien la crea elige si se ven los puntos de cada quien.",
-    "La Liga (tipo desconocidos) es UN SOLO GRUPO con todos los usuarios con poliza verificada (2 oct 2026). Se ven los puntos de cada participante y NUNCA los pasos. A igualdad de puntos queda arriba quien camino mas pasos: el orden lo manda el servidor (aca, Jose Barrios va arriba de Diego con los mismos 25).",
+    "La Liga (tipo desconocidos) es UN SOLO GRUPO con todos los usuarios con poliza verificada (2 oct 2026). Se ven los puntos de cada participante y NUNCA los pasos. A igualdad de puntos queda arriba quien camino mas pasos: el orden lo manda el servidor (aca, Jose Barrios va arriba de Daniel con los mismos 25).",
     "puntos_periodo son los puntos del MES en curso: octubre, que lleva dos dias (el hoy del mock es el viernes 2 oct 2026). Nadie puede pasar de 400 (200 por dia).",
     "Los grupos que el usuario crea NO viven aca: se guardan en el telefono (ver lib/datos/almacen_social.dart) y se pegan encima de esta lista al arrancar."
   ],
   "yo": {
-    "nombre": "Diego",
+    "nombre": "Daniel",
     "puntos_periodo": 25,
     "tendencia": "subida"
   },

@@ -19,10 +19,12 @@ import 'placeholder_imagen.dart';
 // Dos partes:
 //   · los ACTIVOS, como boletos: son lo único levantado de la vista, lo
 //     que se va a mostrar en caja. El que vence primero va arriba;
-//   · los USADOS Y VENCIDOS, como una lista plana y apagada, guardada en
-//     un desplegable cerrado (reunión del 2 de octubre de 2026). Están
-//     para consultar, no para usar, y abiertos le robaban la pantalla a
-//     los que sí se pueden usar.
+//   · los USADOS Y VENCIDOS, como una lista plana y apagada: se ven los
+//     dos más recientes y un botón "Ver más" trae el resto (pedido de
+//     Daniel, 3 de octubre de 2026; antes era un desplegable cerrado, y
+//     cerrado dejaba la pantalla vacía debajo del título). Están para
+//     consultar, no para usar: todos abiertos le robaban la pantalla a los
+//     que sí se pueden usar.
 //
 // Tocar un boleto abre su código en grande, en una hoja.
 // ============================================================
@@ -30,8 +32,11 @@ import 'placeholder_imagen.dart';
 /// Llave de un cupón en la lista, para los tests.
 Key llaveCupon(String id) => ValueKey('cupon-$id');
 
-/// Llave del desplegable de usados y vencidos.
-const Key llaveDesplegableHistorial = ValueKey('cupones-historial');
+/// Llave del botón "Ver más" de usados y vencidos.
+const Key llaveVerMasHistorial = ValueKey('cupones-historial-ver-mas');
+
+/// Cuántos usados y vencidos se ven antes de tocar "Ver más".
+const int cuponesHistorialVisibles = 2;
 
 /// Llave de la hoja con el código en grande.
 const Key llaveHojaCodigo = ValueKey('hoja-codigo-cupon');
@@ -126,11 +131,8 @@ class MisCupones extends StatelessWidget {
   }
 }
 
-/// Los usados y vencidos, detrás de un renglón que se despliega.
-///
-/// Arranca CERRADO: lo que se viene a buscar a Mis cupones es un código
-/// para mostrar en caja, y eso son los activos. El renglón dice cuántos
-/// hay adentro para que no haga falta abrirlo para saberlo.
+/// Los usados y vencidos: el título, los dos más recientes a la vista y
+/// un "Ver más" con el resto.
 class _Historial extends StatefulWidget {
   const _Historial({required this.cupones});
 
@@ -141,45 +143,50 @@ class _Historial extends StatefulWidget {
 }
 
 class _HistorialState extends State<_Historial> {
-  bool _abierto = false;
+  bool _todos = false;
 
-  Widget _lista() => _abierto
-      ? Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final c in widget.cupones) ...[
-              Container(height: 0.5, color: AppColors.separador),
-              _FilaHistorial(cupon: c),
-            ],
-          ],
-        )
-      : const SizedBox(width: double.infinity);
+  /// Del más reciente al más viejo: lo último que se usó es lo que más
+  /// probablemente se venga a consultar.
+  List<CuponCanjeado> get _ordenados =>
+      [...widget.cupones]..sort((a, b) => b.canjeado.compareTo(a.canjeado));
 
   void _alternar() {
     HapticFeedback.selectionClick();
-    setState(() => _abierto = !_abierto);
+    setState(() => _todos = !_todos);
   }
+
+  Widget _fila(CuponCanjeado c) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Container(height: 0.5, color: AppColors.separador),
+      _FilaHistorial(cupon: c),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
     final quieto = MediaQuery.disableAnimationsOf(context);
-    final duracion = quieto ? Duration.zero : const Duration(milliseconds: 260);
-    final cuantos = widget.cupones.length;
+    final cupones = _ordenados;
+    final cuantos = cupones.length;
+    final visibles = cupones.take(cuponesHistorialVisibles).toList();
+    final resto = cupones.skip(cuponesHistorialVisibles).toList();
+
+    final extra = _todos
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [for (final c in resto) _fila(c)],
+          )
+        : const SizedBox(width: double.infinity);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(height: 0.5, color: AppColors.separador),
         Semantics(
-          button: true,
-          expanded: _abierto,
+          header: true,
           label: 'Usados y vencidos, $cuantos',
           excludeSemantics: true,
-          child: CupertinoButton(
-            key: llaveDesplegableHistorial,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            minimumSize: Size.zero,
-            onPressed: _alternar,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
                 Expanded(
@@ -195,32 +202,60 @@ class _HistorialState extends State<_Historial> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 8),
-                AnimatedRotation(
-                  turns: _abierto ? 0.5 : 0,
-                  duration: duracion,
-                  curve: Curves.easeOutCubic,
-                  child: const Icon(
-                    CupertinoIcons.chevron_down,
-                    size: 16,
-                    color: AppColors.azulMedio,
-                  ),
-                ),
               ],
             ),
           ),
         ),
+        for (final c in visibles) _fila(c),
         // Con "Reducir movimiento" aparece de una: un AnimatedSize de
         // duración cero se vuelve a ensuciar en su propio layout.
         if (quieto)
-          _lista()
+          extra
         else
           AnimatedSize(
-            duration: duracion,
+            duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
-            child: _lista(),
+            child: extra,
           ),
+        if (resto.isNotEmpty) ...[
+          Container(height: 0.5, color: AppColors.separador),
+          Semantics(
+            button: true,
+            expanded: _todos,
+            child: CupertinoButton(
+              key: llaveVerMasHistorial,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              minimumSize: Size.zero,
+              onPressed: _alternar,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _todos ? 'Ver menos' : 'Ver más (${resto.length})',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: _todos ? 0.5 : 0,
+                    duration: quieto
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    child: const Icon(
+                      CupertinoIcons.chevron_down,
+                      size: 15,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

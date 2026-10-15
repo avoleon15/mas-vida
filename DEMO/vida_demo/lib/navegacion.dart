@@ -173,3 +173,14 @@ class _FotoAlSalirState extends State<_FotoAlSalir> {
     child: widget.child,
   );
 }
+
+/// Lleva a Mi Plan desde cualquier lado: una pestaña, Perfil o el
+/// detalle de un premio. Es donde vive "Agregar póliza" (pedido de
+/// Daniel, 8 de octubre de 2026): los demás botones que la ofrecían
+/// mandan acá, y el usuario elige ahí.
+///
+/// Vacía la pila, igual que la barra de abajo: Mi Plan es una pestaña,
+/// no una pantalla más adentro.
+void irAMiPlan(BuildContext context) {
+  Navigator.of(context).pushNamedAndRemoveUntil('/mi-plan', (_) => false);
+}

@@ -15,7 +15,9 @@ import '../widgets/moneda_animada.dart';
 //   1. Tu cuenta         nombre, correo y contraseña.
 //   2. Tu edad           fecha de nacimiento (obligatoria, CLAUDE.md).
 //   3. Tu póliza         opcional: "gratis para jugar, pago para los
-//                        beneficios". Se puede saltar.
+//                        beneficios". "Aún no tengo póliza" la salta y
+//                        la cuenta entra sin ella: ve la app completa,
+//                        pero sin canje ni La Liga.
 //   4. Tu aseguradora    SOLO si cargó póliza. El consentimiento de datos
 //                        hacia la aseguradora es explícito y en pantalla
 //                        propia (CLAUDE.md), no un renglón más de los
@@ -29,6 +31,10 @@ import '../widgets/moneda_animada.dart';
 //
 // Un paso por pantalla y no un formulario largo: cada pantalla contesta
 // UNA pregunta y explica por qué se la hacemos.
+//
+// Al final del archivo vive [AgregarPolizaScreen]: los pasos 3 y 4 solos,
+// para quien entró sin póliza y la agrega después. Vive acá para usar
+// las MISMAS piezas: el formulario de la póliza es uno solo.
 // ============================================================
 
 /// Llaves para los tests.
@@ -253,58 +259,14 @@ class _RegistroScreenState extends State<RegistroScreen> {
   }
 
   Future<void> _elegirInicioVigencia() async {
-    FocusScope.of(context).unfocus();
-    var elegida = _inicioVigencia ?? DateTime(_hoy.year, _hoy.month, 1);
-    final ok = await showCupertinoModalPopup<bool>(
-      context: context,
-      builder: (hoja) => Container(
-        height: 320,
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 8, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Inicio de vigencia',
-                        style: Theme.of(hoja).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    CupertinoButton(
-                      onPressed: () => Navigator.of(hoja).pop(true),
-                      child: const Text(
-                        'Listo',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.date,
-                  dateOrder: DatePickerDateOrder.dmy,
-                  initialDateTime: elegida,
-                  minimumDate: DateTime(_hoy.year - 30),
-                  maximumDate: DateTime(_hoy.year + 1, 12, 31),
-                  onDateTimeChanged: (d) => elegida = d,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final elegida = await _elegirFechaDeVigencia(
+      context,
+      hoy: _hoy,
+      actual: _inicioVigencia,
     );
-    if (ok == true && mounted) setState(() => _inicioVigencia = elegida);
+    if (elegida != null && mounted) {
+      setState(() => _inicioVigencia = elegida);
+    }
   }
 
   // ------------------------------------------------------------
@@ -409,7 +371,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
             texto: 'Vincular póliza',
             onPressed: _polizaCompleta ? () => _elegirPoliza(true) : null,
           ),
-          secundario: 'Lo hago después',
+          secundario: 'Aún no tengo póliza',
           llaveSecundario: llaveSaltarPoliza,
           onSecundario: () => _elegirPoliza(false),
         );
@@ -1029,11 +991,11 @@ class _PasoPoliza extends StatelessWidget {
         const _Separador(),
         _Renglon(
           icono: _icono(CupertinoIcons.arrow_right_circle),
-          titulo: '¿No la tienes a mano?',
+          titulo: '¿Aún no tienes póliza?',
           detalle:
-              'Hazlo después desde Mi Plan. Sin póliza sumas puntos y '
-              'monedas igual; la necesitas para canjear premios y recibir '
-              'tu cashback.',
+              'Entra igual: sumas puntos, subes de nivel y juntas monedas. '
+              'La necesitas para canjear premios y entrar a La Liga, y '
+              'la agregas cuando quieras desde Mi Plan.',
         ),
       ],
     );
@@ -1337,4 +1299,281 @@ class _Casilla extends StatelessWidget {
       ),
     ),
   );
+}
+
+// ============================================================
+// La rueda de fechas del inicio de vigencia
+// ============================================================
+
+/// Abre la rueda para elegir el inicio de vigencia. Null si se cerró sin
+/// tocar "Listo".
+Future<DateTime?> _elegirFechaDeVigencia(
+  BuildContext context, {
+  required DateTime hoy,
+  DateTime? actual,
+}) async {
+  FocusScope.of(context).unfocus();
+  var elegida = actual ?? DateTime(hoy.year, hoy.month, 1);
+  final ok = await showCupertinoModalPopup<bool>(
+    context: context,
+    builder: (hoja) => Container(
+      height: 320,
+      decoration: const BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Inicio de vigencia',
+                      style: Theme.of(hoja).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  CupertinoButton(
+                    onPressed: () => Navigator.of(hoja).pop(true),
+                    child: const Text(
+                      'Listo',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                dateOrder: DatePickerDateOrder.dmy,
+                initialDateTime: elegida,
+                minimumDate: DateTime(hoy.year - 30),
+                maximumDate: DateTime(hoy.year + 1, 12, 31),
+                onDateTimeChanged: (d) => elegida = d,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return ok == true ? elegida : null;
+}
+
+// ============================================================
+// AGREGAR LA PÓLIZA DESPUÉS
+//
+// Para quien creó la cuenta con "Aún no tengo póliza". Son los pasos 3 y
+// 4 del registro, solos: la póliza y, aparte, el permiso para compartir
+// con la aseguradora (el consentimiento va SIEMPRE en pantalla propia).
+//
+// Sube desde abajo como una hoja de iOS (`fullscreenDialog`): es un
+// formulario que se llena y se cierra, no una pantalla más adentro.
+// ============================================================
+
+/// Llave del botón de avanzar, para los tests.
+const Key llaveSiguientePoliza = ValueKey('agregar-poliza-siguiente');
+
+/// Abre [AgregarPolizaScreen]. Devuelve true si la póliza quedó agregada.
+Future<bool> abrirAgregarPoliza(BuildContext context) async {
+  HapticFeedback.selectionClick();
+  final ok = await Navigator.of(context).push<bool>(
+    CupertinoPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => const AgregarPolizaScreen(),
+    ),
+  );
+  return ok ?? false;
+}
+
+class AgregarPolizaScreen extends StatefulWidget {
+  const AgregarPolizaScreen({super.key, this.servicio, this.hoy});
+
+  final ServicioSesion? servicio;
+
+  /// La fecha de hoy. Los tests la fijan.
+  final DateTime? hoy;
+
+  @override
+  State<AgregarPolizaScreen> createState() => _AgregarPolizaScreenState();
+}
+
+class _AgregarPolizaScreenState extends State<AgregarPolizaScreen> {
+  final _paginas = PageController();
+  final _aseguradora = TextEditingController();
+  final _numero = TextEditingController();
+
+  int _actual = 0;
+  DateTime? _inicioVigencia;
+  bool _cargando = false;
+  String? _error;
+
+  late final DateTime _hoy = widget.hoy ?? DateTime.now();
+
+  ServicioSesion get _servicio => widget.servicio ?? servicioSesion;
+
+  bool get _completa =>
+      _aseguradora.text.trim().isNotEmpty &&
+      _numero.text.trim().isNotEmpty &&
+      _inicioVigencia != null;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final c in [_aseguradora, _numero]) {
+      c.addListener(_alEscribir);
+    }
+  }
+
+  void _alEscribir() => setState(() => _error = null);
+
+  @override
+  void dispose() {
+    _paginas.dispose();
+    _aseguradora.dispose();
+    _numero.dispose();
+    super.dispose();
+  }
+
+  void _irA(int i) {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _actual = i;
+      _error = null;
+    });
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _paginas.jumpToPage(i);
+    } else {
+      _paginas.animateToPage(
+        i,
+        duration: const Duration(milliseconds: 340),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  void _atras() {
+    if (_actual == 0) {
+      Navigator.of(context).maybePop(false);
+    } else {
+      _irA(_actual - 1);
+    }
+  }
+
+  Future<void> _elegirInicio() async {
+    final elegida = await _elegirFechaDeVigencia(
+      context,
+      hoy: _hoy,
+      actual: _inicioVigencia,
+    );
+    if (elegida != null && mounted) {
+      setState(() => _inicioVigencia = elegida);
+    }
+  }
+
+  Future<void> _guardar(bool compartir) async {
+    if (_cargando) return;
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
+    try {
+      final sesion = await _servicio.actual();
+      if (sesion == null) {
+        throw const ErrorSesion(
+          'Tu sesión se cerró. Vuelve a entrar e intenta de nuevo.',
+        );
+      }
+      final nueva = await _servicio.vincularPoliza(
+        sesion,
+        PolizaRegistro(
+          aseguradora: _aseguradora.text.trim(),
+          numero: _numero.text.trim(),
+          inicioVigencia: _inicioVigencia!,
+        ),
+        compartirConAseguradora: compartir,
+      );
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      usarSesion(nueva);
+      Navigator.of(context).pop(true);
+    } on ErrorSesion catch (e) {
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+      setState(() {
+        _cargando = false;
+        _error = e.mensaje;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      // Igual que en el registro: volver retrocede un paso.
+      canPop: _actual == 0,
+      onPopInvokedWithResult: (salio, _) {
+        if (!salio) _atras();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.fondoDePantalla,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _Encabezado(actual: _actual, total: 2, onAtras: _atras),
+              Expanded(
+                child: PageView(
+                  controller: _paginas,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _PasoPoliza(
+                      aseguradora: _aseguradora,
+                      numero: _numero,
+                      inicioVigencia: _inicioVigencia,
+                      alTocarInicio: _elegirInicio,
+                    ),
+                    const _PasoAseguradora(),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AvisoError(mensaje: _error),
+                    const SizedBox(height: 8),
+                    if (_actual == 0)
+                      BotonPildora(
+                        key: llaveSiguientePoliza,
+                        texto: 'Continuar',
+                        icono: CupertinoIcons.arrow_right,
+                        onPressed: _completa ? () => _irA(1) : null,
+                      )
+                    else
+                      _DosBotones(
+                        principal: BotonPildora(
+                          key: llaveSiguientePoliza,
+                          texto: 'Autorizo',
+                          cargando: _cargando,
+                          onPressed: () => _guardar(true),
+                        ),
+                        secundario: 'Ahora no',
+                        onSecundario: () => _guardar(false),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -424,6 +424,48 @@
       "estado": "vencido",
       "foto": "assets/img/premios/restaurantes/frutalle.webp",
       "fondo": "#000000"
+    },
+    {
+      "id": "cup-yumgreens-01",
+      "comercio": "Yum Greens",
+      "beneficio": "Bowl mediano a mitad de precio",
+      "codigo": "MV-YG35-D7C4",
+      "origen": "tienda",
+      "costo_monedas": 35,
+      "canjeado": "2026-08-01",
+      "vence": "2026-09-30",
+      "dias_para_vencer": 0,
+      "estado": "usado",
+      "usado_el": "2026-08-15",
+      "foto": "assets/img/premios/restaurantes/yum-greens.webp"
+    },
+    {
+      "id": "cup-montanos-s12",
+      "comercio": "Montanos",
+      "beneficio": "2x1 en Puyazo 8 oz",
+      "codigo": "MV-MT12-H3V6",
+      "origen": "semana",
+      "ganado_en": "Semana 12",
+      "canjeado": "2026-06-22",
+      "vence": "2026-08-21",
+      "dias_para_vencer": 0,
+      "estado": "vencido",
+      "foto": "assets/img/premios/restaurantes/montanos.webp",
+      "fondo": "#000000"
+    },
+    {
+      "id": "cup-lecafe-01",
+      "comercio": "Le Café",
+      "beneficio": "Un capuchino",
+      "codigo": "MV-LC15-Q9B2",
+      "origen": "tienda",
+      "costo_monedas": 15,
+      "canjeado": "2026-04-10",
+      "vence": "2026-06-09",
+      "dias_para_vencer": 0,
+      "estado": "usado",
+      "usado_el": "2026-04-18",
+      "foto": "assets/img/premios/cafecitos/le-cafe.webp"
     }
   ]
 }

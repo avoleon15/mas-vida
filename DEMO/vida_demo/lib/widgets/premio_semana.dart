@@ -208,12 +208,12 @@ class _PremioSemanaState extends State<PremioSemana>
       // LA FOTO LIMPIA, sin nada encima (pedido de Daniel, 2 de octubre
       // de 2026: con el texto y la sombra encima la imagen no se veía).
       // Lo que se gana va en un renglón debajo.
+      // La foto llena el alto que le deja la card (todas las cards miden
+      // lo mismo) y el renglón de lo que se gana va siempre entero abajo.
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: altoFotoPremio,
+          Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AppRadios.tarjeta),
               child: SizedBox.expand(
@@ -240,11 +240,26 @@ class _PremioSemanaState extends State<PremioSemana>
                                   for (final ruta in fotos)
                                     SizedBox(
                                       width: caja.maxWidth,
-                                      child: FotoComercio(
-                                        ruta: ruta,
-                                        fondo: p.fondo,
-                                        texto: p.marca.toUpperCase(),
-                                      ),
+                                      // El logo va con aire alrededor; una
+                                      // foto del premio llena el recuadro.
+                                      // Si la foto falta, se ve el logo.
+                                      child: ruta == p.logo
+                                          ? FotoComercio(
+                                              ruta: ruta,
+                                              fondo: p.fondo,
+                                              texto: p.marca.toUpperCase(),
+                                            )
+                                          : Image.asset(
+                                              ruta,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, _, _) =>
+                                                  FotoComercio(
+                                                    ruta: p.logo,
+                                                    fondo: p.fondo,
+                                                    texto: p.marca
+                                                        .toUpperCase(),
+                                                  ),
+                                            ),
                                     ),
                                 ],
                               ),
@@ -265,9 +280,6 @@ class _PremioSemanaState extends State<PremioSemana>
     );
   }
 }
-
-/// Alto de la foto del premio en la card de la semana.
-const double altoFotoPremio = 132;
 
 /// "Cumple los dos y ganas · 2x1 en Puyazo 8 oz", debajo de la foto: un
 /// regalo en el color de la marca, lo que hay que hacer en gris y el

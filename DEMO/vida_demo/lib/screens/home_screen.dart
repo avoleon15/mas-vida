@@ -114,7 +114,7 @@ class HomeScreen extends StatelessWidget {
                             const SizedBox(height: AppSpacing.seccion),
                             _BloqueHorizonte(
                               icono: Icons.wb_sunny_outlined,
-                              imagen: 'assets/img/icono_hoy.png',
+                              imagen: 'assets/img/iconos/icono_hoy.png',
                               titulo: 'Hoy',
                               explica: 'Tus pasos y los puntos del día',
                               accion: BotonComoSumar(pasos: pasos ?? 0),
