@@ -20,16 +20,69 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
+# Todo lo que cambia entre tu computadora y el servidor sale de variables de entorno
+# (archivo .env; ver .env.example). Nada secreto vive en el código.
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-2_4(5q7qn*e@6ie6aquxhe9)$ngb7i!(=t^cj_!d-!o6)zkg$#'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+def _bool_de_entorno(nombre, defecto=False):
+    crudo = os.environ.get(nombre, "").strip().casefold()
+    if crudo == "":
+        return defecto
+    if crudo in ("1", "true", "si", "sí", "yes", "on"):
+        return True
+    if crudo in ("0", "false", "no", "off"):
+        return False
+    raise ImproperlyConfigured(f"{nombre} tiene que ser sí o no (llegó {crudo!r}).")
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "172.20.10.3"]
+
+def _lista_de_entorno(nombre):
+    """Una lista separada por comas: `a.com, b.com` -> ['a.com', 'b.com']."""
+    return [parte.strip() for parte in os.environ.get(nombre, "").split(",") if parte.strip()]
+
+
+# APAGADO por defecto: un servidor al que se le olvide la variable queda seguro. En tu
+# computadora, el .env lleva DEBUG=true. Con DEBUG encendido, un error muestra la
+# configuración y los datos de la petición; nunca en el servidor.
+DEBUG = _bool_de_entorno("DEBUG")
+
+# La clave que firma las sesiones del admin. La que estaba escrita aquí quedó en el
+# historial de git: el servidor tiene que usar una nueva (ver .env.example).
+SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "Falta SECRET_KEY. En el servidor es obligatoria; genera una con:\n"
+            "  python -c \"from django.core.management.utils import get_random_secret_key as k; print(k())\""
+        )
+    SECRET_KEY = "solo-para-desarrollo-nunca-en-el-servidor"
+
+# Los nombres con los que se puede llegar al backend (el dominio en el servidor). En tu
+# computadora, si no se define, vale cualquiera: así el teléfono entra por la IP que
+# tenga tu computadora ese día (antes estaba fija y fallaba con un 400 si cambiaba).
+ALLOWED_HOSTS = _lista_de_entorno("ALLOWED_HOSTS")
+if not ALLOWED_HOSTS:
+    if not DEBUG:
+        raise ImproperlyConfigured("Falta ALLOWED_HOSTS, por ejemplo: ALLOWED_HOSTS=api.masvida.com")
+    ALLOWED_HOSTS = ["*"]
+
+# Para entrar al admin por HTTPS, Django exige saber desde qué dirección llega el
+# formulario: CSRF_TRUSTED_ORIGINS=https://api.masvida.com
+CSRF_TRUSTED_ORIGINS = _lista_de_entorno("CSRF_TRUSTED_ORIGINS")
+
+# HTTPS. En el servidor, Caddy (o el balanceador de AWS) recibe la conexión cifrada y
+# se la pasa al backend avisando con X-Forwarded-Proto que llegó por HTTPS.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = _bool_de_entorno("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # El navegador recuerda que este dominio solo se usa con HTTPS. Empieza en 30 días.
+    # Subdominios y "preload" van apagados (avisos security.W005 y W021 de check --deploy):
+    # encenderlos obliga a que TODOS los subdominios usen HTTPS para siempre, y el dominio
+    # todavía no se conoce.
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", str(30 * 24 * 3600)))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = _bool_de_entorno("SECURE_HSTS_INCLUDE_SUBDOMAINS")
+    SECURE_HSTS_PRELOAD = _bool_de_entorno("SECURE_HSTS_PRELOAD")
 
 
 # Application definition
@@ -107,6 +160,18 @@ def _limites_de_entorno():
 
 LIMITES_DE_INTENTOS = _limites_de_entorno()
 
+# Cuántos proxies propios hay delante del backend (Caddy = 1). Con 0 se usa la IP que
+# llega directo: detrás de Caddy sería la de Caddy para todos, y los límites por IP
+# (registro y login) se repartirían entre todas las personas. Ver services/intentos.py.
+def _num_proxies():
+    crudo = os.environ.get("NUM_PROXIES_CONFIABLES", "0").strip()
+    if not crudo.isdigit():
+        raise ImproperlyConfigured(f"NUM_PROXIES_CONFIABLES tiene que ser 0 o más (llegó {crudo!r}).")
+    return int(crudo)
+
+
+NUM_PROXIES_CONFIABLES = _num_proxies()
+
 # Días SIN uso después de los cuales el token vence; cada uso lo renueva.
 def _dias_de_vida_del_token():
     crudo = os.environ.get("DIAS_DE_VIDA_DEL_TOKEN", "30").strip()
@@ -122,17 +187,6 @@ def _dias_de_vida_del_token():
 
 
 DIAS_DE_VIDA_DEL_TOKEN = _dias_de_vida_del_token()
-
-
-def _bool_de_entorno(nombre, defecto=False):
-    crudo = os.environ.get(nombre, "").strip().casefold()
-    if crudo == "":
-        return defecto
-    if crudo in ("1", "true", "si", "sí", "yes", "on"):
-        return True
-    if crudo in ("0", "false", "no", "off"):
-        return False
-    raise ImproperlyConfigured(f"{nombre} tiene que ser sí o no (llegó {crudo!r}).")
 
 
 # Si es True, `POST /sync` rechaza (403 consentimiento_requerido) a quien no tiene el
@@ -192,6 +246,13 @@ if os.environ.get("DB_ENGINE") == "postgresql":
             "PASSWORD": os.environ.get("DB_PASSWORD"),
             "HOST": os.environ.get("DB_HOST", "db"),
             "PORT": os.environ.get("DB_PORT", "5432"),
+            # Cuántos segundos se reutiliza una conexión (0 = una por petición). En el
+            # servidor ahorra abrir una conexión nueva a la base en cada petición.
+            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "0")),
+            "CONN_HEALTH_CHECKS": True,
+            # Con RDS: DB_SSLMODE=require para que la conexión a la base vaya cifrada.
+            # En tu computadora (la base en Docker) no hace falta.
+            "OPTIONS": {"sslmode": os.environ["DB_SSLMODE"]} if os.environ.get("DB_SSLMODE") else {},
         }
     }
 else:
@@ -264,3 +325,9 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+# El backend todavía no manda ningún correo: recuperar contraseña espera que se elija un
+# proveedor. Por eso el de arriba es el de desarrollo, y check --deploy lo marca como
+# error (mail.E001). Se silencia solo esa regla; el día que haya proveedor, se configura
+# aquí y se quita esta línea.
+SILENCED_SYSTEM_CHECKS = ["mail.E001"]
